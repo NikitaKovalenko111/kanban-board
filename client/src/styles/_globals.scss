@@ -1,0 +1,31 @@
+@import './mixins';
+
+body {
+    font-family: 'Montserrat', sans-serif;
+    font-weight: 400;
+}
+
+a,
+button,
+input,
+textarea,
+svg * {
+    transition-duration: var(--transition-duration);
+}
+
+a {
+    text-decoration: none;
+    color: inherit;
+}
+
+h1 {
+    @include fluid-text(56, 24);
+}
+
+h2 {
+    @include fluid-text(48, 24);
+}
+
+h3 {
+    @include fluid-text(24, 18)
+}

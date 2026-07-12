@@ -1,0 +1,12 @@
+@import './normalize', 
+        './globals', 
+        './media', 
+        './mixins', 
+        './utils', 
+        './variables',
+        './fonts';
+
+@import './../components/Header/header',
+        './../components/BoardElement/boardElement';
+
+@import './../pages/BoardPage/boardPage'

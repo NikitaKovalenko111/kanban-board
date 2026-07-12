@@ -1,0 +1,42 @@
+@import './mixins';
+
+.container {
+    max-width: calc(var(--container-max-width) + var(--container-padding-desktop-mobile) * 2);
+    margin-inline: auto;
+    margin: 0 auto;
+    padding-inline: var(--container-padding-desktop-mobile);
+
+    @include ipad {
+        max-width: calc(var(--container-max-width) + var(--container-padding-ipad) * 2);
+        padding-inline: var(--container-padding-ipad);
+    }
+}
+
+.visually-hidden {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    border: 0;
+    padding: 0;
+    white-space: nowrap;
+    clip-path: inset(100%);
+    clip: rect(0 0 0 0);
+    overflow: hidden;
+}
+
+.hidden-mobile {
+    @include mobile {
+        display: none !important;
+    }
+}
+
+.visible-mobile {
+    @include mobile-above {
+        display: none !important;
+    }
+}
+
+.color-green {
+    color: var(--color-light-green);
+}

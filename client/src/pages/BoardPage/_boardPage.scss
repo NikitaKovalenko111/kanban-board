@@ -1,0 +1,9 @@
+.board-page {
+    padding: 18px;
+
+    &__tables {
+        display: flex;
+        justify-content: space-between;
+        gap: 48px;
+    }
+}

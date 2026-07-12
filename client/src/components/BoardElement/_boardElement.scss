@@ -1,0 +1,19 @@
+.board-element {
+    width: 100%;
+    height: 100px;
+    min-height: 600px;
+
+    padding: 12px;
+
+    border: var(--border);
+
+    &__header {
+        font-size: var(--h3-font-size);
+    }
+
+    &__top {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+    }
+}

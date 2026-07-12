@@ -1,0 +1,16 @@
+.header {
+    padding: 24px 0;
+    box-shadow: 0 2px rgba($color: #000000, $alpha: .2);
+
+    &__nav-list {
+        display: flex;
+        justify-content: space-between;
+        list-style: none;
+    }
+
+    &__nav-list-item {
+        &:hover {
+            cursor: pointer;
+        }
+    }
+}
