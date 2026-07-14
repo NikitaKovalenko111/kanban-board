@@ -1,0 +1,59 @@
+.add-task-modal {
+    width: 100%;
+    height: 100%;
+    background-color: rgba($color: #000000, $alpha: .3);
+    position: fixed;
+    top: 0;
+    right: 0;
+    left: 0;
+    bottom: 0;
+
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 1000;
+
+    &__header {
+        font-size: 24px;
+        margin-bottom: 16px;
+    }
+
+    &__wrapper {
+        background-color: white;
+        padding: 20px;
+        border-radius: var(--border-radius);
+    }
+
+    &__submit-btn {
+        margin-top: 12px;
+        cursor: pointer;
+        padding: 12px;
+        border-radius: var(--border-radius-small);
+        border: none;
+        background-color: #1338BE;
+        color: white;
+        font-weight: 600;
+    }
+
+    &__form {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+
+        input, textarea {
+            width: 400px;
+            outline: none;
+            padding: 8px;
+            border: var(--border);
+            border-color: rgba($color: #000000, $alpha: .4);
+            border-radius: var(--border-radius-small);
+        }
+
+        label {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+            font-size: 14px;
+        }
+    }
+}
