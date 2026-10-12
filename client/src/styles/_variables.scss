@@ -1,23 +1,17 @@
 :root {
-    --h3-font-size: 18px;
-
-    --border: 1px solid black;
-
-    --border-radius: 30px;
-    --border-radius-small: 10px;
-
-    --font-family: 'Montserrat';
-
+    --color-bg: #f5f7fb;
+    --color-surface: #ffffff;
+    --color-text: #20242c;
+    --color-muted: #77808f;
+    --color-primary: #6576df;
+    --color-primary-dark: #5363c7;
+    --color-border: #e5e9f0;
+    --color-danger: #c65f68;
+    --border-radius: 22px;
+    --border-radius-small: 14px;
+    --font-family: Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
     --transition-duration: 0.2s;
-
-    --button-height: 72px;
-    --button-width-large: 382px;
-    --button-width-small: 299px;
-
-    --container-max-width: 1600px;
-    --container-padding-desktop-mobile: 16px;
-    --container-padding-ipad: 48px;
-
-    --input-height: 56px;
-    --input-padding: 18px 16px;
+    --container-max-width: 1500px;
+    --container-padding-desktop-mobile: 28px;
+    --container-padding-ipad: 22px;
 }

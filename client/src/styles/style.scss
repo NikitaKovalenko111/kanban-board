@@ -3,12 +3,14 @@
         './media', 
         './mixins', 
         './utils', 
-        './variables',
-        './fonts';
+        './variables';
 
 @import './../components/Header/header',
+        './../components/Sidebar/sidebar',
         './../components/BoardElement/boardElement',
         './../components/Task/task',
         './../components/AddTaskModal/addTaskModal';
 
-@import './../pages/BoardPage/boardPage'
+@import './../pages/BoardPage/boardPage',
+        './../pages/LoginPage/loginPage',
+        './../pages/ProfilePage/profilePage';

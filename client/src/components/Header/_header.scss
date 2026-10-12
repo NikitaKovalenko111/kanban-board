@@ -1,16 +1,10 @@
 .header {
-    padding: 24px 0;
-    box-shadow: 0 2px rgba($color: #000000, $alpha: .2);
-
-    &__nav-list {
-        display: flex;
-        justify-content: space-between;
-        list-style: none;
-    }
-
-    &__nav-list-item {
-        &:hover {
-            cursor: pointer;
-        }
-    }
+    height: 76px; display: flex; align-items: center; background: rgba(255,255,255,.92);
+    border-bottom: 1px solid var(--color-border); position: sticky; top: 0; z-index: 30; backdrop-filter: blur(12px);
+    &__container { width: 100%; display: flex; align-items: center; gap: 16px; }
+    &__right { margin-left: auto; display: flex; align-items: center; gap: 18px; }
+    &__role { padding: 5px 10px; color: #5563bd; background: #eef0ff; border-radius: 20px; font-size: 12px; font-weight: 650; }
+    &__user { display: flex; align-items: center; gap: 10px; text-align: left; border: 0; background: none; cursor: pointer; }
+    &__user-copy { display: flex; flex-direction: column; line-height: 1.25; strong { font-size: 13px; } small { color: var(--color-muted); font-size: 11px; } }
+    @media (max-width: 600px) { &__role, &__user-copy { display: none; } }
 }

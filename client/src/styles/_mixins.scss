@@ -1,5 +1,5 @@
 @mixin fluid-text($max: 40, $min: 24) {
-    font-size: clamp(#{$min}px, #{$max / 1600 * 100}vw, #{$max}px);
+    font-size: clamp(#{$min}px, #{$max * 0.0625}vw, #{$max}px);
 }
 
 @mixin reset-link {
