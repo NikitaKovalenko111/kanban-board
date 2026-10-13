@@ -13,7 +13,7 @@ function* createTaskWorker(action: PayloadAction<NewTask>) {
   catch (error) { yield put(tasksFailure(error instanceof Error ? error.message : 'Не удалось создать задачу')) }
 }
 function* updateTaskWorker(action: PayloadAction<TaskStatusUpdate>) {
-  try { const { taskId, status, revisionComment, resultAttachments } = action.payload; const task: Task = yield call(mockApi.updateTaskStatus, taskId, status, revisionComment, resultAttachments); yield put(updateTaskSuccess(task)) }
+  try { const { taskId, status, author, revisionComment, resultAttachments } = action.payload; const task: Task = yield call(mockApi.updateTaskStatus, taskId, status, author, revisionComment, resultAttachments); yield put(updateTaskSuccess(task)) }
   catch (error) { yield put(tasksFailure(error instanceof Error ? error.message : 'Не удалось обновить задачу')) }
 }
 export function* tasksSaga() {

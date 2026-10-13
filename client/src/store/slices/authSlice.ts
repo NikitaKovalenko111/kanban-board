@@ -1,20 +1,32 @@
 import { createSlice, type PayloadAction } from '@reduxjs/toolkit'
-import type { User, UserRole } from '../../types'
+import type { LoginCredentials, User } from '../../types'
 
-interface AuthState { user: User | null }
-const users: Record<UserRole, User> = {
-  lead: { id: 1, name: 'Алексей Морозов', login: 'alexey', role: 'lead', position: 'Тимлид' },
-  member: { id: 2, name: 'Мария Волкова', login: 'maria', role: 'member', position: 'Дизайнер' },
-}
-const savedRole = localStorage.getItem('mock-role') as UserRole | null
+interface AuthState { user: User | null; loading: boolean; error: string | null }
+const savedUser = localStorage.getItem('mock-session')
+const initialState: AuthState = { user: savedUser ? JSON.parse(savedUser) as User : null, loading: false, error: null }
 
 const authSlice = createSlice({
-  name: 'auth', initialState: { user: savedRole ? users[savedRole] : null } as AuthState,
+  name: 'auth', initialState,
   reducers: {
-    login(state, action: PayloadAction<UserRole>) { state.user = users[action.payload]; localStorage.setItem('mock-role', action.payload) },
-    logout(state) { state.user = null; localStorage.removeItem('mock-role') },
+    loginRequest(state, _action: PayloadAction<LoginCredentials>) { state.loading = true; state.error = null },
+    loginSuccess(state, action: PayloadAction<User>) {
+      const savedAvatar = localStorage.getItem(`mock-avatar-${action.payload.login}`)
+      state.user = { ...action.payload, avatarUrl: savedAvatar ?? action.payload.avatarUrl }
+      state.loading = false
+      localStorage.setItem('mock-session', JSON.stringify(state.user))
+    },
+    loginFailure(state, action: PayloadAction<string>) { state.loading = false; state.error = action.payload },
+    clearLoginError(state) { state.error = null },
+    updateAvatar(state, action: PayloadAction<string | undefined>) {
+      if (!state.user) return
+      state.user.avatarUrl = action.payload
+      if (action.payload) localStorage.setItem(`mock-avatar-${state.user.login}`, action.payload)
+      else localStorage.removeItem(`mock-avatar-${state.user.login}`)
+      localStorage.setItem('mock-session', JSON.stringify(state.user))
+    },
+    logout(state) { state.user = null; state.error = null; localStorage.removeItem('mock-session') },
   },
 })
 
-export const { login, logout } = authSlice.actions
+export const { loginRequest, loginSuccess, loginFailure, clearLoginError, updateAvatar, logout } = authSlice.actions
 export default authSlice.reducer

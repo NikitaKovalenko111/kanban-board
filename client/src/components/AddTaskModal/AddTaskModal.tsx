@@ -51,13 +51,13 @@ const AddTaskModal: React.FC<PropsType> = ({ task, onClose }): JSX.Element => {
 
     const move = (status: TaskStatus, workFiles?: Attachment[]) => {
       if (!task) return
-      dispatch(updateTaskStatusRequest({ taskId: task.taskId, status, resultAttachments: workFiles }))
+      dispatch(updateTaskStatusRequest({ taskId: task.taskId, status, resultAttachments: workFiles, author: user.name }))
       close()
     }
 
     const returnForRevision = () => {
       if (!task || !revision.trim()) return
-      dispatch(updateTaskStatusRequest({ taskId: task.taskId, status: 'working', revisionComment: revision, resultAttachments: [] }))
+      dispatch(updateTaskStatusRequest({ taskId: task.taskId, status: 'working', revisionComment: revision, resultAttachments: [], author: user.name }))
       close()
     }
 
@@ -92,6 +92,10 @@ const AddTaskModal: React.FC<PropsType> = ({ task, onClose }): JSX.Element => {
                       {task.taskStatus === 'done' && user.role === 'lead' && <button className="button button--secondary" onClick={() => move('working')}>Вернуть в работу</button>}
                     </div>
                     {user.role === 'lead' && task.taskStatus === 'checking' && <div className="revision-form"><label>Что нужно доработать<textarea value={revision} onChange={(event) => setRevision(event.target.value)} placeholder="Оставьте понятный комментарий" /></label><button className="button button--danger" onClick={returnForRevision} disabled={!revision.trim()}>Вернуть на доработку</button></div>}
+                    <section className="task-history">
+                      <span className="eyebrow">История задачи</span>
+                      {task.history.length ? <div className="task-history__list">{[...task.history].reverse().map((event) => <article className={`history-event history-event--${event.type}`} key={event.id}><i /><div className="history-event__content"><div className="history-event__heading"><strong>{event.type === 'revision' ? 'Возврат на доработку' : 'Изменение статуса'}</strong><time>{new Date(event.createdAt).toLocaleString('ru-RU', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</time></div><p><b>{event.author}</b><span className="status-change">{statusLabels[event.fromStatus]} <i>→</i> {statusLabels[event.toStatus]}</span></p>{event.comment && <blockquote>{event.comment}</blockquote>}</div></article>)}</div> : <p className="task-history__empty">Изменений пока не было</p>}
+                    </section>
                   </div>
                 ) : (
                 <form className="add-task-modal__form" onSubmit={submit}>

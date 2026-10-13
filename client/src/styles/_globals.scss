@@ -56,8 +56,9 @@ button { color: inherit; }
 }
 
 .avatar {
-    display: grid; place-items: center; flex: 0 0 auto; width: 38px; height: 38px; border-radius: 50%;
+    display: grid; place-items: center; flex: 0 0 auto; width: 38px; height: 38px; overflow: hidden; border-radius: 50%;
     background: #e6e9ff; color: #5261c0; font-size: 12px; font-weight: 750;
+    img { width: 100%; height: 100%; object-fit: cover; }
     &--large { width: 52px; height: 52px; font-size: 15px; }
     &--xl { width: 92px; height: 92px; font-size: 24px; }
 }

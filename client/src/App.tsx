@@ -5,6 +5,10 @@ import Sidebar from './components/Sidebar/Sidebar'
 import BoardPage from './pages/BoardPage/BoardPage'
 import LoginPage from './pages/LoginPage/LoginPage'
 import ProfilePage from './pages/ProfilePage/ProfilePage'
+import HistoryPage from './pages/HistoryPage/HistoryPage'
+import TeamPage from './pages/TeamPage/TeamPage'
+import MembersPage from './pages/MembersPage/MembersPage'
+import MemberProfilePage from './pages/MembersPage/MemberProfilePage'
 import { useAppSelector } from './store/hooks'
 
 import './styles/style.scss'
@@ -24,6 +28,10 @@ function App() {
       <Routes>
         <Route path="/" element={<BoardPage />} />
         <Route path="/profile" element={<ProfilePage />} />
+        <Route path="/history" element={<HistoryPage />} />
+        <Route path="/members" element={<MembersPage />} />
+        <Route path="/users/:userId" element={<MemberProfilePage />} />
+        <Route path="/team" element={user.role === 'lead' ? <TeamPage /> : <Navigate to="/" replace />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </div>

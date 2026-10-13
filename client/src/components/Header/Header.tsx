@@ -2,6 +2,7 @@ import type { JSX } from 'react'
 import type React from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAppSelector } from '../../store/hooks'
+import UserAvatar from '../UserAvatar/UserAvatar'
 
 type PropsType = { onMenu: () => void }
 
@@ -15,7 +16,7 @@ const Header: React.FC<PropsType> = ({ onMenu }): JSX.Element => {
                 <div className="header__right">
                     <span className="header__role">{user.role === 'lead' ? 'Тимлид' : 'Участник'}</span>
                     <button className="header__user" onClick={() => navigate('/profile')}>
-                        <span className="avatar">{user.name.split(' ').map((part) => part[0]).join('')}</span>
+                        <UserAvatar user={user} />
                         <span className="header__user-copy"><strong>{user.name}</strong><small>@{user.login}</small></span>
                     </button>
                 </div>

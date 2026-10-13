@@ -1,9 +1,10 @@
 .board-element {
-    min-width: 270px; padding: 14px; background: #edf0f5; border-radius: 18px;
+    min-width: 0; padding: 14px; background: #edf0f5; border-radius: 18px;
     animation: soft-pop .38s both cubic-bezier(.2,.75,.3,1);
     &__top { display: flex; justify-content: space-between; align-items: center; padding: 2px 3px 13px; }
     &__header { display: flex; align-items: center; gap: 8px; font-size: 14px; font-weight: 750; i { width: 8px; height: 8px; border-radius: 50%; } span { color: var(--color-muted); font-size: 12px; font-weight: 500; } }
-    &__plus-btn { width: 29px; height: 29px; padding: 0; border: 0; border-radius: 9px; background: rgba(255,255,255,.7); cursor: pointer; font-size: 20px; transition: color .2s ease, background-color .2s ease, transform .2s ease; &:hover { color: var(--color-primary); background: white; transform: rotate(90deg); } &:active { transform: rotate(90deg) scale(.9); } }
+    &__plus-btn { display: grid; place-items: center; flex: 0 0 29px; width: 29px; height: 29px; padding: 0; border: 0; border-radius: 9px; background: rgba(255,255,255,.82); cursor: pointer; transition: background-color .2s ease, box-shadow .2s ease; span { position: relative; display: block; width: 12px; height: 12px; &::before, &::after { content: ''; position: absolute; top: 5px; left: 0; width: 12px; height: 2px; border-radius: 2px; background: var(--color-primary); } &::after { transform: rotate(90deg); } } &:hover { background: white; box-shadow: 0 4px 12px rgba(70,80,130,.12); } &:active { background: #f4f5ff; box-shadow: 0 2px 6px rgba(70,80,130,.1); } }
+    &__history { margin-left: auto; padding: 4px 6px; border: 0; color: var(--color-primary); background: none; cursor: pointer; font-size: 9px; font-weight: 700; &:hover { translate: 2px 0; } }
     &__tasks { display: flex; flex-direction: column; gap: 11px; }
     &__empty { padding: 25px 10px; text-align: center; color: #9aa1ad; font-size: 13px; border: 1px dashed #d2d7df; border-radius: 12px; }
 }
