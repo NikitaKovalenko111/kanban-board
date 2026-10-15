@@ -4,22 +4,23 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Test
+import com.kanbanboard.mobile.model.LoginCredentials
 
 class FakeKanbanRepositoryTest {
     private val repository = FakeKanbanRepository()
 
     @Test
-    fun `login rejects blank id`() {
-        assertNull(repository.login("  "))
+    fun `login rejects invalid credentials`() {
+        assertNull(repository.login(LoginCredentials("alexey", "wrong")))
     }
 
     @Test
-    fun `login returns Samir profile for non blank id`() {
-        val user = repository.login("samir-203")
+    fun `login returns lead for valid credentials`() {
+        val user = repository.login(LoginCredentials("alexey", "lead123"))
 
         assertNotNull(user)
-        assertEquals("samir-203", user?.id)
-        assertEquals("203", user?.group)
+        assertEquals("alexey", user?.login)
+        assertEquals("Тимлид", user?.position)
     }
 
     @Test

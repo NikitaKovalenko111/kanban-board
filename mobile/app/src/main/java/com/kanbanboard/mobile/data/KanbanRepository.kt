@@ -4,22 +4,46 @@ import com.kanbanboard.mobile.model.Attachment
 import com.kanbanboard.mobile.model.Comment
 import com.kanbanboard.mobile.model.EventVisibility
 import com.kanbanboard.mobile.model.Lesson
+import com.kanbanboard.mobile.model.LoginCredentials
 import com.kanbanboard.mobile.model.Task
 import com.kanbanboard.mobile.model.TaskStatus
 import com.kanbanboard.mobile.model.TeamEvent
 import com.kanbanboard.mobile.model.User
+import com.kanbanboard.mobile.model.UserRole
+import com.kanbanboard.mobile.model.TeamSettings
 
 interface KanbanRepository {
-    fun login(id: String): User?
+    fun login(credentials: LoginCredentials): User?
     fun tasks(): List<Task>
+    fun members(): List<User>
+    fun teamSettings(): TeamSettings
     fun lessons(group: String): List<Lesson>
     fun events(): List<TeamEvent>
 }
 
 class FakeKanbanRepository : KanbanRepository {
-    override fun login(id: String): User? = id.trim().takeIf { it.isNotEmpty() }?.let {
-        User(id = it, name = "Самир Ахмедов", role = "Mobile-разработчик", group = "203")
-    }
+    private data class Account(val user: User, val password: String)
+
+    private val accounts = listOf(
+        Account(User(1, "Алексей Морозов", "alexey", UserRole.LEAD, "Тимлид", true, "2026-04-12"), "lead123"),
+        Account(User(2, "Мария Волкова", "maria", UserRole.MEMBER, "Дизайнер", true, "2026-05-08"), "member123"),
+        Account(User(3, "Илья Горин", "ilya", UserRole.MEMBER, "Frontend-разработчик", true, "2026-06-03"), "member123"),
+        Account(User(4, "Анна Лукина", "anna", UserRole.MEMBER, "QA-инженер", true, "2026-07-21"), "member123"),
+        Account(User(5, "Олег Миронов", "oleg", UserRole.MEMBER, "Backend-разработчик", false, "2026-08-15"), "member123"),
+    )
+
+    override fun login(credentials: LoginCredentials): User? = accounts.firstOrNull {
+        it.user.login == credentials.login.trim().lowercase() &&
+            it.password == credentials.password &&
+            it.user.active
+    }?.user
+
+    override fun members(): List<User> = accounts.map { it.user }
+
+    override fun teamSettings() = TeamSettings(
+        name = "Веб-продукт",
+        description = "Команда разработки внутренних и клиентских веб-продуктов.",
+    )
 
     override fun tasks(): List<Task> = listOf(
         Task(
@@ -56,6 +80,8 @@ class FakeKanbanRepository : KanbanRepository {
             assignee = "Никита",
             deadline = "12 окт",
             attachments = listOf(Attachment("a2", "vision.md", "18 КБ")),
+            resultAttachments = listOf(Attachment("r1", "vision-result.pdf", "430 КБ")),
+            completedAt = "12.10.2026",
         ),
         Task(
             id = 105,
@@ -64,7 +90,11 @@ class FakeKanbanRepository : KanbanRepository {
             status = TaskStatus.DONE,
             assignee = "Алёна",
             deadline = "14 окт",
+            resultAttachments = listOf(Attachment("r2", "ci-pipeline.yml", "12 КБ")),
+            completedAt = "14.10.2026",
         ),
+        Task(106, "Подготовить документацию", "Актуализировать инструкции по локальному запуску.", TaskStatus.DONE, "Анна Лукина", "13 окт", completedAt = "13.10.2026"),
+        Task(107, "Собрать UI-kit", "Согласовать состояния кнопок, полей и типографику.", TaskStatus.DONE, "Мария Волкова", "11 окт", completedAt = "11.10.2026"),
     )
 
     override fun lessons(group: String): List<Lesson> = if (group == "203") {

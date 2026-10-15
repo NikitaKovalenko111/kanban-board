@@ -53,6 +53,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -67,6 +68,9 @@ import com.kanbanboard.mobile.model.Lesson
 import com.kanbanboard.mobile.model.Task
 import com.kanbanboard.mobile.model.TaskStatus
 import com.kanbanboard.mobile.model.TeamEvent
+import com.kanbanboard.mobile.model.TeamSettings
+import com.kanbanboard.mobile.model.User
+import com.kanbanboard.mobile.model.UserRole
 import com.kanbanboard.mobile.ui.theme.AppBorder
 import com.kanbanboard.mobile.ui.theme.AppDanger
 import com.kanbanboard.mobile.ui.theme.AppMuted
@@ -75,8 +79,8 @@ import com.kanbanboard.mobile.ui.theme.AppSuccess
 
 private enum class HomeSection(val title: String, val symbol: String) {
     BOARD("Доска", "▦"),
-    SCHEDULE("Расписание", "◫"),
-    EVENTS("События", "●"),
+    HISTORY("История", "◷"),
+    MEMBERS("Участники", "♧"),
     PROFILE("Профиль", "○"),
 }
 
@@ -91,8 +95,8 @@ fun KanbanApp(viewModel: AppViewModel = viewModel()) {
         composable("login") {
             LoginScreen(
                 error = viewModel.uiState.loginError,
-                onLogin = { id ->
-                    viewModel.login(id)
+                onLogin = { login, password ->
+                    viewModel.login(login, password)
                     if (viewModel.uiState.user != null) {
                         navController.navigate("home") { popUpTo("login") { inclusive = true } }
                     }
@@ -103,6 +107,10 @@ fun KanbanApp(viewModel: AppViewModel = viewModel()) {
             HomeScreen(
                 viewModel = viewModel,
                 onTaskClick = { navController.navigate("task/${it.id}") },
+                onMemberClick = { navController.navigate("member/${it.id}") },
+                onCreateTask = { navController.navigate("create-task") },
+                onManageTeam = { navController.navigate("team") },
+                onOpenExtras = { navController.navigate("extras") },
                 onLogout = {
                     viewModel.logout()
                     navController.navigate("login") { popUpTo("home") { inclusive = true } }
@@ -120,18 +128,52 @@ fun KanbanApp(viewModel: AppViewModel = viewModel()) {
             } else {
                 TaskDetailScreen(
                     task = task,
+                    currentUser = viewModel.uiState.user,
                     onBack = navController::popBackStack,
                     onMove = { viewModel.moveTask(taskId, it) },
                     onComment = { viewModel.addComment(taskId, it) },
                 )
             }
         }
+        composable("create-task") {
+            CreateTaskScreen(
+                onBack = navController::popBackStack,
+                onCreate = { title, description, deadline ->
+                    viewModel.createTask(title, description, deadline)
+                    navController.popBackStack()
+                },
+            )
+        }
+        composable(
+            route = "member/{memberId}",
+            arguments = listOf(navArgument("memberId") { type = NavType.LongType }),
+        ) { entry ->
+            val memberId = entry.arguments?.getLong("memberId") ?: return@composable
+            val member = viewModel.uiState.members.firstOrNull { it.id == memberId }
+            MemberProfileScreen(member, viewModel.uiState.tasks, navController::popBackStack)
+        }
+        composable("team") {
+            TeamManagementScreen(
+                user = viewModel.uiState.user,
+                members = viewModel.uiState.members,
+                settings = viewModel.uiState.teamSettings,
+                onBack = navController::popBackStack,
+                onToggleMember = viewModel::toggleMember,
+                onUpdateTeam = viewModel::updateTeam,
+                onAddMember = viewModel::addMember,
+                onMemberClick = { navController.navigate("member/${it.id}") },
+            )
+        }
+        composable("extras") {
+            ExtrasScreen(viewModel, navController::popBackStack)
+        }
     }
 }
 
 @Composable
-private fun LoginScreen(error: String?, onLogin: (String) -> Unit) {
-    var id by rememberSaveable { mutableStateOf("") }
+private fun LoginScreen(error: String?, onLogin: (String, String) -> Unit) {
+    var login by rememberSaveable { mutableStateOf("") }
+    var password by rememberSaveable { mutableStateOf("") }
     Box(
         modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).padding(24.dp),
         contentAlignment = Alignment.Center,
@@ -148,27 +190,39 @@ private fun LoginScreen(error: String?, onLogin: (String) -> Unit) {
                 Text("Добро пожаловать", fontSize = 28.sp, fontWeight = FontWeight.Bold)
                 Spacer(Modifier.height(8.dp))
                 Text(
-                    "Введите личный ID, чтобы открыть задачи вашей команды.",
+                    "Введите логин и пароль, выданные тимлидом.",
                     color = AppMuted,
                     lineHeight = 21.sp,
                 )
                 Spacer(Modifier.height(22.dp))
                 OutlinedTextField(
-                    value = id,
-                    onValueChange = { id = it },
-                    label = { Text("Личный ID") },
-                    placeholder = { Text("Например, samir-203") },
+                    value = login,
+                    onValueChange = { login = it },
+                    label = { Text("Логин") },
+                    placeholder = { Text("Ваш логин") },
                     singleLine = true,
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next),
+                    shape = RoundedCornerShape(14.dp),
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                Spacer(Modifier.height(10.dp))
+                OutlinedTextField(
+                    value = password,
+                    onValueChange = { password = it },
+                    label = { Text("Пароль") },
+                    placeholder = { Text("Ваш пароль") },
+                    singleLine = true,
+                    visualTransformation = PasswordVisualTransformation(),
                     isError = error != null,
                     supportingText = error?.let { { Text(it) } },
                     keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
-                    keyboardActions = KeyboardActions(onDone = { onLogin(id) }),
+                    keyboardActions = KeyboardActions(onDone = { onLogin(login, password) }),
                     shape = RoundedCornerShape(14.dp),
                     modifier = Modifier.fillMaxWidth(),
                 )
                 Spacer(Modifier.height(16.dp))
                 Button(
-                    onClick = { onLogin(id) },
+                    onClick = { onLogin(login, password) },
                     modifier = Modifier.fillMaxWidth().height(52.dp),
                     shape = RoundedCornerShape(12.dp),
                 ) {
@@ -176,7 +230,7 @@ private fun LoginScreen(error: String?, onLogin: (String) -> Unit) {
                 }
                 Spacer(Modifier.height(14.dp))
                 Text(
-                    "Sprint 0 · демонстрационные данные",
+                    "Тимлид: alexey / lead123\nУчастник: maria / member123",
                     modifier = Modifier.align(Alignment.CenterHorizontally),
                     color = AppMuted,
                     fontSize = 12.sp,
@@ -207,6 +261,10 @@ private fun BrandMark() {
 private fun HomeScreen(
     viewModel: AppViewModel,
     onTaskClick: (Task) -> Unit,
+    onMemberClick: (User) -> Unit,
+    onCreateTask: () -> Unit,
+    onManageTeam: () -> Unit,
+    onOpenExtras: () -> Unit,
     onLogout: () -> Unit,
 ) {
     var selectedSection by rememberSaveable { mutableIntStateOf(0) }
@@ -233,10 +291,22 @@ private fun HomeScreen(
         },
     ) { padding ->
         when (section) {
-            HomeSection.BOARD -> BoardScreen(viewModel.uiState.tasks, onTaskClick, Modifier.padding(padding))
-            HomeSection.SCHEDULE -> ScheduleScreen(viewModel::lessons, Modifier.padding(padding))
-            HomeSection.EVENTS -> EventsScreen(viewModel.events, Modifier.padding(padding))
-            HomeSection.PROFILE -> ProfileScreen(viewModel.uiState.user, onLogout, Modifier.padding(padding))
+            HomeSection.BOARD -> BoardScreen(
+                tasks = viewModel.uiState.tasks,
+                onTaskClick = onTaskClick,
+                canCreate = viewModel.uiState.user?.role == UserRole.LEAD,
+                onCreate = onCreateTask,
+                modifier = Modifier.padding(padding),
+            )
+            HomeSection.HISTORY -> HistoryScreen(viewModel.uiState.tasks, onTaskClick, Modifier.padding(padding))
+            HomeSection.MEMBERS -> MembersScreen(
+                members = viewModel.uiState.members,
+                canManage = viewModel.uiState.user?.role == UserRole.LEAD,
+                onMemberClick = onMemberClick,
+                onManage = onManageTeam,
+                modifier = Modifier.padding(padding),
+            )
+            HomeSection.PROFILE -> ProfileScreen(viewModel.uiState.user, viewModel.uiState.tasks, onOpenExtras, onLogout, Modifier.padding(padding))
         }
     }
 }
@@ -268,11 +338,27 @@ private fun Avatar(name: String, size: Int = 42) {
 }
 
 @Composable
-private fun BoardScreen(tasks: List<Task>, onTaskClick: (Task) -> Unit, modifier: Modifier = Modifier) {
+private fun BoardScreen(
+    tasks: List<Task>,
+    onTaskClick: (Task) -> Unit,
+    canCreate: Boolean,
+    onCreate: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
     var selectedStatus by rememberSaveable { mutableStateOf(TaskStatus.WORKING) }
     val visibleTasks = tasks.filter { it.status == selectedStatus }
 
     Column(modifier = modifier.fillMaxSize()) {
+        if (canCreate) {
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 4.dp),
+                horizontalArrangement = Arrangement.End,
+            ) {
+                Button(onClick = onCreate, shape = RoundedCornerShape(12.dp)) {
+                    Text("＋ Новая задача", fontWeight = FontWeight.SemiBold)
+                }
+            }
+        }
         LazyRow(
             contentPadding = PaddingValues(horizontal = 20.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -347,6 +433,349 @@ private fun StatusDot(status: TaskStatus) {
         Box(Modifier.size(7.dp).clip(CircleShape).background(color))
         Spacer(Modifier.width(5.dp))
         Text(status.title, color = color, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+    }
+}
+
+@Composable
+private fun HistoryScreen(tasks: List<Task>, onTaskClick: (Task) -> Unit, modifier: Modifier = Modifier) {
+    var query by rememberSaveable { mutableStateOf("") }
+    var assignee by rememberSaveable { mutableStateOf("Все") }
+    val completed = tasks.filter { it.status == TaskStatus.DONE }
+    val assignees = listOf("Все") + completed.map { it.assignee }.distinct()
+    val visible = completed.filter { task ->
+        (assignee == "Все" || task.assignee == assignee) &&
+            "${task.title} ${task.description} ${task.assignee}".contains(query, ignoreCase = true)
+    }
+
+    Column(modifier = modifier.fillMaxSize()) {
+        OutlinedTextField(
+            value = query,
+            onValueChange = { query = it },
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp),
+            placeholder = { Text("Поиск по истории") },
+            singleLine = true,
+            shape = RoundedCornerShape(14.dp),
+        )
+        LazyRow(
+            contentPadding = PaddingValues(horizontal = 20.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            items(assignees) { name ->
+                FilterChip(selected = assignee == name, onClick = { assignee = name }, label = { Text(name) })
+            }
+        }
+        if (visible.isEmpty()) {
+            EmptyState("По заданным фильтрам задач не найдено", Modifier.weight(1f))
+        } else {
+            LazyColumn(
+                contentPadding = PaddingValues(horizontal = 20.dp, vertical = 8.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                item { Text("${completed.size} выполнено", color = AppMuted, fontSize = 12.sp) }
+                items(visible, key = { it.id }) { task ->
+                    Card(
+                        modifier = Modifier.fillMaxWidth().clickable { onTaskClick(task) },
+                        shape = RoundedCornerShape(14.dp),
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                    ) {
+                        Column(Modifier.padding(16.dp)) {
+                            Row {
+                                Text("#${task.id}", color = AppMuted, fontSize = 11.sp, modifier = Modifier.weight(1f))
+                                Text(task.completedAt ?: "—", color = AppMuted, fontSize = 11.sp)
+                            }
+                            Spacer(Modifier.height(6.dp))
+                            Text(task.title, fontWeight = FontWeight.SemiBold)
+                            Text(task.assignee, color = AppMuted, fontSize = 12.sp)
+                            Text("Результат: ${task.resultAttachments.size} файл(а)", color = AppPrimary, fontSize = 11.sp)
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun MembersScreen(
+    members: List<User>,
+    canManage: Boolean,
+    onMemberClick: (User) -> Unit,
+    onManage: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    var query by rememberSaveable { mutableStateOf("") }
+    val visible = members.filter { "${it.name} ${it.login} ${it.position}".contains(query, ignoreCase = true) }
+    Column(modifier = modifier.fillMaxSize()) {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text("${members.count { it.active }} активных", color = AppMuted, modifier = Modifier.weight(1f))
+            if (canManage) Button(onClick = onManage, shape = RoundedCornerShape(12.dp)) { Text("Управление") }
+        }
+        OutlinedTextField(
+            value = query,
+            onValueChange = { query = it },
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp),
+            placeholder = { Text("Найти участника") },
+            singleLine = true,
+            shape = RoundedCornerShape(14.dp),
+        )
+        LazyColumn(
+            contentPadding = PaddingValues(20.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            items(visible, key = { it.id }) { member -> MemberCard(member) { onMemberClick(member) } }
+        }
+    }
+}
+
+@Composable
+private fun MemberCard(member: User, onClick: () -> Unit) {
+    Card(
+        modifier = Modifier.fillMaxWidth().clickable(onClick = onClick),
+        shape = RoundedCornerShape(14.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+    ) {
+        Row(Modifier.padding(15.dp), verticalAlignment = Alignment.CenterVertically) {
+            Avatar(member.name, 44)
+            Spacer(Modifier.width(12.dp))
+            Column(Modifier.weight(1f)) {
+                Text(member.name, fontWeight = FontWeight.SemiBold)
+                Text(member.position, color = AppMuted, fontSize = 12.sp)
+                Text("@${member.login}", color = AppMuted, fontSize = 11.sp)
+            }
+            Surface(
+                color = if (member.active) Color(0xFFEAF7EF) else Color(0xFFFFF0F1),
+                shape = RoundedCornerShape(8.dp),
+            ) {
+                Text(
+                    if (member.active) "В команде" else "Нет доступа",
+                    color = if (member.active) AppSuccess else AppDanger,
+                    fontSize = 10.sp,
+                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 5.dp),
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun MemberProfileScreen(member: User?, tasks: List<Task>, onBack: () -> Unit) {
+    if (member == null) {
+        Column(Modifier.fillMaxSize().statusBarsPadding().padding(20.dp)) {
+            TextButton(onClick = onBack) { Text("← К участникам") }
+            EmptyState("Профиль не найден", Modifier.weight(1f))
+        }
+        return
+    }
+    val memberTasks = tasks.filter { it.assignee == member.name }
+    LazyColumn(
+        modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).statusBarsPadding(),
+        contentPadding = PaddingValues(20.dp),
+        verticalArrangement = Arrangement.spacedBy(14.dp),
+    ) {
+        item { TextButton(onClick = onBack) { Text("← Назад") } }
+        item {
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(22.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+            ) {
+                Column(Modifier.fillMaxWidth().padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                    Avatar(member.name, 82)
+                    Spacer(Modifier.height(12.dp))
+                    Text(member.name, fontSize = 23.sp, fontWeight = FontWeight.Bold)
+                    Text(member.position, color = AppMuted)
+                    Text("@${member.login}", color = AppMuted, fontSize = 12.sp)
+                    Spacer(Modifier.height(10.dp))
+                    StatusBadge(member.active)
+                }
+            }
+        }
+        item {
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                ProfileStat(memberTasks.count { it.status == TaskStatus.WORKING }, "В работе", Modifier.weight(1f))
+                ProfileStat(memberTasks.count { it.status == TaskStatus.CHECKING }, "Проверка", Modifier.weight(1f))
+                ProfileStat(memberTasks.count { it.status == TaskStatus.DONE }, "Готово", Modifier.weight(1f))
+            }
+        }
+        item { InfoCard("Роль", if (member.role == UserRole.LEAD) "Тимлид" else "Участник") }
+        item { InfoCard("В команде с", member.joinedAt) }
+        if (memberTasks.isNotEmpty()) {
+            item { Text("Последние задачи", fontSize = 18.sp, fontWeight = FontWeight.Bold) }
+            items(memberTasks.take(4)) { task -> TaskCard(task) {} }
+        }
+    }
+}
+
+@Composable
+private fun StatusBadge(active: Boolean) {
+    Surface(color = if (active) Color(0xFFEAF7EF) else Color(0xFFFFF0F1), shape = RoundedCornerShape(8.dp)) {
+        Text(
+            if (active) "Активен" else "Доступ закрыт",
+            color = if (active) AppSuccess else AppDanger,
+            fontSize = 11.sp,
+            fontWeight = FontWeight.SemiBold,
+            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+        )
+    }
+}
+
+@Composable
+private fun CreateTaskScreen(onBack: () -> Unit, onCreate: (String, String, String) -> Unit) {
+    var title by rememberSaveable { mutableStateOf("") }
+    var description by rememberSaveable { mutableStateOf("") }
+    var deadline by rememberSaveable { mutableStateOf("") }
+    Scaffold(
+        containerColor = MaterialTheme.colorScheme.background,
+        topBar = { SimpleTopBar("Новая задача", onBack) },
+    ) { padding ->
+        Column(
+            modifier = Modifier.fillMaxSize().padding(padding).padding(20.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            OutlinedTextField(title, { title = it }, Modifier.fillMaxWidth(), label = { Text("Название задачи") }, shape = RoundedCornerShape(14.dp))
+            OutlinedTextField(description, { description = it }, Modifier.fillMaxWidth().height(140.dp), label = { Text("Описание / ТЗ") }, shape = RoundedCornerShape(14.dp))
+            OutlinedTextField(deadline, { deadline = it }, Modifier.fillMaxWidth(), label = { Text("Дедлайн") }, placeholder = { Text("Например, 20 окт") }, shape = RoundedCornerShape(14.dp))
+            MutedPanel("Прикрепление исходников будет подключено через системный выбор файлов после согласования backend API.")
+            Button(
+                onClick = { onCreate(title, description, deadline) },
+                enabled = title.isNotBlank() && description.isNotBlank(),
+                modifier = Modifier.fillMaxWidth().height(52.dp),
+                shape = RoundedCornerShape(12.dp),
+            ) { Text("Создать задачу") }
+        }
+    }
+}
+
+@Composable
+private fun ExtrasScreen(viewModel: AppViewModel, onBack: () -> Unit) {
+    var selected by rememberSaveable { mutableIntStateOf(0) }
+    Scaffold(
+        containerColor = MaterialTheme.colorScheme.background,
+        topBar = { SimpleTopBar("Дополнительно", onBack) },
+    ) { padding ->
+        Column(Modifier.fillMaxSize().padding(padding)) {
+            Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                FilterChip(selected == 0, { selected = 0 }, label = { Text("Расписание") })
+                FilterChip(selected == 1, { selected = 1 }, label = { Text("События") })
+            }
+            if (selected == 0) ScheduleScreen(viewModel::lessons, Modifier.weight(1f))
+            else EventsScreen(viewModel.events, Modifier.weight(1f))
+        }
+    }
+}
+
+@Composable
+private fun SimpleTopBar(title: String, onBack: () -> Unit) {
+    Row(
+        modifier = Modifier.fillMaxWidth().statusBarsPadding().padding(horizontal = 10.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        TextButton(onClick = onBack) { Text("← Назад") }
+        Text(title, fontSize = 20.sp, fontWeight = FontWeight.Bold)
+    }
+}
+
+@Composable
+private fun TeamManagementScreen(
+    user: User?,
+    members: List<User>,
+    settings: TeamSettings,
+    onBack: () -> Unit,
+    onToggleMember: (Long) -> Unit,
+    onUpdateTeam: (String, String) -> Unit,
+    onAddMember: (String, String, String, UserRole) -> Unit,
+    onMemberClick: (User) -> Unit,
+) {
+    if (user?.role != UserRole.LEAD) {
+        Column(Modifier.fillMaxSize().statusBarsPadding().padding(20.dp)) {
+            TextButton(onClick = onBack) { Text("← Назад") }
+            EmptyState("Раздел доступен только тимлиду", Modifier.weight(1f))
+        }
+        return
+    }
+    var teamName by rememberSaveable(settings.name) { mutableStateOf(settings.name) }
+    var description by rememberSaveable(settings.description) { mutableStateOf(settings.description) }
+    var name by rememberSaveable { mutableStateOf("") }
+    var login by rememberSaveable { mutableStateOf("") }
+    var position by rememberSaveable { mutableStateOf("") }
+    var role by rememberSaveable { mutableStateOf(UserRole.MEMBER) }
+
+    Scaffold(
+        containerColor = MaterialTheme.colorScheme.background,
+        topBar = { SimpleTopBar("Управление командой", onBack) },
+    ) { padding ->
+        LazyColumn(
+            modifier = Modifier.fillMaxSize().padding(padding),
+            contentPadding = PaddingValues(20.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp),
+        ) {
+            item {
+                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    ProfileStat(members.size, "Всего", Modifier.weight(1f))
+                    ProfileStat(members.count { it.active }, "Активных", Modifier.weight(1f))
+                    ProfileStat(members.count { it.role == UserRole.LEAD }, "Тимлидов", Modifier.weight(1f))
+                }
+            }
+            item { Text("Настройки команды", fontSize = 19.sp, fontWeight = FontWeight.Bold) }
+            item {
+                Card(shape = RoundedCornerShape(14.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
+                    Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        OutlinedTextField(teamName, { teamName = it }, Modifier.fillMaxWidth(), label = { Text("Название") }, shape = RoundedCornerShape(12.dp))
+                        OutlinedTextField(description, { description = it }, Modifier.fillMaxWidth(), label = { Text("Описание") }, shape = RoundedCornerShape(12.dp))
+                        Button(onClick = { onUpdateTeam(teamName, description) }, modifier = Modifier.fillMaxWidth()) { Text("Сохранить") }
+                    }
+                }
+            }
+            item { Text("Новый аккаунт", fontSize = 19.sp, fontWeight = FontWeight.Bold) }
+            item {
+                Card(shape = RoundedCornerShape(14.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
+                    Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        OutlinedTextField(name, { name = it }, Modifier.fillMaxWidth(), label = { Text("Имя и фамилия") }, shape = RoundedCornerShape(12.dp))
+                        OutlinedTextField(login, { login = it.lowercase() }, Modifier.fillMaxWidth(), label = { Text("Логин") }, shape = RoundedCornerShape(12.dp))
+                        OutlinedTextField(position, { position = it }, Modifier.fillMaxWidth(), label = { Text("Должность") }, shape = RoundedCornerShape(12.dp))
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            FilterChip(role == UserRole.MEMBER, { role = UserRole.MEMBER }, label = { Text("Участник") })
+                            FilterChip(role == UserRole.LEAD, { role = UserRole.LEAD }, label = { Text("Тимлид") })
+                        }
+                        Button(
+                            onClick = {
+                                onAddMember(name, login, position, role)
+                                name = ""; login = ""; position = ""; role = UserRole.MEMBER
+                            },
+                            enabled = name.isNotBlank() && login.isNotBlank() && position.isNotBlank(),
+                            modifier = Modifier.fillMaxWidth(),
+                        ) { Text("Создать аккаунт") }
+                    }
+                }
+            }
+            item { Text("Участники", fontSize = 19.sp, fontWeight = FontWeight.Bold) }
+            items(members, key = { it.id }) { member ->
+                Card(shape = RoundedCornerShape(14.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
+                    Column(Modifier.padding(14.dp)) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth().clickable { onMemberClick(member) },
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Avatar(member.name, 38)
+                            Spacer(Modifier.width(10.dp))
+                            Column(Modifier.weight(1f)) {
+                                Text(member.name, fontWeight = FontWeight.SemiBold)
+                                Text("@${member.login} · ${member.position}", color = AppMuted, fontSize = 11.sp)
+                            }
+                            StatusBadge(member.active)
+                        }
+                        if (member.id != user.id) {
+                            TextButton(onClick = { onToggleMember(member.id) }, modifier = Modifier.align(Alignment.End)) {
+                                Text(if (member.active) "Заблокировать" else "Восстановить", color = if (member.active) AppDanger else AppSuccess)
+                            }
+                        }
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -450,7 +879,13 @@ private fun EventCard(event: TeamEvent) {
 }
 
 @Composable
-private fun ProfileScreen(user: com.kanbanboard.mobile.model.User?, onLogout: () -> Unit, modifier: Modifier = Modifier) {
+private fun ProfileScreen(
+    user: User?,
+    tasks: List<Task>,
+    onOpenExtras: () -> Unit,
+    onLogout: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
     LazyColumn(
         modifier = modifier.fillMaxSize(),
         contentPadding = PaddingValues(20.dp),
@@ -466,16 +901,24 @@ private fun ProfileScreen(user: com.kanbanboard.mobile.model.User?, onLogout: ()
                     Avatar(user?.name.orEmpty(), 78)
                     Spacer(Modifier.height(14.dp))
                     Text(user?.name ?: "Пользователь", fontSize = 21.sp, fontWeight = FontWeight.Bold)
-                    Text(user?.role.orEmpty(), color = AppMuted)
+                    Text(user?.position.orEmpty(), color = AppMuted)
                     Spacer(Modifier.height(14.dp))
                     Surface(color = MaterialTheme.colorScheme.primaryContainer, shape = RoundedCornerShape(10.dp)) {
-                        Text("Группа ${user?.group}", color = MaterialTheme.colorScheme.onPrimaryContainer, modifier = Modifier.padding(horizontal = 12.dp, vertical = 7.dp), fontWeight = FontWeight.SemiBold)
+                        Text(if (user?.role == UserRole.LEAD) "Капитан команды" else "Участник команды", color = MaterialTheme.colorScheme.onPrimaryContainer, modifier = Modifier.padding(horizontal = 12.dp, vertical = 7.dp), fontWeight = FontWeight.SemiBold)
                     }
                 }
             }
         }
-        item { InfoCard("Команда", "Студенческая команда · 6 участников") }
-        item { InfoCard("Уведомления", "События, дедлайны и изменения статусов") }
+        item {
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                ProfileStat(tasks.count { it.status == TaskStatus.WORKING }, "В работе", Modifier.weight(1f))
+                ProfileStat(tasks.count { it.status == TaskStatus.DONE }, "Завершено", Modifier.weight(1f))
+                ProfileStat(tasks.size, "Всего", Modifier.weight(1f))
+            }
+        }
+        item { InfoCard("Логин", "@${user?.login.orEmpty()}") }
+        item { InfoCard("Команда", "Веб-продукт") }
+        item { InfoCard("Расписание и события", "Дополнительные функции проекта", onOpenExtras) }
         item {
             Button(
                 onClick = onLogout,
@@ -488,9 +931,19 @@ private fun ProfileScreen(user: com.kanbanboard.mobile.model.User?, onLogout: ()
 }
 
 @Composable
-private fun InfoCard(title: String, text: String) {
+private fun ProfileStat(value: Int, label: String, modifier: Modifier = Modifier) {
+    Surface(modifier = modifier, color = MaterialTheme.colorScheme.surface, shape = RoundedCornerShape(14.dp)) {
+        Column(Modifier.padding(13.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+            Text("$value", color = AppPrimary, fontSize = 22.sp, fontWeight = FontWeight.Bold)
+            Text(label, color = AppMuted, fontSize = 10.sp)
+        }
+    }
+}
+
+@Composable
+private fun InfoCard(title: String, text: String, onClick: (() -> Unit)? = null) {
     Surface(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier.fillMaxWidth().then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier),
         color = MaterialTheme.colorScheme.surface,
         shape = RoundedCornerShape(14.dp),
         shadowElevation = 1.dp,
@@ -498,6 +951,7 @@ private fun InfoCard(title: String, text: String) {
         Column(Modifier.padding(16.dp)) {
             Text(title, fontWeight = FontWeight.SemiBold)
             Text(text, color = AppMuted, fontSize = 12.sp)
+            if (onClick != null) Text("Открыть →", color = AppPrimary, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
         }
     }
 }
@@ -505,6 +959,7 @@ private fun InfoCard(title: String, text: String) {
 @Composable
 private fun TaskDetailScreen(
     task: Task,
+    currentUser: User?,
     onBack: () -> Unit,
     onMove: (TaskStatus) -> Unit,
     onComment: (String) -> Unit,
@@ -548,13 +1003,19 @@ private fun TaskDetailScreen(
                             }
                             Text(task.deadline, color = AppMuted, fontSize = 12.sp)
                         }
-                        task.status.next()?.let { next ->
+                        val nextAction = when (task.status) {
+                            TaskStatus.WAITING -> TaskStatus.WORKING to "Взять в работу"
+                            TaskStatus.WORKING -> TaskStatus.CHECKING to "Отправить на проверку"
+                            TaskStatus.CHECKING -> if (currentUser?.role == UserRole.LEAD) TaskStatus.DONE to "Принять задачу" else null
+                            TaskStatus.DONE -> if (currentUser?.role == UserRole.LEAD) TaskStatus.WORKING to "Вернуть в работу" else null
+                        }
+                        nextAction?.let { (next, label) ->
                             Spacer(Modifier.height(18.dp))
                             Button(
                                 onClick = { onMove(next) },
                                 modifier = Modifier.fillMaxWidth(),
                                 shape = RoundedCornerShape(12.dp),
-                            ) { Text("Перевести: ${next.title}") }
+                            ) { Text(label) }
                         }
                     }
                 }
@@ -564,6 +1025,11 @@ private fun TaskDetailScreen(
                 item { MutedPanel("К задаче пока не прикреплены файлы") }
             } else {
                 items(task.attachments) { file -> InfoCard(file.name, file.sizeLabel) }
+            }
+            if (task.status == TaskStatus.CHECKING || task.status == TaskStatus.DONE) {
+                item { SectionTitle("Результат работы", task.resultAttachments.size) }
+                if (task.resultAttachments.isEmpty()) item { MutedPanel("Результат пока не прикреплён") }
+                items(task.resultAttachments) { file -> InfoCard(file.name, file.sizeLabel) }
             }
             item { SectionTitle("Комментарии", task.comments.size) }
             if (task.comments.isEmpty()) item { MutedPanel("Комментариев пока нет") }

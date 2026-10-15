@@ -30,15 +30,26 @@ data class Task(
     val assignee: String,
     val deadline: String,
     val attachments: List<Attachment> = emptyList(),
+    val resultAttachments: List<Attachment> = emptyList(),
     val comments: List<Comment> = emptyList(),
+    val completedAt: String? = null,
 )
 
+enum class UserRole { LEAD, MEMBER }
+
 data class User(
-    val id: String,
+    val id: Long,
     val name: String,
-    val role: String,
-    val group: String,
+    val login: String,
+    val role: UserRole,
+    val position: String,
+    val active: Boolean = true,
+    val joinedAt: String,
 )
+
+data class LoginCredentials(val login: String, val password: String)
+
+data class TeamSettings(val name: String, val description: String)
 
 data class Lesson(
     val time: String,
