@@ -11,12 +11,14 @@ import com.kanbanboard.mobile.model.TeamEvent
 import com.kanbanboard.mobile.model.User
 import com.kanbanboard.mobile.model.UserRole
 import com.kanbanboard.mobile.model.TeamSettings
+import com.kanbanboard.mobile.model.Team
 
 interface KanbanRepository {
     fun login(credentials: LoginCredentials): User?
     fun tasks(): List<Task>
     fun members(): List<User>
     fun teamSettings(): TeamSettings
+    fun teams(): List<Team>
     fun lessons(group: String): List<Lesson>
     fun events(): List<TeamEvent>
 }
@@ -45,6 +47,12 @@ class FakeKanbanRepository : KanbanRepository {
         description = "Команда разработки внутренних и клиентских веб-продуктов.",
     )
 
+    override fun teams(): List<Team> = listOf(
+        Team(1, "Веб-продукт", "Разработка Kanban Board для студенческой команды.", setOf(1, 2, 3, 4, 5)),
+        Team(2, "Мобильная лаборатория", "Android, Wear OS и интеграция с расписанием.", setOf(1, 2, 4)),
+        Team(3, "Data Club", "Учебные проекты по данным и автоматизации.", setOf(3, 5)),
+    )
+
     override fun tasks(): List<Task> = listOf(
         Task(
             id = 101,
@@ -61,7 +69,7 @@ class FakeKanbanRepository : KanbanRepository {
             title = "Спроектировать UI-kit",
             description = "Перенести цвета, скругления, карточки и состояния задач из веб-приложения.",
             status = TaskStatus.WAITING,
-            assignee = "Самир Ахмедов",
+            assignee = "Мария Волкова",
             deadline = "16 окт",
         ),
         Task(
@@ -95,6 +103,7 @@ class FakeKanbanRepository : KanbanRepository {
         ),
         Task(106, "Подготовить документацию", "Актуализировать инструкции по локальному запуску.", TaskStatus.DONE, "Анна Лукина", "13 окт", completedAt = "13.10.2026"),
         Task(107, "Собрать UI-kit", "Согласовать состояния кнопок, полей и типографику.", TaskStatus.DONE, "Мария Волкова", "11 окт", completedAt = "11.10.2026"),
+        Task(108, "Экран расписания", "Подготовить мобильное отображение расписания групп.", TaskStatus.WORKING, "Мария Волкова", "20 окт", teamId = 2),
     )
 
     override fun lessons(group: String): List<Lesson> = if (group == "203") {

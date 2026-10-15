@@ -33,6 +33,7 @@ data class Task(
     val resultAttachments: List<Attachment> = emptyList(),
     val comments: List<Comment> = emptyList(),
     val completedAt: String? = null,
+    val teamId: Long = 1,
 )
 
 enum class UserRole { LEAD, MEMBER }
@@ -50,6 +51,13 @@ data class User(
 data class LoginCredentials(val login: String, val password: String)
 
 data class TeamSettings(val name: String, val description: String)
+
+data class Team(
+    val id: Long,
+    val name: String,
+    val description: String,
+    val memberIds: Set<Long>,
+)
 
 data class Lesson(
     val time: String,

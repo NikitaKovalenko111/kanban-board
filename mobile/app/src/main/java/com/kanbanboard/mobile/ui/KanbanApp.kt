@@ -1,5 +1,6 @@
 package com.kanbanboard.mobile.ui
 
+import android.app.DatePickerDialog
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
@@ -36,6 +37,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -48,6 +50,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
@@ -69,6 +72,7 @@ import com.kanbanboard.mobile.model.Task
 import com.kanbanboard.mobile.model.TaskStatus
 import com.kanbanboard.mobile.model.TeamEvent
 import com.kanbanboard.mobile.model.TeamSettings
+import com.kanbanboard.mobile.model.Team
 import com.kanbanboard.mobile.model.User
 import com.kanbanboard.mobile.model.UserRole
 import com.kanbanboard.mobile.ui.theme.AppBorder
@@ -76,6 +80,10 @@ import com.kanbanboard.mobile.ui.theme.AppDanger
 import com.kanbanboard.mobile.ui.theme.AppMuted
 import com.kanbanboard.mobile.ui.theme.AppPrimary
 import com.kanbanboard.mobile.ui.theme.AppSuccess
+import java.time.LocalDate
+import java.time.format.DateTimeFormatter
+import java.time.temporal.ChronoUnit
+import java.util.Calendar
 
 private enum class HomeSection(val title: String, val symbol: String) {
     BOARD("Доска", "▦"),
@@ -111,6 +119,7 @@ fun KanbanApp(viewModel: AppViewModel = viewModel()) {
                 onCreateTask = { navController.navigate("create-task") },
                 onManageTeam = { navController.navigate("team") },
                 onOpenExtras = { navController.navigate("extras") },
+                onOpenTeams = { navController.navigate("teams") },
                 onLogout = {
                     viewModel.logout()
                     navController.navigate("login") { popUpTo("home") { inclusive = true } }
@@ -150,12 +159,17 @@ fun KanbanApp(viewModel: AppViewModel = viewModel()) {
         ) { entry ->
             val memberId = entry.arguments?.getLong("memberId") ?: return@composable
             val member = viewModel.uiState.members.firstOrNull { it.id == memberId }
-            MemberProfileScreen(member, viewModel.uiState.tasks, navController::popBackStack)
+            MemberProfileScreen(
+                member,
+                viewModel.uiState.tasks.filter { it.teamId == viewModel.uiState.selectedTeamId },
+                navController::popBackStack,
+            )
         }
         composable("team") {
+            val activeTeam = viewModel.uiState.teams.firstOrNull { it.id == viewModel.uiState.selectedTeamId }
             TeamManagementScreen(
                 user = viewModel.uiState.user,
-                members = viewModel.uiState.members,
+                members = viewModel.uiState.members.filter { it.id in (activeTeam?.memberIds ?: emptySet()) },
                 settings = viewModel.uiState.teamSettings,
                 onBack = navController::popBackStack,
                 onToggleMember = viewModel::toggleMember,
@@ -166,6 +180,31 @@ fun KanbanApp(viewModel: AppViewModel = viewModel()) {
         }
         composable("extras") {
             ExtrasScreen(viewModel, navController::popBackStack)
+        }
+        composable("teams") {
+            TeamsScreen(
+                user = viewModel.uiState.user,
+                teams = viewModel.uiState.teams,
+                selectedTeamId = viewModel.uiState.selectedTeamId,
+                onBack = navController::popBackStack,
+                onTeamClick = { navController.navigate("team-details/${it.id}") },
+            )
+        }
+        composable(
+            route = "team-details/{teamId}",
+            arguments = listOf(navArgument("teamId") { type = NavType.LongType }),
+        ) { entry ->
+            val teamId = entry.arguments?.getLong("teamId") ?: return@composable
+            TeamDetailsScreen(
+                team = viewModel.uiState.teams.firstOrNull { it.id == teamId },
+                user = viewModel.uiState.user,
+                members = viewModel.uiState.members,
+                selected = viewModel.uiState.selectedTeamId == teamId,
+                onBack = navController::popBackStack,
+                onSelect = viewModel::selectTeam,
+                onJoin = viewModel::joinTeam,
+                onLeave = viewModel::leaveTeam,
+            )
         }
     }
 }
@@ -265,14 +304,18 @@ private fun HomeScreen(
     onCreateTask: () -> Unit,
     onManageTeam: () -> Unit,
     onOpenExtras: () -> Unit,
+    onOpenTeams: () -> Unit,
     onLogout: () -> Unit,
 ) {
     var selectedSection by rememberSaveable { mutableIntStateOf(0) }
     val section = HomeSection.entries[selectedSection]
+    val activeTeam = viewModel.uiState.teams.firstOrNull { it.id == viewModel.uiState.selectedTeamId }
+    val teamTasks = viewModel.uiState.tasks.filter { it.teamId == viewModel.uiState.selectedTeamId }
+    val teamMembers = viewModel.uiState.members.filter { it.id in (activeTeam?.memberIds ?: emptySet()) }
 
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
-        topBar = { AppHeader(section.title, viewModel.uiState.user?.name ?: "") },
+        topBar = { AppHeader(section.title, activeTeam?.name ?: "Команда не выбрана", viewModel.uiState.user?.name ?: "") },
         bottomBar = {
             NavigationBar(
                 modifier = Modifier.navigationBarsPadding(),
@@ -292,34 +335,42 @@ private fun HomeScreen(
     ) { padding ->
         when (section) {
             HomeSection.BOARD -> BoardScreen(
-                tasks = viewModel.uiState.tasks,
+                tasks = teamTasks,
                 onTaskClick = onTaskClick,
-                canCreate = viewModel.uiState.user?.role == UserRole.LEAD,
+                canCreate = viewModel.uiState.user?.role == UserRole.LEAD && activeTeam != null,
                 onCreate = onCreateTask,
                 modifier = Modifier.padding(padding),
             )
-            HomeSection.HISTORY -> HistoryScreen(viewModel.uiState.tasks, onTaskClick, Modifier.padding(padding))
+            HomeSection.HISTORY -> HistoryScreen(teamTasks, onTaskClick, Modifier.padding(padding))
             HomeSection.MEMBERS -> MembersScreen(
-                members = viewModel.uiState.members,
-                canManage = viewModel.uiState.user?.role == UserRole.LEAD,
+                members = teamMembers,
+                canManage = viewModel.uiState.user?.role == UserRole.LEAD && activeTeam != null,
                 onMemberClick = onMemberClick,
                 onManage = onManageTeam,
                 modifier = Modifier.padding(padding),
             )
-            HomeSection.PROFILE -> ProfileScreen(viewModel.uiState.user, viewModel.uiState.tasks, onOpenExtras, onLogout, Modifier.padding(padding))
+            HomeSection.PROFILE -> ProfileScreen(
+                user = viewModel.uiState.user,
+                tasks = teamTasks,
+                activeTeam = activeTeam,
+                onOpenTeams = onOpenTeams,
+                onOpenExtras = onOpenExtras,
+                onLogout = onLogout,
+                modifier = Modifier.padding(padding),
+            )
         }
     }
 }
 
 @Composable
-private fun AppHeader(title: String, userName: String) {
+private fun AppHeader(title: String, teamName: String, userName: String) {
     Row(
         modifier = Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.background)
             .statusBarsPadding().padding(horizontal = 20.dp, vertical = 16.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Column(modifier = Modifier.weight(1f)) {
-            Text("РАБОЧЕЕ ПРОСТРАНСТВО", color = AppMuted, fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
+            Text(teamName.uppercase(), color = AppMuted, fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
             Text(title, fontSize = 27.sp, fontWeight = FontWeight.Bold)
         }
         Avatar(userName)
@@ -440,10 +491,17 @@ private fun StatusDot(status: TaskStatus) {
 private fun HistoryScreen(tasks: List<Task>, onTaskClick: (Task) -> Unit, modifier: Modifier = Modifier) {
     var query by rememberSaveable { mutableStateOf("") }
     var assignee by rememberSaveable { mutableStateOf("Все") }
+    var periodDays by rememberSaveable { mutableIntStateOf(0) }
     val completed = tasks.filter { it.status == TaskStatus.DONE }
     val assignees = listOf("Все") + completed.map { it.assignee }.distinct()
     val visible = completed.filter { task ->
-        (assignee == "Все" || task.assignee == assignee) &&
+        val matchesPeriod = if (periodDays == 0 || task.completedAt == null) true else {
+            runCatching {
+                val date = LocalDate.parse(task.completedAt, DateTimeFormatter.ofPattern("dd.MM.yyyy"))
+                ChronoUnit.DAYS.between(date, LocalDate.now()) in 0..periodDays.toLong()
+            }.getOrDefault(false)
+        }
+        matchesPeriod && (assignee == "Все" || task.assignee == assignee) &&
             "${task.title} ${task.description} ${task.assignee}".contains(query, ignoreCase = true)
     }
 
@@ -456,6 +514,14 @@ private fun HistoryScreen(tasks: List<Task>, onTaskClick: (Task) -> Unit, modifi
             singleLine = true,
             shape = RoundedCornerShape(14.dp),
         )
+        LazyRow(
+            contentPadding = PaddingValues(horizontal = 20.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            item { FilterChip(periodDays == 0, { periodDays = 0 }, label = { Text("Всё время") }) }
+            item { FilterChip(periodDays == 7, { periodDays = 7 }, label = { Text("7 дней") }) }
+            item { FilterChip(periodDays == 30, { periodDays = 30 }, label = { Text("30 дней") }) }
+        }
         LazyRow(
             contentPadding = PaddingValues(horizontal = 20.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -627,6 +693,17 @@ private fun CreateTaskScreen(onBack: () -> Unit, onCreate: (String, String, Stri
     var title by rememberSaveable { mutableStateOf("") }
     var description by rememberSaveable { mutableStateOf("") }
     var deadline by rememberSaveable { mutableStateOf("") }
+    val context = LocalContext.current
+    val calendar = remember { Calendar.getInstance() }
+    val openDatePicker = {
+        DatePickerDialog(
+            context,
+            { _, year, month, day -> deadline = "%02d.%02d.%04d".format(day, month + 1, year) },
+            calendar.get(Calendar.YEAR),
+            calendar.get(Calendar.MONTH),
+            calendar.get(Calendar.DAY_OF_MONTH),
+        ).apply { datePicker.minDate = System.currentTimeMillis() - 1_000 }.show()
+    }
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
         topBar = { SimpleTopBar("Новая задача", onBack) },
@@ -637,7 +714,13 @@ private fun CreateTaskScreen(onBack: () -> Unit, onCreate: (String, String, Stri
         ) {
             OutlinedTextField(title, { title = it }, Modifier.fillMaxWidth(), label = { Text("Название задачи") }, shape = RoundedCornerShape(14.dp))
             OutlinedTextField(description, { description = it }, Modifier.fillMaxWidth().height(140.dp), label = { Text("Описание / ТЗ") }, shape = RoundedCornerShape(14.dp))
-            OutlinedTextField(deadline, { deadline = it }, Modifier.fillMaxWidth(), label = { Text("Дедлайн") }, placeholder = { Text("Например, 20 окт") }, shape = RoundedCornerShape(14.dp))
+            OutlinedButton(
+                onClick = openDatePicker,
+                modifier = Modifier.fillMaxWidth().height(56.dp),
+                shape = RoundedCornerShape(14.dp),
+            ) {
+                Text(if (deadline.isBlank()) "Выбрать дедлайн: день, месяц, год" else "Дедлайн: $deadline")
+            }
             MutedPanel("Прикрепление исходников будет подключено через системный выбор файлов после согласования backend API.")
             Button(
                 onClick = { onCreate(title, description, deadline) },
@@ -679,6 +762,131 @@ private fun SimpleTopBar(title: String, onBack: () -> Unit) {
 }
 
 @Composable
+private fun TeamsScreen(
+    user: User?,
+    teams: List<Team>,
+    selectedTeamId: Long,
+    onBack: () -> Unit,
+    onTeamClick: (Team) -> Unit,
+) {
+    val myTeams = teams.filter { user != null && user.id in it.memberIds }
+    val availableTeams = teams.filterNot { user != null && user.id in it.memberIds }
+    Scaffold(
+        containerColor = MaterialTheme.colorScheme.background,
+        topBar = { SimpleTopBar("Мои команды", onBack) },
+    ) { padding ->
+        LazyColumn(
+            modifier = Modifier.fillMaxSize().padding(padding),
+            contentPadding = PaddingValues(20.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            if (myTeams.isEmpty()) item { MutedPanel("Вы пока не состоите ни в одной команде") }
+            items(myTeams, key = { "my-${it.id}" }) { team ->
+                TeamCard(team, selectedTeamId == team.id, true) { onTeamClick(team) }
+            }
+            if (availableTeams.isNotEmpty()) {
+                item {
+                    Spacer(Modifier.height(6.dp))
+                    Text("Доступные команды", fontSize = 19.sp, fontWeight = FontWeight.Bold)
+                }
+                items(availableTeams, key = { "available-${it.id}" }) { team ->
+                    TeamCard(team, false, false) { onTeamClick(team) }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun TeamCard(team: Team, selected: Boolean, joined: Boolean, onClick: () -> Unit) {
+    Card(
+        modifier = Modifier.fillMaxWidth().clickable(onClick = onClick),
+        shape = RoundedCornerShape(14.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = if (selected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface,
+        ),
+    ) {
+        Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+            Box(
+                Modifier.size(44.dp).clip(RoundedCornerShape(13.dp)).background(if (selected) AppPrimary else Color(0xFFEEF0FF)),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(team.name.take(1).uppercase(), color = if (selected) Color.White else AppPrimary, fontWeight = FontWeight.Bold)
+            }
+            Spacer(Modifier.width(12.dp))
+            Column(Modifier.weight(1f)) {
+                Text(team.name, fontWeight = FontWeight.SemiBold)
+                Text(team.description, color = AppMuted, fontSize = 11.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                Text("${team.memberIds.size} участников", color = AppMuted, fontSize = 10.sp)
+            }
+            Text(if (selected) "Выбрана" else if (joined) "Открыть →" else "Вступить →", color = AppPrimary, fontSize = 11.sp)
+        }
+    }
+}
+
+@Composable
+private fun TeamDetailsScreen(
+    team: Team?,
+    user: User?,
+    members: List<User>,
+    selected: Boolean,
+    onBack: () -> Unit,
+    onSelect: (Long) -> Unit,
+    onJoin: (Long) -> Unit,
+    onLeave: (Long) -> Unit,
+) {
+    if (team == null || user == null) {
+        Column(Modifier.fillMaxSize().statusBarsPadding().padding(20.dp)) {
+            TextButton(onClick = onBack) { Text("← Назад") }
+            EmptyState("Команда не найдена", Modifier.weight(1f))
+        }
+        return
+    }
+    val joined = user.id in team.memberIds
+    val teamMembers = members.filter { it.id in team.memberIds }
+    Scaffold(
+        containerColor = MaterialTheme.colorScheme.background,
+        topBar = { SimpleTopBar(team.name, onBack) },
+    ) { padding ->
+        LazyColumn(
+            modifier = Modifier.fillMaxSize().padding(padding),
+            contentPadding = PaddingValues(20.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            item {
+                Card(shape = RoundedCornerShape(22.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
+                    Column(Modifier.padding(20.dp)) {
+                        Text(team.name, fontSize = 25.sp, fontWeight = FontWeight.Bold)
+                        Spacer(Modifier.height(6.dp))
+                        Text(team.description, color = AppMuted, lineHeight = 20.sp)
+                        Spacer(Modifier.height(14.dp))
+                        Text("${teamMembers.size} участников", color = AppPrimary, fontWeight = FontWeight.SemiBold)
+                    }
+                }
+            }
+            item {
+                when {
+                    !joined -> Button(onClick = { onJoin(team.id) }, modifier = Modifier.fillMaxWidth()) { Text("Вступить и выбрать команду") }
+                    !selected -> Button(onClick = { onSelect(team.id) }, modifier = Modifier.fillMaxWidth()) { Text("Выбрать эту команду") }
+                    else -> MutedPanel("Эта команда выбрана как рабочая")
+                }
+            }
+            if (joined) {
+                item {
+                    OutlinedButton(
+                        onClick = { onLeave(team.id) },
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = ButtonDefaults.outlinedButtonColors(contentColor = AppDanger),
+                    ) { Text("Выйти из команды") }
+                }
+            }
+            item { Text("Участники", fontSize = 19.sp, fontWeight = FontWeight.Bold) }
+            items(teamMembers, key = { it.id }) { member -> MemberCard(member) {} }
+        }
+    }
+}
+
+@Composable
 private fun TeamManagementScreen(
     user: User?,
     members: List<User>,
@@ -686,7 +894,7 @@ private fun TeamManagementScreen(
     onBack: () -> Unit,
     onToggleMember: (Long) -> Unit,
     onUpdateTeam: (String, String) -> Unit,
-    onAddMember: (String, String, String, UserRole) -> Unit,
+    onAddMember: (String, String, String, String, UserRole) -> Unit,
     onMemberClick: (User) -> Unit,
 ) {
     if (user?.role != UserRole.LEAD) {
@@ -700,6 +908,7 @@ private fun TeamManagementScreen(
     var description by rememberSaveable(settings.description) { mutableStateOf(settings.description) }
     var name by rememberSaveable { mutableStateOf("") }
     var login by rememberSaveable { mutableStateOf("") }
+    var temporaryPassword by rememberSaveable { mutableStateOf("") }
     var position by rememberSaveable { mutableStateOf("") }
     var role by rememberSaveable { mutableStateOf(UserRole.MEMBER) }
 
@@ -735,6 +944,15 @@ private fun TeamManagementScreen(
                     Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                         OutlinedTextField(name, { name = it }, Modifier.fillMaxWidth(), label = { Text("Имя и фамилия") }, shape = RoundedCornerShape(12.dp))
                         OutlinedTextField(login, { login = it.lowercase() }, Modifier.fillMaxWidth(), label = { Text("Логин") }, shape = RoundedCornerShape(12.dp))
+                        OutlinedTextField(
+                            temporaryPassword,
+                            { temporaryPassword = it },
+                            Modifier.fillMaxWidth(),
+                            label = { Text("Временный пароль") },
+                            supportingText = { Text("Минимум 6 символов") },
+                            visualTransformation = PasswordVisualTransformation(),
+                            shape = RoundedCornerShape(12.dp),
+                        )
                         OutlinedTextField(position, { position = it }, Modifier.fillMaxWidth(), label = { Text("Должность") }, shape = RoundedCornerShape(12.dp))
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             FilterChip(role == UserRole.MEMBER, { role = UserRole.MEMBER }, label = { Text("Участник") })
@@ -742,10 +960,10 @@ private fun TeamManagementScreen(
                         }
                         Button(
                             onClick = {
-                                onAddMember(name, login, position, role)
-                                name = ""; login = ""; position = ""; role = UserRole.MEMBER
+                                onAddMember(name, login, temporaryPassword, position, role)
+                                name = ""; login = ""; temporaryPassword = ""; position = ""; role = UserRole.MEMBER
                             },
-                            enabled = name.isNotBlank() && login.isNotBlank() && position.isNotBlank(),
+                            enabled = name.isNotBlank() && login.isNotBlank() && temporaryPassword.length >= 6 && position.isNotBlank(),
                             modifier = Modifier.fillMaxWidth(),
                         ) { Text("Создать аккаунт") }
                     }
@@ -882,6 +1100,8 @@ private fun EventCard(event: TeamEvent) {
 private fun ProfileScreen(
     user: User?,
     tasks: List<Task>,
+    activeTeam: Team?,
+    onOpenTeams: () -> Unit,
     onOpenExtras: () -> Unit,
     onLogout: () -> Unit,
     modifier: Modifier = Modifier,
@@ -917,7 +1137,7 @@ private fun ProfileScreen(
             }
         }
         item { InfoCard("Логин", "@${user?.login.orEmpty()}") }
-        item { InfoCard("Команда", "Веб-продукт") }
+        item { InfoCard("Команды", activeTeam?.name ?: "Команда не выбрана", onOpenTeams) }
         item { InfoCard("Расписание и события", "Дополнительные функции проекта", onOpenExtras) }
         item {
             Button(
@@ -1003,9 +1223,10 @@ private fun TaskDetailScreen(
                             }
                             Text(task.deadline, color = AppMuted, fontSize = 12.sp)
                         }
+                        val isAssignee = task.assignee == currentUser?.name
                         val nextAction = when (task.status) {
-                            TaskStatus.WAITING -> TaskStatus.WORKING to "Взять в работу"
-                            TaskStatus.WORKING -> TaskStatus.CHECKING to "Отправить на проверку"
+                            TaskStatus.WAITING -> if (isAssignee) TaskStatus.WORKING to "Взять в работу" else null
+                            TaskStatus.WORKING -> if (isAssignee) TaskStatus.CHECKING to "Отправить на проверку" else null
                             TaskStatus.CHECKING -> if (currentUser?.role == UserRole.LEAD) TaskStatus.DONE to "Принять задачу" else null
                             TaskStatus.DONE -> if (currentUser?.role == UserRole.LEAD) TaskStatus.WORKING to "Вернуть в работу" else null
                         }
@@ -1016,6 +1237,15 @@ private fun TaskDetailScreen(
                                 modifier = Modifier.fillMaxWidth(),
                                 shape = RoundedCornerShape(12.dp),
                             ) { Text(label) }
+                        }
+                        if (nextAction == null && task.status != TaskStatus.DONE && currentUser != null) {
+                            Spacer(Modifier.height(14.dp))
+                            Text(
+                                if (task.status == TaskStatus.CHECKING) "Решение по проверке принимает тимлид"
+                                else "Статус может изменить только назначенный исполнитель",
+                                color = AppMuted,
+                                fontSize = 12.sp,
+                            )
                         }
                     }
                 }
