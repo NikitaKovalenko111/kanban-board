@@ -1,83 +1,28 @@
-import { useState, type JSX } from "react";
-import type React from "react";
-import type { Task } from "../../types";
-import TaskComponent from "../Task/Task";
-import AddTaskModal from "../AddTaskModal/AddTaskModal";
+import type { JSX } from 'react'
+import type React from 'react'
+import type { Task } from '../../types'
+import TaskComponent from '../Task/Task'
 
 type PropsType = {
     name: string
+    accent: string
+    tasks: Task[]
+    onTaskClick: (task: Task) => void
+    onAdd?: () => void
+    onHistory?: () => void
 }
 
-const BoardElement: React.FC<PropsType> = ({ name }): JSX.Element => {
-    const [showAddModal, setShowAddModal] = useState<boolean>(true)
-
-    const tasks: Task[] = [
-        {
-            taskId: 1,
-            taskName: "Тест 1",
-            taskStatus: "waiting",
-            taskDeadline: "08.14.2026",
-            taskDesc: "Тестовое описание 1"
-        },
-        {
-            taskId: 2,
-            taskName: "Тест 2",
-            taskStatus: "waiting",
-            taskDeadline: "09.14.2026",
-            taskDesc: "Тестовое описание 2"
-        },
-        {
-            taskId: 2,
-            taskName: "Тест 2",
-            taskStatus: "waiting",
-            taskDeadline: "09.14.2026",
-            taskDesc: "Тестовое описание 2"
-        },
-        {
-            taskId: 2,
-            taskName: "Тест 2",
-            taskStatus: "waiting",
-            taskDeadline: "09.14.2026",
-            taskDesc: "Тестовое описание 2"
-        },
-        {
-            taskId: 2,
-            taskName: "Тест 2",
-            taskStatus: "waiting",
-            taskDeadline: "09.14.2026",
-            taskDesc: "Тестовое описание 2"
-        },
-        {
-            taskId: 2,
-            taskName: "Тест 2",
-            taskStatus: "waiting",
-            taskDeadline: "09.14.2026",
-            taskDesc: "Тестовое описание 2"
-        },
-        {
-            taskId: 2,
-            taskName: "Тест 2",
-            taskStatus: "waiting",
-            taskDeadline: "09.14.2026",
-            taskDesc: "Тестовое описание 2"
-        }
-    ]
-
+const BoardElement: React.FC<PropsType> = ({ name, accent, tasks, onTaskClick, onAdd, onHistory }): JSX.Element => {
     return (
         <div className="board-element">
-            {
-                showAddModal && <AddTaskModal />
-            }
             <div className="board-element__top">
-                <h3 className="board-element__header">{ name }</h3>
-                <div className="board-element__plus-btn">+</div>
+                <h3 className="board-element__header"><i style={{ background: accent }} />{name}<span>{tasks.length}</span></h3>
+                {onAdd && <button className="board-element__plus-btn" onClick={onAdd} aria-label="Добавить задачу"><span aria-hidden="true" /></button>}
+                {onHistory && <button className="board-element__history" onClick={onHistory}>Вся история →</button>}
             </div>
             <div className="board-element__tasks">
-                {
-                    tasks.map(t => {
-                        return <TaskComponent key={t.taskId} taskName={t.taskName} taskDesc={t.taskDesc} taskDeadline={t.taskDeadline} />
-                    })
-                }
+                {tasks.map((task) => <TaskComponent key={task.taskId} task={task} onClick={() => onTaskClick(task)} />)}
+                {tasks.length === 0 && <div className="board-element__empty">Здесь пока пусто</div>}
             </div>
         </div>
     )

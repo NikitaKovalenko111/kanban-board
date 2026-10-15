@@ -1,59 +1,31 @@
 .add-task-modal {
-    width: 100%;
-    height: 100%;
-    background-color: rgba($color: #000000, $alpha: .3);
-    position: fixed;
-    top: 0;
-    right: 0;
-    left: 0;
-    bottom: 0;
-
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    z-index: 1000;
-
-    &__header {
-        font-size: 24px;
-        margin-bottom: 16px;
-    }
-
-    &__wrapper {
-        background-color: white;
-        padding: 20px;
-        border-radius: var(--border-radius);
-    }
-
-    &__submit-btn {
-        margin-top: 12px;
-        cursor: pointer;
-        padding: 12px;
-        border-radius: var(--border-radius-small);
-        border: none;
-        background-color: #1338BE;
-        color: white;
-        font-weight: 600;
-    }
-
-    &__form {
-        display: flex;
-        flex-direction: column;
-        gap: 12px;
-
-        input, textarea {
-            width: 400px;
-            outline: none;
-            padding: 8px;
-            border: var(--border);
-            border-color: rgba($color: #000000, $alpha: .4);
-            border-radius: var(--border-radius-small);
-        }
-
-        label {
-            display: flex;
-            flex-direction: column;
-            gap: 4px;
-            font-size: 14px;
-        }
-    }
+    position: fixed; inset: 0; z-index: 1000; display: flex; justify-content: flex-end;
+    &__backdrop { position: absolute; inset: 0; border: 0; background: rgba(30,35,45,.28); backdrop-filter: blur(2px); animation: backdrop-in .25s ease both; }
+    &__wrapper { position: relative; width: min(520px, 100%); height: 100%; overflow-y: auto; background: white; padding: 30px; box-shadow: -18px 0 50px rgba(30,35,45,.1); animation: slide-in .32s cubic-bezier(.22,.8,.25,1); }
+    &__top { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; margin-bottom: 28px; }
+    &__header { font-size: 24px; margin-top: 3px; }
+    &__form { display: flex; flex-direction: column; gap: 18px; }
+    &__form label, .revision-form label { display: flex; flex-direction: column; gap: 7px; font-size: 12px; font-weight: 700; small { color: var(--color-muted); font-weight: 400; } }
+    &__form input, &__form textarea, .revision-form textarea { width: 100%; outline: none; padding: 12px 13px; border: 1px solid var(--color-border); border-radius: 11px; background: #fafbfc; font-size: 14px; font-weight: 400; &:focus { border-color: var(--color-primary); box-shadow: 0 0 0 3px rgba(101,118,223,.1); } }
+    &__form textarea { min-height: 130px; resize: vertical; }
+    &__footer { display: flex; justify-content: flex-end; gap: 10px; padding-top: 8px; }
+    &.is-closing &__backdrop { animation: backdrop-out .26s ease both; }
+    &.is-closing &__wrapper { animation: slide-out .26s ease both; }
 }
+
+.file-upload { display: flex; width: 100%; min-height: 52px; align-items: center; justify-content: center; padding: 13px 16px; border: 1px dashed #cbd1dd; border-radius: 11px; color: var(--color-primary); background: white; cursor: pointer; line-height: 1.3; text-align: center; transition: border-color .2s ease, background-color .2s ease, transform .2s ease; &:hover { border-color: var(--color-primary); background: #f6f7ff; } &:active { transform: scale(.99); } input { display: none; } }
+.file-row { display: flex; align-items: center; gap: 8px; padding: 10px 11px; margin-top: 7px; border-radius: 10px; background: #f6f7f9; font-size: 13px; animation: soft-pop .22s ease both; span { flex: 1; } small { color: var(--color-muted); } }
+.task-details { display: flex; flex-direction: column; gap: 24px; section > p { margin-top: 7px; font-size: 14px; line-height: 1.65; } }
+.task-details__status { display: flex; align-items: center; justify-content: space-between; padding: 13px 15px; background: #f6f7fb; border-radius: 11px; font-size: 13px; strong { color: #5968c5; } }
+.task-details__grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.task-details__notice { padding: 14px; background: #fff5f5; border-radius: 11px; }
+.task-details__actions { display: flex; gap: 10px; flex-wrap: wrap; }
+.work-result { padding: 15px; overflow: hidden; border: 1px solid #e2e6f5; border-radius: 12px; background: #fafbff; .muted { margin: 5px 0 12px; font-size: 12px; } .file-upload { margin-top: 11px; } }
+.revision-form { display: flex; flex-direction: column; gap: 10px; padding-top: 20px; border-top: 1px solid var(--color-border); textarea { min-height: 86px; resize: vertical; } }
+.task-history { padding-top: 22px; border-top: 1px solid var(--color-border); &__list { position: relative; display: flex; flex-direction: column; gap: 0; margin-top: 14px; &::before { content: ''; position: absolute; top: 7px; bottom: 18px; left: 5px; width: 1px; background: #dfe3eb; } } &__empty { margin-top: 8px !important; color: var(--color-muted); font-size: 12px !important; } }
+.history-event { position: relative; display: grid; grid-template-columns: 12px 1fr; gap: 12px; padding-bottom: 19px; > i { position: relative; z-index: 1; width: 11px; height: 11px; margin-top: 4px; border: 3px solid white; border-radius: 50%; background: #7887df; box-shadow: 0 0 0 1px #cfd5e5; } &--revision > i { background: #d06a74; } &__content { min-width: 0; } &__heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; strong { font-size: 11px; } time { flex: 0 0 auto; color: var(--color-muted); font-size: 9px; } } p { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 4px !important; font-size: 10px !important; b { font-weight: 500; } } blockquote { margin: 9px 0 0; padding: 9px 11px; border-left: 2px solid #d8737d; border-radius: 0 8px 8px 0; color: #7b4f54; background: #fff3f4; font-size: 11px; line-height: 1.5; } }
+.status-change { display: inline-flex; align-items: center; gap: 5px; color: var(--color-muted); i { color: var(--color-primary); font-style: normal; } }
+@keyframes slide-in { from { transform: translateX(100%); } }
+@keyframes slide-out { to { transform: translateX(100%); } }
+@keyframes backdrop-in { from { opacity: 0; } }
+@keyframes backdrop-out { to { opacity: 0; } }
