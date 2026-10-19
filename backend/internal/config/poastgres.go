@@ -7,11 +7,12 @@ import (
 )
 
 type Postgres struct {
-	DbHost string `yaml:"db_host" env-required:"true"`
-	DbUser string `yaml:"db_user" env-required:"true"`
-	DbPort int    `yaml:"db_port" env-required:"true"`
-	DbPass string `yaml:"db_pass" env-required:"true"`
-	DbName string `yaml:"db_name" env-required:"true"`
+	DbHost  string `yaml:"db_host" env-required:"true"`
+	DbUser  string `yaml:"db_user" env-required:"true"`
+	DbPort  int    `yaml:"db_port" env-required:"true"`
+	DbPass  string `yaml:"db_pass" env-required:"true"`
+	DbName  string `yaml:"db_name" env-required:"true"`
+	SSLMode string `yaml:"ssl_mode" env-required:"true"`
 }
 
 func loadPostgres(cfg *Config) error {
@@ -39,6 +40,10 @@ func loadPostgres(cfg *Config) error {
 		cfg.Postgres.DbName = v
 	}
 
+	if v := os.Getenv("ssl_mode"); v != "" {
+		cfg.Postgres.SSLMode = v
+	}
+
 	return nil
 }
 
@@ -61,6 +66,10 @@ func validatePostgres(cfg *Config) error {
 
 	if cfg.Postgres.DbName == "" {
 		return fmt.Errorf("DbName is required")
+	}
+
+	if cfg.Postgres.SSLMode == "" {
+		return fmt.Errorf("SSLMode is required")
 	}
 
 	return nil

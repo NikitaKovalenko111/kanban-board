@@ -8,7 +8,8 @@ import (
 )
 
 type Config struct {
-	HTTP     `yaml:"http" env-required:"true"`
+	LogLevel string `yaml:"log_level" env-required:"true"`
+	HTTP     `yaml:"http_server" env-required:"true"`
 	Postgres `yaml:"postgres" env-required:"true"`
 }
 
@@ -50,6 +51,10 @@ func loadYAML(path string, cfg *Config) error {
 }
 
 func loadENV(cfg *Config) error {
+	if v := os.Getenv("log_level"); v != "" {
+		cfg.LogLevel = v
+	}
+
 	err := loadHTTP(cfg)
 	if err != nil {
 		return err
@@ -64,6 +69,10 @@ func loadENV(cfg *Config) error {
 }
 
 func validate(cfg *Config) error {
+	if cfg.LogLevel == "" {
+		return fmt.Errorf("LogLevel is required")
+	}
+
 	err := validateHTTP(cfg)
 	if err != nil {
 		return err

@@ -8,8 +8,8 @@ import (
 
 type HTTP struct {
 	HTTP_ADDRESS string        `yaml:"http_address" env-required:"true"`
-	TIMEOUT      time.Duration `yaml:"timeout" env-required:"true"`
-	IDLE_TIMEOUT time.Duration `yaml:"idle_timeout" env-required:"true"`
+	TIMEOUT      time.Duration `yaml:"http_timeout" env-required:"true"`
+	IDLE_TIMEOUT time.Duration `yaml:"http_idle_timeout" env-required:"true"`
 }
 
 func loadHTTP(cfg *Config) error {
