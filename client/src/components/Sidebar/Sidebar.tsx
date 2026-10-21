@@ -20,9 +20,11 @@ const Sidebar = ({ open, onClose }: Props) => {
         <div className="sidebar__person"><UserAvatar user={user} size="large" /><div><strong>{user.name}</strong><small>{user.position}</small></div></div>
         <nav className="sidebar__nav">
           <NavLink to="/" onClick={onClose}>▦ <span>Доска задач</span></NavLink>
+          <NavLink to="/schedule" onClick={onClose}>▤ <span>Расписание</span></NavLink>
           <NavLink to="/history" onClick={onClose}>◷ <span>История задач</span></NavLink>
           <NavLink to="/members" onClick={onClose}>♧ <span>Участники</span></NavLink>
           {user.role === 'lead' && <NavLink to="/team" onClick={onClose}>♙ <span>Управление командой</span></NavLink>}
+          <NavLink to="/projects" onClick={onClose}>◇ <span>Проекты</span></NavLink>
           <NavLink to="/profile" onClick={onClose}>◎ <span>Мой профиль</span></NavLink>
         </nav>
         <div className="sidebar__team"><span>Команда</span><strong>{team.settings.name || 'Команда'}</strong><small>{team.members.length || '—'} участников</small></div>

@@ -6,6 +6,7 @@
     &:hover { transform: translateY(-3px); box-shadow: 0 10px 26px rgba(45, 53, 73, .1); border-color: #d5daee; }
     &:active { transform: translateY(-1px) scale(.99); }
     &__meta { display: flex; justify-content: space-between; color: #9aa1ad; font-size: 10px; margin-bottom: 8px; }
+    &__project { display: inline-flex; max-width: 100%; align-items: center; gap: 6px; padding: 4px 7px; margin-bottom: 9px; border-radius: 7px; color: #657080; background: #f3f5f8; font-size: 9px; font-weight: 650; i { flex: 0 0 auto; width: 6px; height: 6px; border-radius: 50%; } }
     &__name { font-size: 14px; line-height: 1.35; margin-bottom: 7px; }
     &__desc { color: #737b88; font-size: 12px; line-height: 1.5; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
     &__revision { display: inline-block; margin-top: 10px; padding: 4px 7px; color: #b75a64; background: #fff0f1; border-radius: 7px; font-size: 10px; font-weight: 650; }

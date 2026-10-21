@@ -10,6 +10,7 @@ type SortOrder = 'newest' | 'oldest'
 const HistoryPage = () => {
   const dispatch = useAppDispatch()
   const { items, loading } = useAppSelector((state) => state.tasks)
+  const activeProjectId = useAppSelector((state) => state.projects.activeProjectId)
   const [query, setQuery] = useState('')
   const [assignee, setAssignee] = useState('all')
   const [period, setPeriod] = useState<Period>('all')
@@ -18,7 +19,7 @@ const HistoryPage = () => {
 
   useEffect(() => { if (!items.length) dispatch(loadTasksRequest()) }, [dispatch, items.length])
 
-  const completed = useMemo(() => items.filter((task) => task.taskStatus === 'done'), [items])
+  const completed = useMemo(() => items.filter((task) => (activeProjectId === 'all' || task.projectId === activeProjectId) && task.taskStatus === 'done'), [activeProjectId, items])
   const assignees = useMemo(() => [...new Set(completed.map((task) => task.assignee))].sort(), [completed])
   const filtered = useMemo(() => {
     const now = Date.now()

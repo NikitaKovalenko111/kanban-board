@@ -8,11 +8,12 @@ type PropsType = {
     accent: string
     tasks: Task[]
     onTaskClick: (task: Task) => void
+    showProject?: boolean
     onAdd?: () => void
     onHistory?: () => void
 }
 
-const BoardElement: React.FC<PropsType> = ({ name, accent, tasks, onTaskClick, onAdd, onHistory }): JSX.Element => {
+const BoardElement: React.FC<PropsType> = ({ name, accent, tasks, onTaskClick, showProject, onAdd, onHistory }): JSX.Element => {
     return (
         <div className="board-element">
             <div className="board-element__top">
@@ -21,7 +22,7 @@ const BoardElement: React.FC<PropsType> = ({ name, accent, tasks, onTaskClick, o
                 {onHistory && <button className="board-element__history" onClick={onHistory}>Вся история →</button>}
             </div>
             <div className="board-element__tasks">
-                {tasks.map((task) => <TaskComponent key={task.taskId} task={task} onClick={() => onTaskClick(task)} />)}
+                {tasks.map((task) => <TaskComponent key={task.taskId} task={task} onClick={() => onTaskClick(task)} showProject={showProject} />)}
                 {tasks.length === 0 && <div className="board-element__empty">Здесь пока пусто</div>}
             </div>
         </div>

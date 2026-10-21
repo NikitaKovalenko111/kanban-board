@@ -12,6 +12,7 @@ const AddTaskModal: React.FC<PropsType> = ({ task, onClose }): JSX.Element => {
     const dispatch = useAppDispatch()
     const { saving } = useAppSelector((state) => state.tasks)
     const user = useAppSelector((state) => state.auth.user)!
+    const activeProjectId = useAppSelector((state) => state.projects.activeProjectId)
     const [name, setName] = useState('')
     const [description, setDescription] = useState('')
     const [deadline, setDeadline] = useState('')
@@ -45,7 +46,7 @@ const AddTaskModal: React.FC<PropsType> = ({ task, onClose }): JSX.Element => {
 
     const submit = (event: FormEvent) => {
       event.preventDefault()
-      dispatch(createTaskRequest({ taskName: name, taskDesc: description, taskDeadline: deadline || undefined, attachments }))
+      dispatch(createTaskRequest({ projectId: activeProjectId, taskName: name, taskDesc: description, taskDeadline: deadline || undefined, attachments }))
       close()
     }
 

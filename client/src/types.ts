@@ -1,5 +1,40 @@
 export type TaskStatus = 'waiting' | 'working' | 'checking' | 'done'
 export type UserRole = 'lead' | 'member'
+export type ScheduleEventType = 'meeting' | 'milestone' | 'class' | 'presentation'
+
+export interface Project {
+  id: string
+  name: string
+  description: string
+  color: string
+  sources: ProjectSource[]
+}
+
+export interface ProjectSource extends Attachment {
+  uploadedAt: string
+  uploadedBy: string
+}
+
+export type NewProject = Omit<Project, 'id' | 'sources'>
+
+export interface AddProjectSourcesPayload {
+  projectId: string
+  files: Attachment[]
+  author: string
+}
+
+export interface ScheduleEvent {
+  id: number
+  projectId: string
+  title: string
+  description: string
+  startsAt: string
+  type: ScheduleEventType
+  location?: string
+  author: string
+}
+
+export type NewScheduleEvent = Omit<ScheduleEvent, 'id'>
 
 export interface Attachment {
   id: string
@@ -19,6 +54,7 @@ export interface TaskHistoryEvent {
 
 export interface Task {
   taskId: number
+  projectId: string
   taskName: string
   taskDesc: string
   taskStatus: TaskStatus
@@ -64,7 +100,7 @@ export interface NewTeamMember {
   role: UserRole
 }
 
-export type NewTask = Pick<Task, 'taskName' | 'taskDesc' | 'taskDeadline' | 'attachments'>
+export type NewTask = Pick<Task, 'projectId' | 'taskName' | 'taskDesc' | 'taskDeadline' | 'attachments'>
 
 export interface TaskStatusUpdate {
   taskId: number

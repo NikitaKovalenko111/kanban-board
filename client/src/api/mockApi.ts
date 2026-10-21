@@ -1,5 +1,5 @@
 import axios, { type AxiosRequestConfig, type AxiosResponse } from 'axios'
-import type { Attachment, LoginCredentials, NewTask, NewTeamMember, Task, TaskHistoryEvent, TaskStatus, TeamMember, TeamSettings, User } from '../types'
+import type { AddProjectSourcesPayload, Attachment, LoginCredentials, NewProject, NewScheduleEvent, NewTask, NewTeamMember, Project, ProjectSource, ScheduleEvent, Task, TaskHistoryEvent, TaskStatus, TeamMember, TeamSettings, User } from '../types'
 
 interface Account extends TeamMember { password: string }
 
@@ -16,7 +16,21 @@ let accounts: Account[] = [
   { id: 5, name: 'Олег Миронов', login: 'oleg', password: 'member123', role: 'member', position: 'Backend-разработчик', active: false, joinedAt: '2026-08-15' },
 ]
 
-const taskSeeds: Omit<Task, 'history'>[] = [
+let projects: Project[] = [
+  { id: 'ai-hackathon', name: 'AI Hackathon', description: 'Командный проект для осеннего хакатона', color: '#8b72e8', sources: [{ id: 'source-1', name: 'Регламент хакатона.pdf', size: 684000, uploadedAt: '2026-10-18T12:30:00', uploadedBy: 'Алексей Морозов' }] },
+  { id: 'web-course', name: 'Веб-разработка', description: 'Учебная дисциплина и лабораторные работы', color: '#4e8bd8', sources: [{ id: 'source-2', name: 'Материалы курса.zip', size: 2480000, uploadedAt: '2026-10-15T09:20:00', uploadedBy: 'Алексей Морозов' }] },
+  { id: 'internal-portal', name: 'Внутренний портал', description: 'Развитие внутреннего продукта команды', color: '#42a682', sources: [] },
+]
+
+let scheduleEvents: ScheduleEvent[] = [
+  { id: 201, projectId: 'ai-hackathon', title: 'Установочная встреча', description: 'Распределить роли и утвердить идею решения.', startsAt: '2026-10-21T18:00:00', type: 'meeting', location: 'Переговорная 2', author: 'Алексей Морозов' },
+  { id: 202, projectId: 'ai-hackathon', title: 'Промежуточный питч', description: 'Показать прототип и получить обратную связь.', startsAt: '2026-10-24T15:30:00', type: 'presentation', location: 'Главный зал', author: 'Алексей Морозов' },
+  { id: 203, projectId: 'web-course', title: 'Практика по React Router', description: 'Маршрутизация и защищённые страницы.', startsAt: '2026-10-22T12:10:00', type: 'class', location: 'Аудитория 304', author: 'Алексей Морозов' },
+  { id: 204, projectId: 'web-course', title: 'Сдача лабораторной №4', description: 'Канбан-доска и управление состоянием.', startsAt: '2026-10-28T23:59:00', type: 'milestone', author: 'Алексей Морозов' },
+  { id: 205, projectId: 'internal-portal', title: 'Планирование спринта', description: 'Приоритизация задач следующего этапа.', startsAt: '2026-10-23T10:00:00', type: 'meeting', location: 'Онлайн', author: 'Алексей Морозов' },
+]
+
+const taskSeeds: Omit<Task, 'history' | 'projectId'>[] = [
   { taskId: 101, taskName: 'Собрать референсы для лендинга', taskDesc: 'Подобрать визуальные примеры первого экрана и карточек преимуществ.', taskStatus: 'waiting', taskDeadline: '2026-10-16', attachments: [{ id: 'a1', name: 'brief.pdf', size: 840000 }], resultAttachments: [], assignee: 'Мария Волкова', createdAt: '2026-10-09' },
   { taskId: 102, taskName: 'Подготовить UI-kit', taskDesc: 'Собрать состояния кнопок, полей и базовую типографику в единую систему.', taskStatus: 'working', taskDeadline: '2026-10-14', attachments: [], resultAttachments: [], assignee: 'Илья Горин', createdAt: '2026-10-08' },
   { taskId: 103, taskName: 'Проверить адаптив', taskDesc: 'Проверить основные экраны на ширинах 1440, 1024, 768 и 375 px.', taskStatus: 'checking', taskDeadline: '2026-10-13', attachments: [{ id: 'a2', name: 'checklist.xlsx', size: 256000 }], resultAttachments: [{ id: 'r1', name: 'adaptive-report.pdf', size: 610000 }], assignee: 'Анна Лукина', createdAt: '2026-10-07' },
@@ -40,7 +54,9 @@ function createInitialHistory(task: Omit<Task, 'history'>): TaskHistoryEvent[] {
 }
 
 let tasks: Task[] = taskSeeds.map((task) => {
-  const normalized = task.taskId === 104 ? { ...task, completedAt: '2026-10-12' } : task
+  const projectId = [101, 103, 107, 109].includes(task.taskId) ? 'ai-hackathon' : [105, 108, 111].includes(task.taskId) ? 'web-course' : 'internal-portal'
+  const withProject: Omit<Task, 'history'> = { ...task, projectId }
+  const normalized = task.taskId === 104 ? { ...withProject, completedAt: '2026-10-12' } : withProject
   return { ...normalized, history: createInitialHistory(normalized) }
 })
 
@@ -62,6 +78,36 @@ const publicMember = ({ password: _password, ...member }: Account): TeamMember =
 
 client.defaults.adapter = async (config) => {
   await new Promise((resolve) => setTimeout(resolve, 280))
+  if (config.url === '/projects' && config.method === 'get') return response(config, projects.map((project) => ({ ...project })))
+  if (config.url === '/projects' && config.method === 'post') {
+    const payload = JSON.parse(config.data as string) as NewProject
+    const baseId = payload.name.trim().toLowerCase().replace(/[^a-zа-яё0-9]+/gi, '-').replace(/^-|-$/g, '') || 'project'
+    const id = projects.some((project) => project.id === baseId) ? `${baseId}-${Date.now()}` : baseId
+    const project: Project = { ...payload, name: payload.name.trim(), description: payload.description.trim(), id, sources: [] }
+    projects = [...projects, project]
+    return response(config, { ...project }, 201)
+  }
+  if (config.url?.match(/^\/projects\/[^/]+\/sources$/) && config.method === 'post') {
+    const projectId = config.url.split('/')[2]
+    const payload = JSON.parse(config.data as string) as AddProjectSourcesPayload
+    const projectIndex = projects.findIndex((project) => project.id === projectId)
+    if (projectIndex < 0) throw new Error('Проект не найден')
+    const uploadedAt = new Date().toISOString()
+    const sources: ProjectSource[] = payload.files.map((file) => ({ ...file, uploadedAt, uploadedBy: payload.author }))
+    const updatedProject = { ...projects[projectIndex], sources: [...projects[projectIndex].sources, ...sources] }
+    projects = projects.map((project, index) => index === projectIndex ? updatedProject : project)
+    return response(config, { ...updatedProject, sources: updatedProject.sources.map((source) => ({ ...source })) })
+  }
+  if (config.url?.startsWith('/schedule/') && config.method === 'get') {
+    const projectId = config.url.split('/').pop()
+    return response(config, scheduleEvents.filter((event) => projectId === 'all' || event.projectId === projectId).map((event) => ({ ...event })))
+  }
+  if (config.url === '/schedule' && config.method === 'post') {
+    const payload = JSON.parse(config.data as string) as NewScheduleEvent
+    const event: ScheduleEvent = { ...payload, id: Date.now() }
+    scheduleEvents = [...scheduleEvents, event]
+    return response(config, { ...event }, 201)
+  }
   if (config.url === '/auth/login' && config.method === 'post') {
     const credentials = JSON.parse(config.data as string) as LoginCredentials
     const account = accounts.find((item) => item.login === credentials.login.trim().toLowerCase() && item.password === credentials.password)
@@ -126,6 +172,11 @@ client.defaults.adapter = async (config) => {
 }
 
 export const mockApi = {
+  getProjects: async () => (await client.get<Project[]>('/projects')).data,
+  createProject: async (project: NewProject) => (await client.post<Project>('/projects', project)).data,
+  addProjectSources: async (payload: AddProjectSourcesPayload) => (await client.post<Project>(`/projects/${payload.projectId}/sources`, payload)).data,
+  getSchedule: async (projectId: string) => (await client.get<ScheduleEvent[]>(`/schedule/${projectId}`)).data,
+  createScheduleEvent: async (event: NewScheduleEvent) => (await client.post<ScheduleEvent>('/schedule', event)).data,
   login: async (credentials: LoginCredentials) => (await client.post<User>('/auth/login', credentials)).data,
   getTeam: async () => (await client.get<{ settings: TeamSettings; members: TeamMember[] }>('/team')).data,
   updateTeam: async (settings: TeamSettings) => (await client.patch<TeamSettings>('/team', settings)).data,
