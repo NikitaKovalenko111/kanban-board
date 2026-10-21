@@ -22,7 +22,7 @@ func TestLoadHTTPServerFromYAML(t *testing.T) {
 		t.Setenv(name, "")
 	}
 
-	cfg, err := Load(filepath.Join("..", "..", "config", "config.yaml"))
+	cfg, err := Load(filepath.Join("..", "..", "config", "config_test.yaml"))
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
