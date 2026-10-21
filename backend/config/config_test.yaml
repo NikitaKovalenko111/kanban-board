@@ -1,0 +1,13 @@
+log_level: "dev"
+http_server:
+    http_address: ":3005"
+    http_timeout: 4s
+    http_idle_timeout: 60s
+
+postgres:
+  db_host: "localhost"
+  db_user: "postgres"
+  db_port: 1234
+  db_pass: "pass"
+  db_name: "database"
+  ssl_mode: "disable"
