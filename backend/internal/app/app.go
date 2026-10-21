@@ -3,12 +3,12 @@ package app
 import (
 	"fmt"
 	"kanban-board/internal/config"
-	"kanban-board/internal/pkg"
+	"kanban-board/internal/middleware"
 	"kanban-board/internal/services"
 	"kanban-board/internal/storage"
 	transport "kanban-board/internal/transport/http"
 	"kanban-board/internal/transport/http/handlers"
-	"kanban-board/middleware"
+	"kanban-board/pkg"
 	"net/http"
 )
 
