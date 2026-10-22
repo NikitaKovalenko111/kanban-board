@@ -6,6 +6,12 @@ import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import com.kanbanboard.mobile.data.FakeKanbanRepository
 import com.kanbanboard.mobile.data.KanbanRepository
+import com.kanbanboard.mobile.data.AppStorage
+import com.kanbanboard.mobile.data.MemoryAppStorage
+import com.kanbanboard.mobile.model.AppTheme
+import com.kanbanboard.mobile.model.EventType
+import com.kanbanboard.mobile.model.EventVisibility
+import com.kanbanboard.mobile.model.TeamEvent
 import com.kanbanboard.mobile.model.Comment
 import com.kanbanboard.mobile.model.Task
 import com.kanbanboard.mobile.model.TaskStatus
@@ -23,23 +29,92 @@ data class AppUiState(
     val teams: List<Team> = emptyList(),
     val selectedTeamId: Long = 1,
     val loginError: String? = null,
+    val theme: AppTheme = AppTheme.LIGHT,
+    val studentGroup: String = "203",
+    val events: List<TeamEvent> = emptyList(),
+    val eventTypes: List<EventType> = emptyList(),
 )
 
 class AppViewModel(
     private val repository: KanbanRepository = FakeKanbanRepository(),
+    private val storage: AppStorage = MemoryAppStorage(),
 ) : ViewModel() {
     var uiState by mutableStateOf(AppUiState(
         tasks = repository.tasks(),
         members = repository.members(),
         teamSettings = repository.teamSettings(),
         teams = repository.teams(),
+        theme = storage.theme(),
+        studentGroup = storage.group(),
+        events = repository.events() + storage.events(),
+        eventTypes = listOf(
+            EventType("meeting", "Созвон команды", 0xFF6576DF, defaultReminders = setOf(60, 30)),
+            EventType("study", "Учёба", 0xFFDA8A37, defaultReminders = setOf(1440)),
+            EventType("personal", "Личное", 0xFF38A585),
+        ) + storage.types(),
     ))
         private set
 
-    val events get() = repository.events()
     private val createdPasswords = mutableMapOf<String, String>()
 
     fun lessons(group: String) = repository.lessons(group)
+
+    fun setTheme(theme: AppTheme) {
+        storage.saveTheme(theme)
+        uiState = uiState.copy(theme = theme)
+    }
+
+    fun setStudentGroup(group: String) {
+        if (group !in setOf("203", "204")) return
+        storage.saveGroup(group)
+        uiState = uiState.copy(studentGroup = group)
+    }
+
+    fun visibleEvents(): List<TeamEvent> {
+        val user = uiState.user ?: return emptyList()
+        return uiState.events.filter { event ->
+            when (event.visibility) {
+                EventVisibility.TEAM -> event.teamId == uiState.selectedTeamId
+                EventVisibility.GROUP -> event.group == uiState.studentGroup
+                EventVisibility.PERSONAL -> event.ownerId == user.id
+            }
+        }
+    }
+
+    fun addEventType(title: String, color: Long, defaultReminders: Set<Int> = emptySet()): EventType? {
+        val normalized = title.trim()
+        if (normalized.isEmpty() || uiState.eventTypes.any { it.title.equals(normalized, true) }) return null
+        val type = EventType("custom-${java.util.UUID.randomUUID()}", normalized, color, custom = true, defaultReminders = defaultReminders)
+        val updated = uiState.eventTypes + type
+        storage.saveTypes(updated)
+        uiState = uiState.copy(eventTypes = updated)
+        return type
+    }
+
+    fun createEvent(title: String, date: String, time: String, visibility: EventVisibility, typeId: String, reminders: Set<Int>): TeamEvent? {
+        val user = uiState.user ?: return null
+        val startsAt = runCatching { java.time.LocalDateTime.parse("${date}T${time}") }.getOrNull()
+        if (title.isBlank() || startsAt == null || !startsAt.isAfter(java.time.LocalDateTime.now()) ||
+            uiState.eventTypes.none { it.id == typeId } ||
+            visibility == EventVisibility.TEAM && uiState.selectedTeamId == 0L
+        ) return null
+        val event = TeamEvent(
+            id = (uiState.events.maxOfOrNull { it.id } ?: 0) + 1,
+            title = title.trim(),
+            date = date,
+            time = time,
+            visibility = visibility,
+            group = if (visibility == EventVisibility.GROUP) uiState.studentGroup else null,
+            typeId = typeId,
+            reminderMinutes = reminders,
+            ownerId = user.id,
+            teamId = uiState.selectedTeamId,
+        )
+        val updated = uiState.events + event
+        storage.saveEvents(updated.filterNot { old -> repository.events().any { it.id == old.id } })
+        uiState = uiState.copy(events = updated)
+        return event
+    }
 
     fun login(login: String, password: String) {
         val normalizedLogin = login.trim().lowercase()

@@ -60,11 +60,19 @@ data class Team(
 )
 
 data class Lesson(
+    val date: String,
     val time: String,
     val title: String,
     val room: String,
     val teacher: String,
+    val kind: LessonKind,
 )
+
+enum class LessonKind(val title: String, val color: Long) {
+    LECTURE("Лекция", 0xFF6576DF),
+    PRACTICE("Практика", 0xFFDA8A37),
+    LAB("Лабораторная", 0xFF38A585),
+}
 
 enum class EventVisibility(val title: String) {
     TEAM("Команда"),
@@ -78,5 +86,19 @@ data class TeamEvent(
     val date: String,
     val time: String,
     val visibility: EventVisibility,
-    val reminder: String,
+    val group: String? = null,
+    val typeId: String = "meeting",
+    val reminderMinutes: Set<Int> = emptySet(),
+    val ownerId: Long? = null,
+    val teamId: Long = 1,
 )
+
+data class EventType(
+    val id: String,
+    val title: String,
+    val color: Long,
+    val custom: Boolean = false,
+    val defaultReminders: Set<Int> = emptySet(),
+)
+
+enum class AppTheme { LIGHT, DARK }
