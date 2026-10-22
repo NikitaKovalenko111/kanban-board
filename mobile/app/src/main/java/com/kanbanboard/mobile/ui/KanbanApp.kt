@@ -65,6 +65,9 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -349,7 +352,14 @@ private fun HomeScreen(
 
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
-        topBar = { AppHeader(section.title, activeTeam?.name ?: "Команда не выбрана", viewModel.uiState.user?.name ?: "") },
+        topBar = {
+            AppHeader(
+                section.title,
+                activeTeam?.name ?: "Команда не выбрана",
+                viewModel.uiState.user?.name ?: "",
+                onProfileClick = { selectedSection = HomeSection.PROFILE.ordinal },
+            )
+        },
         bottomBar = {
             NavigationBar(
                 modifier = Modifier.navigationBarsPadding(),
@@ -403,7 +413,7 @@ private fun HomeScreen(
 }
 
 @Composable
-private fun AppHeader(title: String, teamName: String, userName: String) {
+private fun AppHeader(title: String, teamName: String, userName: String, onProfileClick: () -> Unit) {
     Row(
         modifier = Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.background)
             .statusBarsPadding().padding(horizontal = 20.dp, vertical = 16.dp),
@@ -413,7 +423,12 @@ private fun AppHeader(title: String, teamName: String, userName: String) {
             Text(teamName.uppercase(), color = AppMuted, fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
             Text(title, fontSize = 27.sp, fontWeight = FontWeight.Bold)
         }
-        Avatar(userName)
+        Box(
+            modifier = Modifier.size(48.dp)
+                .semantics { contentDescription = "Открыть профиль" }
+                .clickable(role = Role.Button, onClick = onProfileClick),
+            contentAlignment = Alignment.Center,
+        ) { Avatar(userName) }
     }
 }
 
@@ -709,7 +724,14 @@ private fun MemberProfileScreen(member: User?, tasks: List<Task>, onBack: () -> 
         item { InfoCard("Роль", if (member.role == UserRole.LEAD) "Тимлид" else "Участник") }
         item { InfoCard("В команде с", member.joinedAt) }
         if (memberTasks.isNotEmpty()) {
-            item { Text("Последние задачи", fontSize = 18.sp, fontWeight = FontWeight.Bold) }
+            item {
+                Text(
+                    "Последние задачи",
+                    color = MaterialTheme.colorScheme.onBackground,
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.Bold,
+                )
+            }
             items(memberTasks.take(4)) { task -> TaskCard(task) {} }
         }
     }
