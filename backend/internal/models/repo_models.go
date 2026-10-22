@@ -31,3 +31,9 @@ type Project struct {
 	Description string
 	CreatedAt   time.Time
 }
+
+type Board struct {
+	ID        string
+	ProjectID string
+	Name      string
+}
