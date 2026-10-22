@@ -20,6 +20,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
@@ -43,6 +44,7 @@ import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Icon
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.AccountCircle
 import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.Groups
@@ -685,7 +687,7 @@ private fun MemberCard(member: User, onClick: () -> Unit) {
 private fun MemberProfileScreen(member: User?, tasks: List<Task>, onBack: () -> Unit) {
     if (member == null) {
         Column(Modifier.fillMaxSize().statusBarsPadding().padding(20.dp)) {
-            TextButton(onClick = onBack) { Text("← К участникам") }
+            BackButton(onBack, "К участникам")
             EmptyState("Профиль не найден", Modifier.weight(1f))
         }
         return
@@ -696,7 +698,7 @@ private fun MemberProfileScreen(member: User?, tasks: List<Task>, onBack: () -> 
         contentPadding = PaddingValues(20.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
-        item { TextButton(onClick = onBack) { Text("← Назад") } }
+        item { BackButton(onBack, "К участникам") }
         item {
             Card(
                 modifier = Modifier.fillMaxWidth(),
@@ -800,8 +802,22 @@ internal fun SimpleTopBar(title: String, onBack: () -> Unit) {
         modifier = Modifier.fillMaxWidth().statusBarsPadding().padding(horizontal = 10.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        TextButton(onClick = onBack, modifier = Modifier.height(48.dp)) { Text("← Назад") }
-        Text(title, fontSize = 20.sp, fontWeight = FontWeight.Bold)
+        BackButton(onBack)
+        Text(title, fontSize = 20.sp, fontWeight = FontWeight.Bold, maxLines = 1,
+            overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+    }
+}
+
+@Composable
+private fun BackButton(onBack: () -> Unit, label: String = "Назад") {
+    TextButton(
+        onClick = onBack,
+        modifier = Modifier.heightIn(min = 48.dp),
+        contentPadding = PaddingValues(horizontal = 12.dp),
+    ) {
+        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = null, modifier = Modifier.size(24.dp))
+        Spacer(Modifier.width(6.dp))
+        Text(label, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
     }
 }
 
@@ -881,7 +897,7 @@ private fun TeamDetailsScreen(
 ) {
     if (team == null || user == null) {
         Column(Modifier.fillMaxSize().statusBarsPadding().padding(20.dp)) {
-            TextButton(onClick = onBack) { Text("← Назад") }
+            BackButton(onBack)
             EmptyState("Команда не найдена", Modifier.weight(1f))
         }
         return
@@ -943,7 +959,7 @@ private fun TeamManagementScreen(
 ) {
     if (user?.role != UserRole.LEAD) {
         Column(Modifier.fillMaxSize().statusBarsPadding().padding(20.dp)) {
-            TextButton(onClick = onBack) { Text("← Назад") }
+            BackButton(onBack)
             EmptyState("Раздел доступен только тимлиду", Modifier.weight(1f))
         }
         return
@@ -1137,7 +1153,7 @@ private fun TaskDetailScreen(
                 modifier = Modifier.fillMaxWidth().statusBarsPadding().padding(horizontal = 10.dp, vertical = 8.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                TextButton(onClick = onBack) { Text("← Назад") }
+                BackButton(onBack)
                 Text("Задача #${task.id}", fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
             }
         },
