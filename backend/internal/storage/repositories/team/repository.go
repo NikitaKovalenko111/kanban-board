@@ -12,9 +12,9 @@ type TeamRepo struct {
 	ctx context.Context
 }
 
-func Init(db *sql.DB, ctx context.Context) *TeamRepo {
+func Init(sql *sql.DB, ctx context.Context) *TeamRepo {
 	return &TeamRepo{
-		db:  db,
+		db:  sql,
 		ctx: ctx,
 	}
 }

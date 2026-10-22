@@ -5,7 +5,6 @@ import (
 	"database/sql"
 	"fmt"
 	"kanban-board/internal/models"
-	"kanban-board/internal/storage"
 )
 
 type UsersRepo struct {
@@ -13,9 +12,9 @@ type UsersRepo struct {
 	ctx context.Context
 }
 
-func Init(storage *storage.Storage, ctx context.Context) *UsersRepo {
+func Init(sql *sql.DB, ctx context.Context) *UsersRepo {
 	return &UsersRepo{
-		db:  storage.Db,
+		db:  sql,
 		ctx: ctx,
 	}
 }

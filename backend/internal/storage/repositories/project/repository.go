@@ -12,9 +12,9 @@ type ProjectRepo struct {
 	ctx context.Context
 }
 
-func Init(db *sql.DB, ctx context.Context) *ProjectRepo {
+func Init(sql *sql.DB, ctx context.Context) *ProjectRepo {
 	return &ProjectRepo{
-		db:  db,
+		db:  sql,
 		ctx: ctx,
 	}
 }
