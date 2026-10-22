@@ -1,6 +1,13 @@
 package com.kanbanboard.mobile.ui
 
 import android.app.DatePickerDialog
+import android.Manifest
+import android.content.pm.PackageManager
+import android.os.Build
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.AnimatedContentTransitionScope
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
@@ -34,6 +41,13 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Icon
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AccountCircle
+import androidx.compose.material.icons.filled.CalendarMonth
+import androidx.compose.material.icons.filled.Groups
+import androidx.compose.material.icons.filled.History
+import androidx.compose.material.icons.filled.ViewKanban
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.OutlinedTextField
@@ -51,6 +65,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
@@ -67,6 +82,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.kanbanboard.mobile.model.EventVisibility
+import com.kanbanboard.mobile.data.ReminderScheduler
 import com.kanbanboard.mobile.model.Lesson
 import com.kanbanboard.mobile.model.Task
 import com.kanbanboard.mobile.model.TaskStatus
@@ -85,20 +101,27 @@ import java.time.format.DateTimeFormatter
 import java.time.temporal.ChronoUnit
 import java.util.Calendar
 
-private enum class HomeSection(val title: String, val symbol: String) {
-    BOARD("Доска", "▦"),
-    HISTORY("История", "◷"),
-    MEMBERS("Участники", "♧"),
-    PROFILE("Профиль", "○"),
+private enum class HomeSection(val title: String, val icon: ImageVector) {
+    BOARD("Доска", Icons.Filled.ViewKanban),
+    SCHEDULE("Расписание", Icons.Filled.CalendarMonth),
+    HISTORY("История", Icons.Filled.History),
+    MEMBERS("Участники", Icons.Filled.Groups),
+    PROFILE("Профиль", Icons.Filled.AccountCircle),
 }
 
 @Composable
 fun KanbanApp(viewModel: AppViewModel = viewModel()) {
     val navController = rememberNavController()
+    val context = LocalContext.current
+    val notificationPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { }
 
     NavHost(
         navController = navController,
         startDestination = if (viewModel.uiState.user == null) "login" else "home",
+        enterTransition = { slideIntoContainer(AnimatedContentTransitionScope.SlideDirection.Left, tween(280)) },
+        exitTransition = { slideOutOfContainer(AnimatedContentTransitionScope.SlideDirection.Left, tween(280)) },
+        popEnterTransition = { slideIntoContainer(AnimatedContentTransitionScope.SlideDirection.Right, tween(280)) },
+        popExitTransition = { slideOutOfContainer(AnimatedContentTransitionScope.SlideDirection.Right, tween(280)) },
     ) {
         composable("login") {
             LoginScreen(
@@ -118,7 +141,8 @@ fun KanbanApp(viewModel: AppViewModel = viewModel()) {
                 onMemberClick = { navController.navigate("member/${it.id}") },
                 onCreateTask = { navController.navigate("create-task") },
                 onManageTeam = { navController.navigate("team") },
-                onOpenExtras = { navController.navigate("extras") },
+                onCreateEvent = { navController.navigate("create-event") },
+                onOpenSettings = { navController.navigate("settings") },
                 onOpenTeams = { navController.navigate("teams") },
                 onLogout = {
                     viewModel.logout()
@@ -178,8 +202,17 @@ fun KanbanApp(viewModel: AppViewModel = viewModel()) {
                 onMemberClick = { navController.navigate("member/${it.id}") },
             )
         }
-        composable("extras") {
-            ExtrasScreen(viewModel, navController::popBackStack)
+        composable("settings") {
+            SettingsScreen(viewModel, navController::popBackStack)
+        }
+        composable("create-event") {
+            CreateEventScreen(viewModel, navController::popBackStack) { event ->
+                ReminderScheduler.schedule(context, event)
+                if (event.reminderMinutes.isNotEmpty() && Build.VERSION.SDK_INT >= 33 &&
+                    context.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
+                ) notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
+                navController.popBackStack()
+            }
         }
         composable("teams") {
             TeamsScreen(
@@ -303,7 +336,8 @@ private fun HomeScreen(
     onMemberClick: (User) -> Unit,
     onCreateTask: () -> Unit,
     onManageTeam: () -> Unit,
-    onOpenExtras: () -> Unit,
+    onCreateEvent: () -> Unit,
+    onOpenSettings: () -> Unit,
     onOpenTeams: () -> Unit,
     onLogout: () -> Unit,
 ) {
@@ -326,8 +360,8 @@ private fun HomeScreen(
                     NavigationBarItem(
                         selected = selectedSection == index,
                         onClick = { selectedSection = index },
-                        icon = { Text(item.symbol, fontSize = 19.sp, fontWeight = FontWeight.Bold) },
-                        label = { Text(item.title, fontSize = 10.sp) },
+                        icon = { Icon(item.icon, contentDescription = item.title, modifier = Modifier.size(24.dp)) },
+                        label = { Text(item.title, fontSize = 9.sp, maxLines = 1) },
                     )
                 }
             }
@@ -339,6 +373,12 @@ private fun HomeScreen(
                 onTaskClick = onTaskClick,
                 canCreate = viewModel.uiState.user?.role == UserRole.LEAD && activeTeam != null,
                 onCreate = onCreateTask,
+                modifier = Modifier.padding(padding),
+            )
+            HomeSection.SCHEDULE -> ScheduleTimelineScreen(
+                viewModel = viewModel,
+                tasks = teamTasks,
+                onCreateEvent = onCreateEvent,
                 modifier = Modifier.padding(padding),
             )
             HomeSection.HISTORY -> HistoryScreen(teamTasks, onTaskClick, Modifier.padding(padding))
@@ -354,7 +394,7 @@ private fun HomeScreen(
                 tasks = teamTasks,
                 activeTeam = activeTeam,
                 onOpenTeams = onOpenTeams,
-                onOpenExtras = onOpenExtras,
+                onOpenSettings = onOpenSettings,
                 onLogout = onLogout,
                 modifier = Modifier.padding(padding),
             )
@@ -733,30 +773,12 @@ private fun CreateTaskScreen(onBack: () -> Unit, onCreate: (String, String, Stri
 }
 
 @Composable
-private fun ExtrasScreen(viewModel: AppViewModel, onBack: () -> Unit) {
-    var selected by rememberSaveable { mutableIntStateOf(0) }
-    Scaffold(
-        containerColor = MaterialTheme.colorScheme.background,
-        topBar = { SimpleTopBar("Дополнительно", onBack) },
-    ) { padding ->
-        Column(Modifier.fillMaxSize().padding(padding)) {
-            Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                FilterChip(selected == 0, { selected = 0 }, label = { Text("Расписание") })
-                FilterChip(selected == 1, { selected = 1 }, label = { Text("События") })
-            }
-            if (selected == 0) ScheduleScreen(viewModel::lessons, Modifier.weight(1f))
-            else EventsScreen(viewModel.events, Modifier.weight(1f))
-        }
-    }
-}
-
-@Composable
-private fun SimpleTopBar(title: String, onBack: () -> Unit) {
+internal fun SimpleTopBar(title: String, onBack: () -> Unit) {
     Row(
         modifier = Modifier.fillMaxWidth().statusBarsPadding().padding(horizontal = 10.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        TextButton(onClick = onBack) { Text("← Назад") }
+        TextButton(onClick = onBack, modifier = Modifier.height(48.dp)) { Text("← Назад") }
         Text(title, fontSize = 20.sp, fontWeight = FontWeight.Bold)
     }
 }
@@ -998,111 +1020,12 @@ private fun TeamManagementScreen(
 }
 
 @Composable
-private fun ScheduleScreen(lessonsProvider: (String) -> List<Lesson>, modifier: Modifier = Modifier) {
-    var selectedGroup by rememberSaveable { mutableStateOf("203") }
-    Column(modifier = modifier.fillMaxSize()) {
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp).horizontalScroll(rememberScrollState()),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            listOf("203", "204").forEach { group ->
-                FilterChip(
-                    selected = selectedGroup == group,
-                    onClick = { selectedGroup = group },
-                    label = { Text("Группа $group") },
-                )
-            }
-        }
-        LazyColumn(
-            contentPadding = PaddingValues(20.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
-            item {
-                Text("Сегодня · четверг", fontSize = 18.sp, fontWeight = FontWeight.Bold)
-                Text("Данные ИСУ сохранены локально", color = AppMuted, fontSize = 12.sp)
-                Spacer(Modifier.height(6.dp))
-            }
-            items(lessonsProvider(selectedGroup)) { lesson -> LessonCard(lesson) }
-        }
-    }
-}
-
-@Composable
-private fun LessonCard(lesson: Lesson) {
-    Card(
-        shape = RoundedCornerShape(14.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        elevation = CardDefaults.cardElevation(1.dp),
-    ) {
-        Row(modifier = Modifier.padding(16.dp)) {
-            Column(modifier = Modifier.width(92.dp)) {
-                Text(lesson.time.substringBefore("–"), color = AppPrimary, fontWeight = FontWeight.Bold)
-                Text(lesson.time.substringAfter("–"), color = AppMuted, fontSize = 12.sp)
-            }
-            Column(modifier = Modifier.weight(1f)) {
-                Text(lesson.title, fontWeight = FontWeight.SemiBold)
-                Spacer(Modifier.height(5.dp))
-                Text("${lesson.room} · ${lesson.teacher}", color = AppMuted, fontSize = 12.sp)
-            }
-        }
-    }
-}
-
-@Composable
-private fun EventsScreen(events: List<TeamEvent>, modifier: Modifier = Modifier) {
-    var visibility by rememberSaveable { mutableStateOf<EventVisibility?>(null) }
-    Column(modifier = modifier.fillMaxSize()) {
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp).horizontalScroll(rememberScrollState()),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            FilterChip(selected = visibility == null, onClick = { visibility = null }, label = { Text("Все") })
-            EventVisibility.entries.forEach { item ->
-                FilterChip(selected = visibility == item, onClick = { visibility = item }, label = { Text(item.title) })
-            }
-        }
-        LazyColumn(
-            contentPadding = PaddingValues(20.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
-            items(events.filter { visibility == null || it.visibility == visibility }) { event -> EventCard(event) }
-        }
-    }
-}
-
-@Composable
-private fun EventCard(event: TeamEvent) {
-    val accent = when (event.visibility) {
-        EventVisibility.TEAM -> AppPrimary
-        EventVisibility.GROUP -> Color(0xFFE0A04B)
-        EventVisibility.PERSONAL -> AppSuccess
-    }
-    Card(
-        shape = RoundedCornerShape(14.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        elevation = CardDefaults.cardElevation(1.dp),
-    ) {
-        Row(modifier = Modifier.padding(16.dp)) {
-            Box(Modifier.width(4.dp).height(76.dp).clip(RoundedCornerShape(4.dp)).background(accent))
-            Spacer(Modifier.width(13.dp))
-            Column(modifier = Modifier.weight(1f)) {
-                Text(event.visibility.title.uppercase(), color = accent, fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = .8.sp)
-                Text(event.title, fontWeight = FontWeight.SemiBold, fontSize = 16.sp)
-                Spacer(Modifier.height(6.dp))
-                Text("${event.date} · ${event.time}", color = AppMuted, fontSize = 12.sp)
-                Text("Напомнить: ${event.reminder}", color = AppMuted, fontSize = 11.sp)
-            }
-        }
-    }
-}
-
-@Composable
 private fun ProfileScreen(
     user: User?,
     tasks: List<Task>,
     activeTeam: Team?,
     onOpenTeams: () -> Unit,
-    onOpenExtras: () -> Unit,
+    onOpenSettings: () -> Unit,
     onLogout: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -1138,7 +1061,7 @@ private fun ProfileScreen(
         }
         item { InfoCard("Логин", "@${user?.login.orEmpty()}") }
         item { InfoCard("Команды", activeTeam?.name ?: "Команда не выбрана", onOpenTeams) }
-        item { InfoCard("Расписание и события", "Дополнительные функции проекта", onOpenExtras) }
+        item { InfoCard("Настройки приложения", "Тема и учебная группа", onOpenSettings) }
         item {
             Button(
                 onClick = onLogout,
@@ -1307,7 +1230,7 @@ private fun SectionTitle(title: String, count: Int) {
 
 @Composable
 private fun MutedPanel(text: String) {
-    Surface(color = Color(0xFFF0F2F8), shape = RoundedCornerShape(14.dp), modifier = Modifier.fillMaxWidth()) {
+    Surface(color = MaterialTheme.colorScheme.surfaceVariant, shape = RoundedCornerShape(14.dp), modifier = Modifier.fillMaxWidth()) {
         Text(text, color = AppMuted, fontSize = 13.sp, modifier = Modifier.padding(16.dp))
     }
 }
