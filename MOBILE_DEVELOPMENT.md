@@ -125,6 +125,8 @@ mobile/
 
 ## 5. Подключение backend
 
+Подробный перечень нужных Android-клиенту HTTP-запросов, полей, примеров и открытых вопросов: [mobile/BACKEND_API_CONTRACT.md](mobile/BACKEND_API_CONTRACT.md). Это проект контракта для согласования, а не подтверждённые маршруты сервера.
+
 Необходимо сохранить интерфейс `KanbanRepository` и заменить `FakeKanbanRepository` реализацией `RemoteKanbanRepository`. Рекомендуемый порядок:
 
 1. согласовать OpenAPI-контракт с backend-разработчиком;
