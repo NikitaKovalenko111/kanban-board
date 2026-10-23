@@ -57,6 +57,32 @@ func (r *TaskAssigneeRepo) GetTaskAssigneesByTaskID(taskID string) ([]models.Tas
 	return assignees, nil
 }
 
+func (r *TaskAssigneeRepo) GetTaskAssigneesByUserID(userID string) ([]models.TaskAssignee, error) {
+	rows, err := r.db.QueryContext(r.ctx, `
+		SELECT task_id, user_id
+		FROM task_assignee
+		WHERE user_id = $1
+	`, userID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get task assignees by user id: %v", err)
+	}
+	defer rows.Close()
+
+	var assignees []models.TaskAssignee
+	for rows.Next() {
+		var assignee models.TaskAssignee
+		if err := rows.Scan(&assignee.TaskID, &assignee.UserID); err != nil {
+			return nil, fmt.Errorf("failed to scan task assignee: %v", err)
+		}
+		assignees = append(assignees, assignee)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("failed to iterate task assignees by user id: %v", err)
+	}
+
+	return assignees, nil
+}
+
 func (r *TaskAssigneeRepo) UpdateTaskAssignee(taskID string, oldUserID string, newUserID string) error {
 	_, err := r.db.ExecContext(r.ctx, `
 		UPDATE task_assignee
