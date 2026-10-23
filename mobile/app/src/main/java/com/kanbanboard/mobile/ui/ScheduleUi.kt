@@ -20,6 +20,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.FilterChip
@@ -28,6 +29,7 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -45,6 +47,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.kanbanboard.mobile.model.AppTheme
 import com.kanbanboard.mobile.model.EventVisibility
+import com.kanbanboard.mobile.model.EventType
 import com.kanbanboard.mobile.model.Task
 import com.kanbanboard.mobile.model.TaskStatus
 import com.kanbanboard.mobile.model.TeamEvent
@@ -186,9 +189,7 @@ fun CreateEventScreen(viewModel: AppViewModel, onBack: () -> Unit, onCreated: (T
     var time by rememberSaveable { mutableStateOf("18:00") }
     var visibility by rememberSaveable { mutableStateOf(EventVisibility.PERSONAL) }
     var selectedType by rememberSaveable { mutableStateOf("meeting") }
-    var customTitle by rememberSaveable { mutableStateOf("") }
-    var customColor by rememberSaveable { mutableLongStateOf(eventColors.first()) }
-    var customReminders by remember { mutableStateOf(setOf<Int>()) }
+    var showCreateType by rememberSaveable { mutableStateOf(false) }
     var reminders by remember { mutableStateOf(setOf(60, 30)) }
     var error by remember { mutableStateOf(false) }
 
@@ -231,35 +232,7 @@ fun CreateEventScreen(viewModel: AppViewModel, onBack: () -> Unit, onCreated: (T
                     }
                 }
             }
-            item {
-                Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
-                    Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Text("Свой тип", fontWeight = FontWeight.SemiBold)
-                        OutlinedTextField(customTitle, { customTitle = it }, label = { Text("Название типа") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
-                        Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                            eventColors.forEach { color ->
-                                FilterChip(customColor == color, onClick = { customColor = color }, label = { Text("●", color = Color(color)) })
-                            }
-                        }
-                        Text("Напоминания по умолчанию", fontSize = 12.sp)
-                        Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            reminderOptions.forEach { (minutes, label) ->
-                                FilterChip(minutes in customReminders, onClick = {
-                                    customReminders = if (minutes in customReminders) customReminders - minutes else customReminders + minutes
-                                }, label = { Text(label) })
-                            }
-                        }
-                        OutlinedButton(onClick = {
-                            viewModel.addEventType(customTitle, customColor, customReminders)?.let {
-                                selectedType = it.id
-                                reminders = it.defaultReminders
-                                customTitle = ""
-                                customReminders = emptySet()
-                            }
-                        }, enabled = customTitle.isNotBlank()) { Text("Добавить тип") }
-                    }
-                }
-            }
+            item { OutlinedButton(onClick = { showCreateType = true }, modifier = Modifier.fillMaxWidth()) { Text("+ Создать свой тип") } }
             item {
                 Text("Напомнить", fontWeight = FontWeight.Bold)
                 Text("Можно выбрать несколько интервалов", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
@@ -280,4 +253,59 @@ fun CreateEventScreen(viewModel: AppViewModel, onBack: () -> Unit, onCreated: (T
             }
         }
     }
+    if (showCreateType) {
+        CreateTypeDialog(
+            onDismiss = { showCreateType = false },
+            onCreate = { name, color, defaultReminders -> viewModel.addEventType(name, color, defaultReminders) },
+            onCreated = { type ->
+                selectedType = type.id
+                reminders = type.defaultReminders
+                showCreateType = false
+            },
+        )
+    }
+}
+
+@Composable
+private fun CreateTypeDialog(
+    onDismiss: () -> Unit,
+    onCreate: (String, Long, Set<Int>) -> EventType?,
+    onCreated: (EventType) -> Unit,
+) {
+    var name by rememberSaveable { mutableStateOf("") }
+    var color by rememberSaveable { mutableLongStateOf(eventColors.first()) }
+    var reminders by remember { mutableStateOf(setOf<Int>()) }
+    var duplicate by remember { mutableStateOf(false) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Новый тип события") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedTextField(name, { name = it; duplicate = false }, label = { Text("Название типа") },
+                    singleLine = true, modifier = Modifier.fillMaxWidth())
+                if (duplicate) Text("Такой тип уже существует", color = MaterialTheme.colorScheme.error, fontSize = 12.sp)
+                Text("Цвет", fontWeight = FontWeight.SemiBold)
+                Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    eventColors.forEach { option ->
+                        FilterChip(color == option, onClick = { color = option }, label = { Text("●", color = Color(option)) })
+                    }
+                }
+                Text("Напоминания по умолчанию", fontWeight = FontWeight.SemiBold)
+                Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    reminderOptions.forEach { (minutes, label) ->
+                        FilterChip(minutes in reminders, onClick = {
+                            reminders = if (minutes in reminders) reminders - minutes else reminders + minutes
+                        }, label = { Text(label) })
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = {
+                val created = onCreate(name, color, reminders)
+                if (created == null) duplicate = true else onCreated(created)
+            }, enabled = name.isNotBlank()) { Text("Создать тип") }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Отмена") } },
+    )
 }
