@@ -20,6 +20,7 @@ import com.kanbanboard.mobile.model.User
 import com.kanbanboard.mobile.model.UserRole
 import com.kanbanboard.mobile.model.LoginCredentials
 import com.kanbanboard.mobile.model.Team
+import com.kanbanboard.mobile.model.Project
 
 data class AppUiState(
     val user: User? = null,
@@ -28,6 +29,8 @@ data class AppUiState(
     val teamSettings: TeamSettings = TeamSettings("", ""),
     val teams: List<Team> = emptyList(),
     val selectedTeamId: Long = 1,
+    val projects: List<Project> = emptyList(),
+    val selectedProjectId: Long = 1,
     val loginError: String? = null,
     val theme: AppTheme = AppTheme.LIGHT,
     val studentGroup: String = "203",
@@ -44,6 +47,7 @@ class AppViewModel(
         members = repository.members(),
         teamSettings = repository.teamSettings(),
         teams = repository.teams(),
+        projects = repository.projects(),
         theme = storage.theme(),
         studentGroup = storage.group(),
         events = repository.events() + storage.events(),
@@ -91,10 +95,11 @@ class AppViewModel(
         return type
     }
 
-    fun createEvent(title: String, date: String, time: String, visibility: EventVisibility, typeId: String, reminders: Set<Int>): TeamEvent? {
+    fun createEvent(title: String, date: String, time: String, visibility: EventVisibility, typeId: String, reminders: Set<Int>, endTime: String = java.time.LocalTime.parse(time).plusHours(1).toString(), description: String = ""): TeamEvent? {
         val user = uiState.user ?: return null
         val startsAt = runCatching { java.time.LocalDateTime.parse("${date}T${time}") }.getOrNull()
-        if (title.isBlank() || startsAt == null || !startsAt.isAfter(java.time.LocalDateTime.now()) ||
+        val endsAt = runCatching { java.time.LocalDateTime.parse("${date}T${endTime}") }.getOrNull()
+        if (title.isBlank() || startsAt == null || endsAt == null || !endsAt.isAfter(startsAt) || !startsAt.isAfter(java.time.LocalDateTime.now()) ||
             uiState.eventTypes.none { it.id == typeId } ||
             visibility == EventVisibility.TEAM && uiState.selectedTeamId == 0L
         ) return null
@@ -103,6 +108,8 @@ class AppViewModel(
             title = title.trim(),
             date = date,
             time = time,
+            endTime = endTime,
+            description = description.trim(),
             visibility = visibility,
             group = if (visibility == EventVisibility.GROUP) uiState.studentGroup else null,
             typeId = typeId,
@@ -177,6 +184,7 @@ class AppViewModel(
             assignee = uiState.user?.name ?: "Не назначен",
             deadline = deadline.ifBlank { "Без срока" },
             teamId = uiState.selectedTeamId,
+            projectId = uiState.selectedProjectId,
         )
         uiState = uiState.copy(tasks = listOf(task) + uiState.tasks)
     }
@@ -226,6 +234,7 @@ class AppViewModel(
         val team = uiState.teams.firstOrNull { it.id == teamId && user.id in it.memberIds } ?: return
         uiState = uiState.copy(
             selectedTeamId = team.id,
+            selectedProjectId = uiState.projects.firstOrNull { it.teamId == team.id }?.id ?: 0,
             teamSettings = TeamSettings(team.name, team.description),
         )
     }
@@ -236,6 +245,7 @@ class AppViewModel(
         uiState = uiState.copy(
             teams = uiState.teams.map { if (it.id == teamId) it.copy(memberIds = it.memberIds + user.id) else it },
             selectedTeamId = teamId,
+            selectedProjectId = uiState.projects.firstOrNull { it.teamId == teamId }?.id ?: 0,
             teamSettings = TeamSettings(team.name, team.description),
         )
     }
@@ -249,9 +259,15 @@ class AppViewModel(
         uiState = uiState.copy(
             teams = updatedTeams,
             selectedTeamId = if (uiState.selectedTeamId == teamId) nextTeam?.id ?: 0 else uiState.selectedTeamId,
+            selectedProjectId = if (uiState.selectedTeamId == teamId) uiState.projects.firstOrNull { it.teamId == nextTeam?.id }?.id ?: 0 else uiState.selectedProjectId,
             teamSettings = if (uiState.selectedTeamId == teamId) {
                 nextTeam?.let { TeamSettings(it.name, it.description) } ?: TeamSettings("Команда не выбрана", "Выберите или вступите в команду")
             } else uiState.teamSettings,
         )
+    }
+
+    fun selectProject(projectId: Long) {
+        if (uiState.projects.none { it.id == projectId && it.teamId == uiState.selectedTeamId }) return
+        uiState = uiState.copy(selectedProjectId = projectId)
     }
 }

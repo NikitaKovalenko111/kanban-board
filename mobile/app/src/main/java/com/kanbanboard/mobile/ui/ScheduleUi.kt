@@ -3,6 +3,7 @@ package com.kanbanboard.mobile.ui
 import android.app.DatePickerDialog
 import android.app.TimePickerDialog
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -64,6 +65,7 @@ private data class AgendaItem(
     val detail: String,
     val category: String,
     val color: Long,
+    val eventId: Long? = null,
 )
 
 private val dateLabel = DateTimeFormatter.ofPattern("d MMMM, EEEE", Locale.forLanguageTag("ru"))
@@ -75,6 +77,7 @@ fun ScheduleTimelineScreen(
     viewModel: AppViewModel,
     tasks: List<Task>,
     onCreateEvent: () -> Unit,
+    onEventClick: (Long) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     var filter by rememberSaveable { mutableStateOf<EventVisibility?>(null) }
@@ -94,9 +97,9 @@ fun ScheduleTimelineScreen(
         runCatching {
             val type = types[event.typeId]
             AgendaItem(
-                "event-${event.id}", LocalDate.parse(event.date), event.time, event.title,
+                "event-${event.id}", LocalDate.parse(event.date), "${event.time}–${event.endTime}", event.title,
                 listOfNotNull(type?.title, event.visibility.title, event.group?.let { "группа $it" }).joinToString(" · "),
-                "Событие", type?.color ?: 0xFF6576DF,
+                "Событие", type?.color ?: 0xFF6576DF, event.id,
             )
         }.getOrNull()
     }
@@ -133,16 +136,16 @@ fun ScheduleTimelineScreen(
                     }
                     previous = entry.date
                 }
-                item(entry.key) { AgendaCard(entry) }
+                item(entry.key) { AgendaCard(entry, onEventClick) }
             }
         }
     }
 }
 
 @Composable
-private fun AgendaCard(item: AgendaItem) {
+private fun AgendaCard(item: AgendaItem, onEventClick: (Long) -> Unit) {
     Card(
-        modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(14.dp),
+        modifier = Modifier.fillMaxWidth().then(item.eventId?.let { id -> Modifier.clickable { onEventClick(id) } } ?: Modifier), shape = RoundedCornerShape(14.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
     ) {
         Row(Modifier.padding(15.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -187,6 +190,8 @@ fun CreateEventScreen(viewModel: AppViewModel, onBack: () -> Unit, onCreated: (T
     var title by rememberSaveable { mutableStateOf("") }
     var date by rememberSaveable { mutableStateOf(LocalDate.now().plusDays(1).toString()) }
     var time by rememberSaveable { mutableStateOf("18:00") }
+    var endTime by rememberSaveable { mutableStateOf("19:00") }
+    var description by rememberSaveable { mutableStateOf("") }
     var visibility by rememberSaveable { mutableStateOf(EventVisibility.PERSONAL) }
     var selectedType by rememberSaveable { mutableStateOf("meeting") }
     var showCreateType by rememberSaveable { mutableStateOf(false) }
@@ -202,14 +207,20 @@ fun CreateEventScreen(viewModel: AppViewModel, onBack: () -> Unit, onCreated: (T
         val initial = LocalTime.parse(time)
         TimePickerDialog(context, { _, hour, minute -> time = "%02d:%02d".format(hour, minute) }, initial.hour, initial.minute, true).show()
     }
+    val chooseEndTime = {
+        val initial = LocalTime.parse(endTime)
+        TimePickerDialog(context, { _, hour, minute -> endTime = "%02d:%02d".format(hour, minute) }, initial.hour, initial.minute, true).show()
+    }
 
     Scaffold(containerColor = MaterialTheme.colorScheme.background, topBar = { SimpleTopBar("Новое событие", onBack) }) { padding ->
         LazyColumn(Modifier.fillMaxSize().padding(padding), contentPadding = PaddingValues(20.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
             item { OutlinedTextField(title, { title = it }, label = { Text("Название") }, modifier = Modifier.fillMaxWidth(), singleLine = true) }
+            item { OutlinedTextField(description, { description = it }, label = { Text("Описание события") }, modifier = Modifier.fillMaxWidth(), minLines = 3) }
             item {
+                OutlinedButton(onClick = chooseDate, modifier = Modifier.fillMaxWidth()) { Text("Дата: $date") }
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedButton(onClick = chooseDate, modifier = Modifier.weight(1f)) { Text(date) }
-                    OutlinedButton(onClick = chooseTime) { Text(time) }
+                    OutlinedButton(onClick = chooseTime, modifier = Modifier.weight(1f)) { Text("С $time") }
+                    OutlinedButton(onClick = chooseEndTime, modifier = Modifier.weight(1f)) { Text("До $endTime") }
                 }
             }
             item {
@@ -244,10 +255,10 @@ fun CreateEventScreen(viewModel: AppViewModel, onBack: () -> Unit, onCreated: (T
                     }
                 }
             }
-            if (error) item { Text("Укажите название, дату, время и доступную команду", color = MaterialTheme.colorScheme.error) }
+            if (error) item { Text("Проверьте название, дату и время: окончание должно быть позже начала", color = MaterialTheme.colorScheme.error) }
             item {
                 Button(onClick = {
-                    val event = viewModel.createEvent(title, date, time, visibility, selectedType, reminders)
+                    val event = viewModel.createEvent(title, date, time, visibility, selectedType, reminders, endTime, description)
                     if (event == null) error = true else onCreated(event)
                 }, modifier = Modifier.fillMaxWidth(), enabled = title.isNotBlank()) { Text("Создать событие") }
             }
@@ -308,4 +319,31 @@ private fun CreateTypeDialog(
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Отмена") } },
     )
+}
+
+@Composable
+fun EventDetailScreen(event: TeamEvent?, type: EventType?, onBack: () -> Unit) {
+    Scaffold(containerColor = MaterialTheme.colorScheme.background,
+        topBar = { SimpleTopBar("Событие", onBack) }) { padding ->
+        if (event == null) {
+            Text("Событие не найдено", modifier = Modifier.padding(padding).padding(20.dp))
+        } else {
+            LazyColumn(Modifier.fillMaxSize().padding(padding), contentPadding = PaddingValues(20.dp),
+                verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                item {
+                    Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                        modifier = Modifier.fillMaxWidth()) {
+                        Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                            Text(type?.title ?: "Событие", color = Color(type?.color ?: 0xFF6576DF), fontWeight = FontWeight.Bold)
+                            Text(event.title, fontSize = 24.sp, fontWeight = FontWeight.Bold)
+                            Text("${event.date} · ${event.time}–${event.endTime}")
+                            Text("Для кого: ${event.visibility.title}${event.group?.let { " $it" } ?: ""}")
+                            Text(event.description.ifBlank { "Описание не добавлено" },
+                                color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                    }
+                }
+            }
+        }
+    }
 }

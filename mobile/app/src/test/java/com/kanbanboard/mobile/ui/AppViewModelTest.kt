@@ -106,4 +106,27 @@ class AppViewModelTest {
         viewModel.login("alexey", "lead123")
         assertEquals(false, viewModel.visibleEvents().any { it.id == personal.id })
     }
+
+    @Test
+    fun `project selection scopes newly created task`() {
+        val viewModel = AppViewModel()
+        viewModel.login("alexey", "lead123")
+        viewModel.selectProject(2)
+        viewModel.createTask("Демо", "Подготовить показ", "2030-01-02")
+        assertEquals(2L, viewModel.uiState.tasks.first().projectId)
+        viewModel.selectTeam(2)
+        assertEquals(3L, viewModel.uiState.selectedProjectId)
+    }
+
+    @Test
+    fun `event requires end after start and preserves description`() {
+        val viewModel = AppViewModel()
+        viewModel.login("maria", "member123")
+        assertEquals(null, viewModel.createEvent("Встреча", "2030-01-02", "14:00", EventVisibility.PERSONAL,
+            "meeting", emptySet(), "13:00", "Описание"))
+        val event = viewModel.createEvent("Встреча", "2030-01-02", "14:00", EventVisibility.PERSONAL,
+            "meeting", emptySet(), "15:30", "Описание")!!
+        assertEquals("15:30", event.endTime)
+        assertEquals("Описание", event.description)
+    }
 }

@@ -53,6 +53,10 @@ class SharedPreferencesAppStorage(context: Context) : AppStorage {
                 title = item.getString("title"),
                 date = item.getString("date"),
                 time = item.getString("time"),
+                endTime = item.optString("endTime", runCatching {
+                    java.time.LocalTime.parse(item.getString("time")).plusHours(1).toString()
+                }.getOrDefault(item.getString("time"))),
+                description = item.optString("description", ""),
                 visibility = EventVisibility.valueOf(item.getString("visibility")),
                 group = item.optString("group").ifBlank { null },
                 typeId = item.getString("typeId"),
@@ -81,6 +85,8 @@ class SharedPreferencesAppStorage(context: Context) : AppStorage {
                 put("title", event.title)
                 put("date", event.date)
                 put("time", event.time)
+                put("endTime", event.endTime)
+                put("description", event.description)
                 put("visibility", event.visibility.name)
                 put("group", event.group)
                 put("typeId", event.typeId)

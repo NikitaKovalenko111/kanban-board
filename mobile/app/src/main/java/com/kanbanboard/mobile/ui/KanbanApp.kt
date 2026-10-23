@@ -94,6 +94,7 @@ import com.kanbanboard.mobile.model.TaskStatus
 import com.kanbanboard.mobile.model.TeamEvent
 import com.kanbanboard.mobile.model.TeamSettings
 import com.kanbanboard.mobile.model.Team
+import com.kanbanboard.mobile.model.Project
 import com.kanbanboard.mobile.model.User
 import com.kanbanboard.mobile.model.UserRole
 import com.kanbanboard.mobile.ui.theme.AppBorder
@@ -147,6 +148,7 @@ fun KanbanApp(viewModel: AppViewModel = viewModel()) {
                 onCreateTask = { navController.navigate("create-task") },
                 onManageTeam = { navController.navigate("team") },
                 onCreateEvent = { navController.navigate("create-event") },
+                onEventClick = { navController.navigate("event/$it") },
                 onOpenSettings = { navController.navigate("settings") },
                 onOpenTeams = { navController.navigate("teams") },
                 onLogout = {
@@ -170,6 +172,7 @@ fun KanbanApp(viewModel: AppViewModel = viewModel()) {
                     onBack = navController::popBackStack,
                     onMove = { viewModel.moveTask(taskId, it) },
                     onComment = { viewModel.addComment(taskId, it) },
+                    onAssigneeClick = { name -> viewModel.uiState.members.firstOrNull { it.name == name }?.let { navController.navigate("member/${it.id}") } },
                 )
             }
         }
@@ -219,6 +222,10 @@ fun KanbanApp(viewModel: AppViewModel = viewModel()) {
                 navController.popBackStack()
             }
         }
+        composable(route = "event/{eventId}", arguments = listOf(navArgument("eventId") { type = NavType.LongType })) { entry ->
+            val event = viewModel.uiState.events.firstOrNull { it.id == entry.arguments?.getLong("eventId") }
+            EventDetailScreen(event, viewModel.uiState.eventTypes.firstOrNull { it.id == event?.typeId }, navController::popBackStack)
+        }
         composable("teams") {
             TeamsScreen(
                 user = viewModel.uiState.user,
@@ -242,6 +249,7 @@ fun KanbanApp(viewModel: AppViewModel = viewModel()) {
                 onSelect = viewModel::selectTeam,
                 onJoin = viewModel::joinTeam,
                 onLeave = viewModel::leaveTeam,
+                onMemberClick = { navController.navigate("member/${it.id}") },
             )
         }
     }
@@ -342,6 +350,7 @@ private fun HomeScreen(
     onCreateTask: () -> Unit,
     onManageTeam: () -> Unit,
     onCreateEvent: () -> Unit,
+    onEventClick: (Long) -> Unit,
     onOpenSettings: () -> Unit,
     onOpenTeams: () -> Unit,
     onLogout: () -> Unit,
@@ -381,19 +390,26 @@ private fun HomeScreen(
     ) { padding ->
         when (section) {
             HomeSection.BOARD -> BoardScreen(
-                tasks = teamTasks,
+                tasks = teamTasks.filter { it.projectId == viewModel.uiState.selectedProjectId },
+                projects = viewModel.uiState.projects.filter { it.teamId == viewModel.uiState.selectedTeamId },
+                selectedProjectId = viewModel.uiState.selectedProjectId,
+                onSelectProject = viewModel::selectProject,
                 onTaskClick = onTaskClick,
                 canCreate = viewModel.uiState.user?.role == UserRole.LEAD && activeTeam != null,
                 onCreate = onCreateTask,
+                onAssigneeClick = { name -> teamMembers.firstOrNull { it.name == name }?.let(onMemberClick) },
                 modifier = Modifier.padding(padding),
             )
             HomeSection.SCHEDULE -> ScheduleTimelineScreen(
                 viewModel = viewModel,
                 tasks = teamTasks,
                 onCreateEvent = onCreateEvent,
+                onEventClick = onEventClick,
                 modifier = Modifier.padding(padding),
             )
-            HomeSection.HISTORY -> HistoryScreen(teamTasks, onTaskClick, Modifier.padding(padding))
+            HomeSection.HISTORY -> HistoryScreen(teamTasks, onTaskClick,
+                onAssigneeClick = { name -> teamMembers.firstOrNull { it.name == name }?.let(onMemberClick) },
+                modifier = Modifier.padding(padding))
             HomeSection.MEMBERS -> MembersScreen(
                 members = teamMembers,
                 canManage = viewModel.uiState.user?.role == UserRole.LEAD && activeTeam != null,
@@ -448,15 +464,26 @@ private fun Avatar(name: String, size: Int = 42) {
 @Composable
 private fun BoardScreen(
     tasks: List<Task>,
+    projects: List<Project>,
+    selectedProjectId: Long,
+    onSelectProject: (Long) -> Unit,
     onTaskClick: (Task) -> Unit,
     canCreate: Boolean,
     onCreate: () -> Unit,
+    onAssigneeClick: (String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     var selectedStatus by rememberSaveable { mutableStateOf(TaskStatus.WORKING) }
     val visibleTasks = tasks.filter { it.status == selectedStatus }
 
     Column(modifier = modifier.fillMaxSize()) {
+        LazyRow(contentPadding = PaddingValues(horizontal = 20.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            items(projects, key = { it.id }) { project ->
+                FilterChip(selected = project.id == selectedProjectId,
+                    onClick = { onSelectProject(project.id) }, label = { Text(project.name) })
+            }
+        }
+        if (projects.isEmpty()) Text("В команде пока нет проектов", modifier = Modifier.padding(20.dp))
         if (canCreate) {
             Row(
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 4.dp),
@@ -493,14 +520,14 @@ private fun BoardScreen(
                 contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 4.dp, bottom = 28.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
-                items(visibleTasks, key = { it.id }) { task -> TaskCard(task) { onTaskClick(task) } }
+                items(visibleTasks, key = { it.id }) { task -> TaskCard(task, { onTaskClick(task) }, { onAssigneeClick(task.assignee) }) }
             }
         }
     }
 }
 
 @Composable
-private fun TaskCard(task: Task, onClick: () -> Unit) {
+private fun TaskCard(task: Task, onClick: () -> Unit, onAssigneeClick: () -> Unit = {}) {
     Card(
         modifier = Modifier.fillMaxWidth().clickable(onClick = onClick),
         shape = RoundedCornerShape(14.dp),
@@ -518,9 +545,11 @@ private fun TaskCard(task: Task, onClick: () -> Unit) {
             Text(task.description, color = AppMuted, fontSize = 13.sp, lineHeight = 19.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
             Spacer(Modifier.height(16.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Avatar(task.assignee, 30)
-                Spacer(Modifier.width(9.dp))
-                Text(task.assignee, fontSize = 12.sp, modifier = Modifier.weight(1f))
+                Row(Modifier.weight(1f).clickable(onClick = onAssigneeClick), verticalAlignment = Alignment.CenterVertically) {
+                    Avatar(task.assignee, 30)
+                    Spacer(Modifier.width(9.dp))
+                    Text(task.assignee, fontSize = 12.sp)
+                }
                 Surface(color = Color(0xFFF5F6F8), shape = RoundedCornerShape(8.dp)) {
                     Text(task.deadline, color = AppMuted, fontSize = 11.sp, modifier = Modifier.padding(horizontal = 8.dp, vertical = 5.dp))
                 }
@@ -545,7 +574,7 @@ private fun StatusDot(status: TaskStatus) {
 }
 
 @Composable
-private fun HistoryScreen(tasks: List<Task>, onTaskClick: (Task) -> Unit, modifier: Modifier = Modifier) {
+private fun HistoryScreen(tasks: List<Task>, onTaskClick: (Task) -> Unit, onAssigneeClick: (String) -> Unit, modifier: Modifier = Modifier) {
     var query by rememberSaveable { mutableStateOf("") }
     var assignee by rememberSaveable { mutableStateOf("Все") }
     var periodDays by rememberSaveable { mutableIntStateOf(0) }
@@ -608,7 +637,8 @@ private fun HistoryScreen(tasks: List<Task>, onTaskClick: (Task) -> Unit, modifi
                             }
                             Spacer(Modifier.height(6.dp))
                             Text(task.title, fontWeight = FontWeight.SemiBold)
-                            Text(task.assignee, color = AppMuted, fontSize = 12.sp)
+                            Text(task.assignee, color = AppPrimary, fontSize = 12.sp,
+                                modifier = Modifier.clickable { onAssigneeClick(task.assignee) })
                             Text("Результат: ${task.resultAttachments.size} файл(а)", color = AppPrimary, fontSize = 11.sp)
                         }
                     }
@@ -734,7 +764,7 @@ private fun MemberProfileScreen(member: User?, tasks: List<Task>, onBack: () -> 
                     fontWeight = FontWeight.Bold,
                 )
             }
-            items(memberTasks.take(4)) { task -> TaskCard(task) {} }
+            items(memberTasks.take(4)) { task -> TaskCard(task, onClick = {}) }
         }
     }
 }
@@ -894,6 +924,7 @@ private fun TeamDetailsScreen(
     onSelect: (Long) -> Unit,
     onJoin: (Long) -> Unit,
     onLeave: (Long) -> Unit,
+    onMemberClick: (User) -> Unit,
 ) {
     if (team == null || user == null) {
         Column(Modifier.fillMaxSize().statusBarsPadding().padding(20.dp)) {
@@ -941,7 +972,7 @@ private fun TeamDetailsScreen(
                 }
             }
             item { Text("Участники", fontSize = 19.sp, fontWeight = FontWeight.Bold) }
-            items(teamMembers, key = { it.id }) { member -> MemberCard(member) {} }
+            items(teamMembers, key = { it.id }) { member -> MemberCard(member) { onMemberClick(member) } }
         }
     }
 }
@@ -1144,6 +1175,7 @@ private fun TaskDetailScreen(
     onBack: () -> Unit,
     onMove: (TaskStatus) -> Unit,
     onComment: (String) -> Unit,
+    onAssigneeClick: (String) -> Unit,
 ) {
     var comment by rememberSaveable { mutableStateOf("") }
     Scaffold(
@@ -1175,7 +1207,8 @@ private fun TaskDetailScreen(
                         Spacer(Modifier.height(9.dp))
                         Text(task.description, color = AppMuted, lineHeight = 21.sp)
                         Spacer(Modifier.height(18.dp))
-                        Row(verticalAlignment = Alignment.CenterVertically) {
+                        Row(verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.clickable { onAssigneeClick(task.assignee) }) {
                             Avatar(task.assignee, 34)
                             Spacer(Modifier.width(9.dp))
                             Column(modifier = Modifier.weight(1f)) {

@@ -13,6 +13,7 @@ import com.kanbanboard.mobile.model.User
 import com.kanbanboard.mobile.model.UserRole
 import com.kanbanboard.mobile.model.TeamSettings
 import com.kanbanboard.mobile.model.Team
+import com.kanbanboard.mobile.model.Project
 import java.time.LocalDate
 
 interface KanbanRepository {
@@ -21,6 +22,7 @@ interface KanbanRepository {
     fun members(): List<User>
     fun teamSettings(): TeamSettings
     fun teams(): List<Team>
+    fun projects(): List<Project>
     fun lessons(group: String): List<Lesson>
     fun events(): List<TeamEvent>
 }
@@ -34,6 +36,10 @@ class FakeKanbanRepository : KanbanRepository {
         Account(User(3, "Илья Горин", "ilya", UserRole.MEMBER, "Frontend-разработчик", true, "2026-06-03"), "member123"),
         Account(User(4, "Анна Лукина", "anna", UserRole.MEMBER, "QA-инженер", true, "2026-07-21"), "member123"),
         Account(User(5, "Олег Миронов", "oleg", UserRole.MEMBER, "Backend-разработчик", false, "2026-08-15"), "member123"),
+        Account(User(6, "Самир Ахмедов", "samir", UserRole.MEMBER, "Android-разработчик", true, "2026-09-01"), "member123"),
+        Account(User(7, "Денис", "denis", UserRole.MEMBER, "Backend-разработчик", true, "2026-09-01"), "member123"),
+        Account(User(8, "Никита", "nikita", UserRole.LEAD, "Тимлид", true, "2026-09-01"), "member123"),
+        Account(User(9, "Алёна", "alena", UserRole.MEMBER, "DevOps", true, "2026-09-01"), "member123"),
     )
 
     override fun login(credentials: LoginCredentials): User? = accounts.firstOrNull {
@@ -50,9 +56,15 @@ class FakeKanbanRepository : KanbanRepository {
     )
 
     override fun teams(): List<Team> = listOf(
-        Team(1, "Команда Kanban", "Разработка Kanban Board для студенческой команды.", setOf(1, 2, 3, 4, 5)),
-        Team(2, "Мобильная лаборатория", "Android, Wear OS и интеграция с расписанием.", setOf(1, 2, 4)),
+        Team(1, "Команда Kanban", "Разработка Kanban Board для студенческой команды.", setOf(1, 2, 3, 4, 5, 6, 7, 8, 9)),
+        Team(2, "Мобильная лаборатория", "Android, Wear OS и интеграция с расписанием.", setOf(1, 2, 4, 6)),
         Team(3, "Исследования", "Учебные проекты по данным и автоматизации.", setOf(3, 5)),
+    )
+
+    override fun projects(): List<Project> = listOf(
+        Project(1, 1, "Kanban Board"), Project(2, 1, "Хакатон"),
+        Project(3, 2, "Мобильная разработка"), Project(4, 2, "Лабораторные"),
+        Project(5, 3, "Исследования"),
     )
 
     override fun tasks(): List<Task> = listOf(
@@ -105,7 +117,8 @@ class FakeKanbanRepository : KanbanRepository {
         ),
         Task(106, "Подготовить документацию", "Актуализировать инструкции по локальному запуску.", TaskStatus.DONE, "Анна Лукина", "13 окт", completedAt = "13.10.2026"),
         Task(107, "Собрать UI-kit", "Согласовать состояния кнопок, полей и типографику.", TaskStatus.DONE, "Мария Волкова", "11 окт", completedAt = "11.10.2026"),
-        Task(108, "Экран расписания", "Подготовить мобильное отображение расписания групп.", TaskStatus.WORKING, "Мария Волкова", LocalDate.now().plusDays(2).toString(), teamId = 2),
+        Task(108, "Экран расписания", "Подготовить мобильное отображение расписания групп.", TaskStatus.WORKING, "Мария Волкова", LocalDate.now().plusDays(2).toString(), teamId = 2, projectId = 3),
+        Task(109, "Подготовить демо хакатона", "Собрать сценарий демонстрации.", TaskStatus.WAITING, "Мария Волкова", LocalDate.now().plusDays(5).toString(), projectId = 2),
     )
 
     override fun lessons(group: String): List<Lesson> = if (group == "203") {
@@ -123,8 +136,8 @@ class FakeKanbanRepository : KanbanRepository {
     }
 
     override fun events(): List<TeamEvent> = listOf(
-        TeamEvent(1, "Созвон команды", LocalDate.now().plusDays(1).toString(), "18:00", EventVisibility.TEAM, reminderMinutes = setOf(60)),
-        TeamEvent(2, "Подготовка к лабораторной", LocalDate.now().plusDays(1).toString(), "11:40", EventVisibility.GROUP, group = "203", typeId = "study", reminderMinutes = setOf(1440)),
-        TeamEvent(3, "Проверить pull request", LocalDate.now().toString(), "20:00", EventVisibility.PERSONAL, typeId = "personal", reminderMinutes = setOf(30), ownerId = 1),
+        TeamEvent(1, "Созвон команды", LocalDate.now().plusDays(1).toString(), "18:00", EventVisibility.TEAM, endTime = "19:00", description = "Обсуждение задач и результатов спринта.", reminderMinutes = setOf(60)),
+        TeamEvent(2, "Подготовка к лабораторной", LocalDate.now().plusDays(1).toString(), "11:40", EventVisibility.GROUP, endTime = "13:10", description = "Разобрать материалы к занятию.", group = "203", typeId = "study", reminderMinutes = setOf(1440)),
+        TeamEvent(3, "Проверить pull request", LocalDate.now().toString(), "20:00", EventVisibility.PERSONAL, endTime = "20:30", description = "Просмотреть замечания и проверить сборку.", typeId = "personal", reminderMinutes = setOf(30), ownerId = 1),
     )
 }

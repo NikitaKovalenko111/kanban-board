@@ -34,6 +34,7 @@ data class Task(
     val comments: List<Comment> = emptyList(),
     val completedAt: String? = null,
     val teamId: Long = 1,
+    val projectId: Long = 1,
 )
 
 enum class UserRole { LEAD, MEMBER }
@@ -58,6 +59,8 @@ data class Team(
     val description: String,
     val memberIds: Set<Long>,
 )
+
+data class Project(val id: Long, val teamId: Long, val name: String)
 
 data class Lesson(
     val date: String,
@@ -86,6 +89,8 @@ data class TeamEvent(
     val date: String,
     val time: String,
     val visibility: EventVisibility,
+    val endTime: String = time,
+    val description: String = "",
     val group: String? = null,
     val typeId: String = "meeting",
     val reminderMinutes: Set<Int> = emptySet(),
