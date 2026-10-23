@@ -21,9 +21,9 @@ func Init(sql *sql.DB, ctx context.Context) *TeamRepo {
 
 func (r *TeamRepo) CreateTeam(name string) (string, error) {
 	var id string
-	err := r.db.QueryRow(`
-		INSERT INTO team (name)
-		VALUES ($1)
+	err := r.db.QueryRowContext(r.ctx, `
+		INSERT INTO team (id, name)
+		VALUES (gen_random_uuid(), $1)
 		RETURNING id
 	`, name).Scan(&id)
 	if err != nil {
@@ -78,6 +78,9 @@ func (r *TeamRepo) GetAllTeams() ([]models.Team, error) {
 			return nil, fmt.Errorf("failed to scan team: %v", err)
 		}
 		teams = append(teams, team)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("failed to iterate teams: %v", err)
 	}
 
 	return teams, nil

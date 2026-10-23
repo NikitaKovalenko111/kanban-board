@@ -51,6 +51,9 @@ func (r *TeamMemberRepo) GetTeamMembersByTeamID(teamID string) ([]models.TeamMem
 		}
 		members = append(members, member)
 	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("failed to iterate team members: %v", err)
+	}
 
 	return members, nil
 }
