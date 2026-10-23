@@ -3,7 +3,11 @@ http_server:
     http_address: ":3005"
     http_timeout: 4s
     http_idle_timeout: 60s
-
+jwt:
+    jwt_access_secret: "aaaaaaaaaaaaaaaaa"
+    jwt_refresh_secret: "rrrrrrrrrrrrrrrrr"
+    access_token_ttl: "1m"
+    refresh_token_ttl: "1h"
 postgres:
   db_host: "localhost"
   db_user: "postgres"
