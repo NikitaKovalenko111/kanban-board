@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -31,6 +32,7 @@ import com.kanbanboard.mobile.data.ReminderScheduler
 import com.kanbanboard.mobile.data.SharedPreferencesAppStorage
 import com.kanbanboard.mobile.ui.AppViewModel
 import com.kanbanboard.mobile.ui.KanbanApp
+import com.kanbanboard.mobile.ui.LocalDeviceCornerShape
 import com.kanbanboard.mobile.model.AppTheme
 import com.kanbanboard.mobile.ui.theme.KanbanTheme
 
@@ -78,5 +80,7 @@ private fun DeviceRoundedSurface(content: @Composable () -> Unit) {
             }
         }
     }
-    Box(Modifier.fillMaxSize().clip(corners).background(MaterialTheme.colorScheme.background)) { content() }
+    CompositionLocalProvider(LocalDeviceCornerShape provides corners) {
+        Box(Modifier.fillMaxSize().clip(corners).background(MaterialTheme.colorScheme.background)) { content() }
+    }
 }

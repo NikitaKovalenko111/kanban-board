@@ -130,7 +130,7 @@ fun KanbanApp(viewModel: AppViewModel = viewModel()) {
         popExitTransition = { slideOutOfContainer(AnimatedContentTransitionScope.SlideDirection.Right, tween(280)) },
     ) {
         composable("login") {
-            LoginScreen(
+            DestinationSurface { LoginScreen(
                 error = viewModel.uiState.loginError,
                 onLogin = { login, password ->
                     viewModel.login(login, password)
@@ -138,10 +138,10 @@ fun KanbanApp(viewModel: AppViewModel = viewModel()) {
                         navController.navigate("home") { popUpTo("login") { inclusive = true } }
                     }
                 },
-            )
+            ) }
         }
         composable("home") {
-            HomeScreen(
+            DestinationSurface { HomeScreen(
                 viewModel = viewModel,
                 onTaskClick = { navController.navigate("task/${it.id}") },
                 onMemberClick = { navController.navigate("member/${it.id}") },
@@ -155,7 +155,7 @@ fun KanbanApp(viewModel: AppViewModel = viewModel()) {
                     viewModel.logout()
                     navController.navigate("login") { popUpTo("home") { inclusive = true } }
                 },
-            )
+            ) }
         }
         composable(
             route = "task/{taskId}",
@@ -163,7 +163,7 @@ fun KanbanApp(viewModel: AppViewModel = viewModel()) {
         ) { entry ->
             val taskId = entry.arguments?.getLong("taskId") ?: return@composable
             val task = viewModel.uiState.tasks.firstOrNull { it.id == taskId }
-            if (task == null) {
+            DestinationSurface { if (task == null) {
                 EmptyState("Задача не найдена")
             } else {
                 TaskDetailScreen(
@@ -174,16 +174,16 @@ fun KanbanApp(viewModel: AppViewModel = viewModel()) {
                     onComment = { viewModel.addComment(taskId, it) },
                     onAssigneeClick = { name -> viewModel.uiState.members.firstOrNull { it.name == name }?.let { navController.navigate("member/${it.id}") } },
                 )
-            }
+            } }
         }
         composable("create-task") {
-            CreateTaskScreen(
+            DestinationSurface { CreateTaskScreen(
                 onBack = navController::popBackStack,
                 onCreate = { title, description, deadline ->
                     viewModel.createTask(title, description, deadline)
                     navController.popBackStack()
                 },
-            )
+            ) }
         }
         composable(
             route = "member/{memberId}",
@@ -191,15 +191,15 @@ fun KanbanApp(viewModel: AppViewModel = viewModel()) {
         ) { entry ->
             val memberId = entry.arguments?.getLong("memberId") ?: return@composable
             val member = viewModel.uiState.members.firstOrNull { it.id == memberId }
-            MemberProfileScreen(
+            DestinationSurface { MemberProfileScreen(
                 member,
                 viewModel.uiState.tasks.filter { it.teamId == viewModel.uiState.selectedTeamId },
                 navController::popBackStack,
-            )
+            ) }
         }
         composable("team") {
             val activeTeam = viewModel.uiState.teams.firstOrNull { it.id == viewModel.uiState.selectedTeamId }
-            TeamManagementScreen(
+            DestinationSurface { TeamManagementScreen(
                 user = viewModel.uiState.user,
                 members = viewModel.uiState.members.filter { it.id in (activeTeam?.memberIds ?: emptySet()) },
                 settings = viewModel.uiState.teamSettings,
@@ -208,39 +208,39 @@ fun KanbanApp(viewModel: AppViewModel = viewModel()) {
                 onUpdateTeam = viewModel::updateTeam,
                 onAddMember = viewModel::addMember,
                 onMemberClick = { navController.navigate("member/${it.id}") },
-            )
+            ) }
         }
         composable("settings") {
-            SettingsScreen(viewModel, navController::popBackStack)
+            DestinationSurface { SettingsScreen(viewModel, navController::popBackStack) }
         }
         composable("create-event") {
-            CreateEventScreen(viewModel, navController::popBackStack) { event ->
+            DestinationSurface { CreateEventScreen(viewModel, navController::popBackStack) { event ->
                 ReminderScheduler.schedule(context, event)
                 if (event.reminderMinutes.isNotEmpty() && Build.VERSION.SDK_INT >= 33 &&
                     context.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
                 ) notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
                 navController.popBackStack()
-            }
+            } }
         }
         composable(route = "event/{eventId}", arguments = listOf(navArgument("eventId") { type = NavType.LongType })) { entry ->
             val event = viewModel.uiState.events.firstOrNull { it.id == entry.arguments?.getLong("eventId") }
-            EventDetailScreen(event, viewModel.uiState.eventTypes.firstOrNull { it.id == event?.typeId }, navController::popBackStack)
+            DestinationSurface { EventDetailScreen(event, viewModel.uiState.eventTypes.firstOrNull { it.id == event?.typeId }, navController::popBackStack) }
         }
         composable("teams") {
-            TeamsScreen(
+            DestinationSurface { TeamsScreen(
                 user = viewModel.uiState.user,
                 teams = viewModel.uiState.teams,
                 selectedTeamId = viewModel.uiState.selectedTeamId,
                 onBack = navController::popBackStack,
                 onTeamClick = { navController.navigate("team-details/${it.id}") },
-            )
+            ) }
         }
         composable(
             route = "team-details/{teamId}",
             arguments = listOf(navArgument("teamId") { type = NavType.LongType }),
         ) { entry ->
             val teamId = entry.arguments?.getLong("teamId") ?: return@composable
-            TeamDetailsScreen(
+            DestinationSurface { TeamDetailsScreen(
                 team = viewModel.uiState.teams.firstOrNull { it.id == teamId },
                 user = viewModel.uiState.user,
                 members = viewModel.uiState.members,
@@ -250,8 +250,15 @@ fun KanbanApp(viewModel: AppViewModel = viewModel()) {
                 onJoin = viewModel::joinTeam,
                 onLeave = viewModel::leaveTeam,
                 onMemberClick = { navController.navigate("member/${it.id}") },
-            )
+            ) }
         }
+    }
+}
+
+@Composable
+private fun DestinationSurface(content: @Composable () -> Unit) {
+    Box(Modifier.fillMaxSize().clip(LocalDeviceCornerShape.current).background(MaterialTheme.colorScheme.background)) {
+        content()
     }
 }
 
