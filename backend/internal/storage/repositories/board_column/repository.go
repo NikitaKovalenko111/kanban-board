@@ -8,20 +8,18 @@ import (
 )
 
 type BoardColumnRepo struct {
-	db  *sql.DB
-	ctx context.Context
+	db *sql.DB
 }
 
-func Init(db *sql.DB, ctx context.Context) *BoardColumnRepo {
+func Init(db *sql.DB) *BoardColumnRepo {
 	return &BoardColumnRepo{
-		db:  db,
-		ctx: ctx,
+		db: db,
 	}
 }
 
-func (r *BoardColumnRepo) CreateBoardColumn(boardID string, name string, position int) (string, error) {
+func (r *BoardColumnRepo) CreateBoardColumn(ctx context.Context, boardID string, name string, position int) (string, error) {
 	var columnID string
-	err := r.db.QueryRowContext(r.ctx, `
+	err := r.db.QueryRowContext(ctx, `
 		INSERT INTO board_columns (column_id, board_id, name, position)
 		VALUES (gen_random_uuid(), $1, $2, $3)
 		RETURNING column_id
@@ -33,9 +31,9 @@ func (r *BoardColumnRepo) CreateBoardColumn(boardID string, name string, positio
 	return columnID, nil
 }
 
-func (r *BoardColumnRepo) GetBoardColumnByID(columnID string) (*models.BoardColumn, error) {
+func (r *BoardColumnRepo) GetBoardColumnByID(ctx context.Context, columnID string) (*models.BoardColumn, error) {
 	var column models.BoardColumn
-	err := r.db.QueryRowContext(r.ctx, `
+	err := r.db.QueryRowContext(ctx, `
 		SELECT column_id, board_id, name, position
 		FROM board_columns
 		WHERE column_id = $1
@@ -47,8 +45,8 @@ func (r *BoardColumnRepo) GetBoardColumnByID(columnID string) (*models.BoardColu
 	return &column, nil
 }
 
-func (r *BoardColumnRepo) GetBoardColumnsByBoardID(boardID string) ([]models.BoardColumn, error) {
-	rows, err := r.db.QueryContext(r.ctx, `
+func (r *BoardColumnRepo) GetBoardColumnsByBoardID(ctx context.Context, boardID string) ([]models.BoardColumn, error) {
+	rows, err := r.db.QueryContext(ctx, `
 		SELECT column_id, board_id, name, position
 		FROM board_columns
 		WHERE board_id = $1
@@ -74,8 +72,8 @@ func (r *BoardColumnRepo) GetBoardColumnsByBoardID(boardID string) ([]models.Boa
 	return columns, nil
 }
 
-func (r *BoardColumnRepo) UpdateBoardColumn(columnID string, boardID string, name string, position int) error {
-	_, err := r.db.ExecContext(r.ctx, `
+func (r *BoardColumnRepo) UpdateBoardColumn(ctx context.Context, columnID string, boardID string, name string, position int) error {
+	_, err := r.db.ExecContext(ctx, `
 		UPDATE board_columns
 		SET board_id = $1, name = $2, position = $3
 		WHERE column_id = $4
@@ -87,8 +85,8 @@ func (r *BoardColumnRepo) UpdateBoardColumn(columnID string, boardID string, nam
 	return nil
 }
 
-func (r *BoardColumnRepo) DeleteBoardColumn(columnID string) error {
-	_, err := r.db.ExecContext(r.ctx, `
+func (r *BoardColumnRepo) DeleteBoardColumn(ctx context.Context, columnID string) error {
+	_, err := r.db.ExecContext(ctx, `
 		DELETE FROM board_columns
 		WHERE column_id = $1
 	`, columnID)

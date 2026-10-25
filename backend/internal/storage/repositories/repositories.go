@@ -1,7 +1,6 @@
 package repositories
 
 import (
-	"context"
 	"kanban-board/internal/storage"
 	attachment_repo "kanban-board/internal/storage/repositories/attachment"
 	board_repo "kanban-board/internal/storage/repositories/board"
@@ -30,18 +29,18 @@ type Repositories struct {
 	AttachmentRepo   *attachment_repo.AttachmentRepo
 }
 
-func Init(storage *storage.Storage, ctx context.Context) *Repositories {
+func Init(storage *storage.Storage) *Repositories {
 	return &Repositories{
 		UsersRepo:        users_repository.Init(storage.Db),
-		TeamRepo:         team_repo.Init(storage.Db, ctx),
-		TeamMemberRepo:   team_member_repo.Init(storage.Db, ctx),
-		ProjectRepo:      project_repo.Init(storage.Db, ctx),
-		BoardRepo:        board_repo.Init(storage.Db, ctx),
-		BoardColumnRepo:  board_column_repo.Init(storage.Db, ctx),
-		TaskRepo:         task_repo.Init(storage.Db, ctx),
+		TeamRepo:         team_repo.Init(storage.Db),
+		TeamMemberRepo:   team_member_repo.Init(storage.Db),
+		ProjectRepo:      project_repo.Init(storage.Db),
+		BoardRepo:        board_repo.Init(storage.Db),
+		BoardColumnRepo:  board_column_repo.Init(storage.Db),
+		TaskRepo:         task_repo.Init(storage.Db),
 		SessionRepo:      session_repo.Init(storage.Db),
-		TaskAssigneeRepo: task_assignee_repo.Init(storage.Db, ctx),
-		CommentRepo:      comment_repo.Init(storage.Db, ctx),
-		AttachmentRepo:   attachment_repo.Init(storage.Db, ctx),
+		TaskAssigneeRepo: task_assignee_repo.Init(storage.Db),
+		CommentRepo:      comment_repo.Init(storage.Db),
+		AttachmentRepo:   attachment_repo.Init(storage.Db),
 	}
 }

@@ -8,20 +8,18 @@ import (
 )
 
 type TeamRepo struct {
-	db  *sql.DB
-	ctx context.Context
+	db *sql.DB
 }
 
-func Init(sql *sql.DB, ctx context.Context) *TeamRepo {
+func Init(sql *sql.DB) *TeamRepo {
 	return &TeamRepo{
-		db:  sql,
-		ctx: ctx,
+		db: sql,
 	}
 }
 
-func (r *TeamRepo) CreateTeam(name string) (string, error) {
+func (r *TeamRepo) CreateTeam(ctx context.Context, name string) (string, error) {
 	var teamID string
-	err := r.db.QueryRowContext(r.ctx, `
+	err := r.db.QueryRowContext(ctx, `
 		INSERT INTO teams (team_id, name)
 		VALUES (gen_random_uuid(), $1)
 		RETURNING team_id
@@ -33,9 +31,9 @@ func (r *TeamRepo) CreateTeam(name string) (string, error) {
 	return teamID, nil
 }
 
-func (r *TeamRepo) GetTeamByID(teamID string) (*models.Team, error) {
+func (r *TeamRepo) GetTeamByID(ctx context.Context, teamID string) (*models.Team, error) {
 	var team models.Team
-	err := r.db.QueryRowContext(r.ctx, `
+	err := r.db.QueryRowContext(ctx, `
 		SELECT team_id, name, created_at
 		FROM teams
 		WHERE team_id = $1
@@ -46,9 +44,9 @@ func (r *TeamRepo) GetTeamByID(teamID string) (*models.Team, error) {
 	return &team, nil
 }
 
-// func (r *TeamRepo) GetTeamByName(name string) (*models.Team, error) {
+// func (r *TeamRepo) GetTeamByName(ctx context.Context, name string) (*models.Team, error) {
 // 	var team models.Team
-// 	err := r.db.QueryRowContext(r.ctx, `
+// 	err := r.db.QueryRowContext(ctx, `
 // 		SELECT team_id, name, created_at
 // 		FROM teams
 // 		WHERE name = $1
@@ -59,8 +57,8 @@ func (r *TeamRepo) GetTeamByID(teamID string) (*models.Team, error) {
 // 	return &team, nil
 // }
 
-func (r *TeamRepo) GetAllTeams() ([]models.Team, error) {
-	rows, err := r.db.QueryContext(r.ctx, `
+func (r *TeamRepo) GetAllTeams(ctx context.Context) ([]models.Team, error) {
+	rows, err := r.db.QueryContext(ctx, `
 		SELECT team_id, name, created_at
 		FROM teams
 	`)
@@ -86,8 +84,8 @@ func (r *TeamRepo) GetAllTeams() ([]models.Team, error) {
 	return teams, nil
 }
 
-func (r *TeamRepo) UpdateTeam(teamID string, name string) error {
-	_, err := r.db.ExecContext(r.ctx, `
+func (r *TeamRepo) UpdateTeam(ctx context.Context, teamID string, name string) error {
+	_, err := r.db.ExecContext(ctx, `
 		UPDATE teams
 		SET name = $1
 		WHERE team_id = $2
@@ -99,8 +97,8 @@ func (r *TeamRepo) UpdateTeam(teamID string, name string) error {
 	return nil
 }
 
-func (r *TeamRepo) DeleteTeam(teamID string) error {
-	_, err := r.db.ExecContext(r.ctx, `
+func (r *TeamRepo) DeleteTeam(ctx context.Context, teamID string) error {
+	_, err := r.db.ExecContext(ctx, `
 		DELETE FROM teams
 		WHERE team_id = $1
 	`, teamID)

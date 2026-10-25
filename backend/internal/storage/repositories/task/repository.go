@@ -9,20 +9,18 @@ import (
 )
 
 type TaskRepo struct {
-	db  *sql.DB
-	ctx context.Context
+	db *sql.DB
 }
 
-func Init(db *sql.DB, ctx context.Context) *TaskRepo {
+func Init(db *sql.DB) *TaskRepo {
 	return &TaskRepo{
-		db:  db,
-		ctx: ctx,
+		db: db,
 	}
 }
 
-func (r *TaskRepo) CreateTask(columnID string, createdBy string, title string, description string, priority string, position int, dueDate *time.Time) (string, error) {
+func (r *TaskRepo) CreateTask(ctx context.Context, columnID string, createdBy string, title string, description string, priority string, position int, dueDate *time.Time) (string, error) {
 	var taskID string
-	err := r.db.QueryRowContext(r.ctx, `
+	err := r.db.QueryRowContext(ctx, `
 		INSERT INTO tasks (
 			task_id, column_id, created_by_user_id, title, description,
 			priority, position, due_date
@@ -37,9 +35,9 @@ func (r *TaskRepo) CreateTask(columnID string, createdBy string, title string, d
 	return taskID, nil
 }
 
-func (r *TaskRepo) GetTaskByID(taskID string) (*models.Task, error) {
+func (r *TaskRepo) GetTaskByID(ctx context.Context, taskID string) (*models.Task, error) {
 	var task models.Task
-	err := r.db.QueryRowContext(r.ctx, `
+	err := r.db.QueryRowContext(ctx, `
 		SELECT task_id, column_id, created_by_user_id, title, COALESCE(description, ''),
 			priority, position, due_date, created_at, updated_at
 		FROM tasks
@@ -63,8 +61,8 @@ func (r *TaskRepo) GetTaskByID(taskID string) (*models.Task, error) {
 	return &task, nil
 }
 
-func (r *TaskRepo) GetTasksByColumnID(columnID string) ([]models.Task, error) {
-	rows, err := r.db.QueryContext(r.ctx, `
+func (r *TaskRepo) GetTasksByColumnID(ctx context.Context, columnID string) ([]models.Task, error) {
+	rows, err := r.db.QueryContext(ctx, `
 		SELECT task_id, column_id, created_by_user_id, title, COALESCE(description, ''),
 			priority, position, due_date, created_at, updated_at
 		FROM tasks
@@ -102,8 +100,8 @@ func (r *TaskRepo) GetTasksByColumnID(columnID string) ([]models.Task, error) {
 	return tasks, nil
 }
 
-func (r *TaskRepo) UpdateTask(taskID string, columnID string, title string, description string, priority string, position int, dueDate *time.Time) error {
-	_, err := r.db.ExecContext(r.ctx, `
+func (r *TaskRepo) UpdateTask(ctx context.Context, taskID string, columnID string, title string, description string, priority string, position int, dueDate *time.Time) error {
+	_, err := r.db.ExecContext(ctx, `
 		UPDATE tasks
 		SET column_id = $1,
 			title = $2,
@@ -121,8 +119,8 @@ func (r *TaskRepo) UpdateTask(taskID string, columnID string, title string, desc
 	return nil
 }
 
-func (r *TaskRepo) DeleteTask(taskID string) error {
-	_, err := r.db.ExecContext(r.ctx, `
+func (r *TaskRepo) DeleteTask(ctx context.Context, taskID string) error {
+	_, err := r.db.ExecContext(ctx, `
 		DELETE FROM tasks
 		WHERE task_id = $1
 	`, taskID)

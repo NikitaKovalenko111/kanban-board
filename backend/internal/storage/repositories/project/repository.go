@@ -8,20 +8,18 @@ import (
 )
 
 type ProjectRepo struct {
-	db  *sql.DB
-	ctx context.Context
+	db *sql.DB
 }
 
-func Init(sql *sql.DB, ctx context.Context) *ProjectRepo {
+func Init(sql *sql.DB) *ProjectRepo {
 	return &ProjectRepo{
-		db:  sql,
-		ctx: ctx,
+		db: sql,
 	}
 }
 
-func (r *ProjectRepo) CreateProject(teamID string, name string, description string) (string, error) {
+func (r *ProjectRepo) CreateProject(ctx context.Context, teamID string, name string, description string) (string, error) {
 	var projectID string
-	err := r.db.QueryRowContext(r.ctx, `
+	err := r.db.QueryRowContext(ctx, `
 		INSERT INTO projects (project_id, team_id, name, description)
 		VALUES (gen_random_uuid(), $1, $2, $3)
 		RETURNING project_id
@@ -34,9 +32,9 @@ func (r *ProjectRepo) CreateProject(teamID string, name string, description stri
 	return projectID, nil
 }
 
-func (r *ProjectRepo) GetProjectByID(projectID string) (*models.Project, error) {
+func (r *ProjectRepo) GetProjectByID(ctx context.Context, projectID string) (*models.Project, error) {
 	var project models.Project
-	err := r.db.QueryRowContext(r.ctx, `
+	err := r.db.QueryRowContext(ctx, `
 		SELECT project_id, team_id, name, COALESCE(description, ''), created_at
 		FROM projects
 		WHERE project_id = $1
@@ -49,9 +47,9 @@ func (r *ProjectRepo) GetProjectByID(projectID string) (*models.Project, error) 
 	return &project, nil
 }
 
-func (r *ProjectRepo) GetProjectByName(name string) (*models.Project, error) {
+func (r *ProjectRepo) GetProjectByName(ctx context.Context, name string) (*models.Project, error) {
 	var project models.Project
-	err := r.db.QueryRowContext(r.ctx, `
+	err := r.db.QueryRowContext(ctx, `
 		SELECT project_id, team_id, name, COALESCE(description, ''), created_at
 		FROM projects
 		WHERE name = $1
@@ -64,8 +62,8 @@ func (r *ProjectRepo) GetProjectByName(name string) (*models.Project, error) {
 	return &project, nil
 }
 
-func (r *ProjectRepo) GetProjectsByTeamID(teamID string) ([]models.Project, error) {
-	rows, err := r.db.QueryContext(r.ctx, `
+func (r *ProjectRepo) GetProjectsByTeamID(ctx context.Context, teamID string) ([]models.Project, error) {
+	rows, err := r.db.QueryContext(ctx, `
 		SELECT project_id, team_id, name, COALESCE(description, ''), created_at
 		FROM projects
 		WHERE team_id = $1
@@ -97,8 +95,8 @@ func (r *ProjectRepo) GetProjectsByTeamID(teamID string) ([]models.Project, erro
 	return projects, nil
 }
 
-func (r *ProjectRepo) UpdateProjectByID(projectID string, teamID string, name string, description string) error {
-	_, err := r.db.ExecContext(r.ctx, `
+func (r *ProjectRepo) UpdateProjectByID(ctx context.Context, projectID string, teamID string, name string, description string) error {
+	_, err := r.db.ExecContext(ctx, `
 		UPDATE projects
 		SET team_id = $1, name = $2, description = $3
 		WHERE project_id = $4
@@ -111,8 +109,8 @@ func (r *ProjectRepo) UpdateProjectByID(projectID string, teamID string, name st
 	return nil
 }
 
-func (r *ProjectRepo) DeleteProjectByID(projectID string) error {
-	_, err := r.db.ExecContext(r.ctx, `
+func (r *ProjectRepo) DeleteProjectByID(ctx context.Context, projectID string) error {
+	_, err := r.db.ExecContext(ctx, `
 		DELETE FROM projects
 		WHERE project_id = $1
 	`, projectID)

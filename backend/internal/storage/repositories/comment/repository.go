@@ -8,20 +8,18 @@ import (
 )
 
 type CommentRepo struct {
-	db  *sql.DB
-	ctx context.Context
+	db *sql.DB
 }
 
-func Init(db *sql.DB, ctx context.Context) *CommentRepo {
+func Init(db *sql.DB) *CommentRepo {
 	return &CommentRepo{
-		db:  db,
-		ctx: ctx,
+		db: db,
 	}
 }
 
-func (r *CommentRepo) CreateComment(taskID string, authorID string, content string) (string, error) {
+func (r *CommentRepo) CreateComment(ctx context.Context, taskID string, authorID string, content string) (string, error) {
 	var commentID string
-	err := r.db.QueryRowContext(r.ctx, `
+	err := r.db.QueryRowContext(ctx, `
 		INSERT INTO comments (comment_id, task_id, author_user_id, content)
 		VALUES (gen_random_uuid(), $1, $2, $3)
 		RETURNING comment_id
@@ -33,9 +31,9 @@ func (r *CommentRepo) CreateComment(taskID string, authorID string, content stri
 	return commentID, nil
 }
 
-func (r *CommentRepo) GetCommentByID(commentID string) (*models.Comment, error) {
+func (r *CommentRepo) GetCommentByID(ctx context.Context, commentID string) (*models.Comment, error) {
 	var comment models.Comment
-	err := r.db.QueryRowContext(r.ctx, `
+	err := r.db.QueryRowContext(ctx, `
 		SELECT comment_id, task_id, author_user_id, content, created_at
 		FROM comments
 		WHERE comment_id = $1
@@ -53,8 +51,8 @@ func (r *CommentRepo) GetCommentByID(commentID string) (*models.Comment, error) 
 	return &comment, nil
 }
 
-func (r *CommentRepo) GetCommentsByTaskID(taskID string) ([]models.Comment, error) {
-	rows, err := r.db.QueryContext(r.ctx, `
+func (r *CommentRepo) GetCommentsByTaskID(ctx context.Context, taskID string) ([]models.Comment, error) {
+	rows, err := r.db.QueryContext(ctx, `
 		SELECT comment_id, task_id, author_user_id, content, created_at
 		FROM comments
 		WHERE task_id = $1
@@ -86,8 +84,8 @@ func (r *CommentRepo) GetCommentsByTaskID(taskID string) ([]models.Comment, erro
 	return comments, nil
 }
 
-func (r *CommentRepo) UpdateComment(commentID string, content string) error {
-	_, err := r.db.ExecContext(r.ctx, `
+func (r *CommentRepo) UpdateComment(ctx context.Context, commentID string, content string) error {
+	_, err := r.db.ExecContext(ctx, `
 		UPDATE comments
 		SET content = $1
 		WHERE comment_id = $2
@@ -99,8 +97,8 @@ func (r *CommentRepo) UpdateComment(commentID string, content string) error {
 	return nil
 }
 
-func (r *CommentRepo) DeleteComment(commentID string) error {
-	_, err := r.db.ExecContext(r.ctx, `
+func (r *CommentRepo) DeleteComment(ctx context.Context, commentID string) error {
+	_, err := r.db.ExecContext(ctx, `
 		DELETE FROM comments
 		WHERE comment_id = $1
 	`, commentID)

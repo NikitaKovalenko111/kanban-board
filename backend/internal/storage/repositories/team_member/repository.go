@@ -8,19 +8,17 @@ import (
 )
 
 type TeamMemberRepo struct {
-	db  *sql.DB
-	ctx context.Context
+	db *sql.DB
 }
 
-func Init(db *sql.DB, ctx context.Context) *TeamMemberRepo {
+func Init(db *sql.DB) *TeamMemberRepo {
 	return &TeamMemberRepo{
-		db:  db,
-		ctx: ctx,
+		db: db,
 	}
 }
 
-func (r *TeamMemberRepo) AddMemberToTeam(teamID string, userID string, role string) error {
-	_, err := r.db.ExecContext(r.ctx, `
+func (r *TeamMemberRepo) AddMemberToTeam(ctx context.Context, teamID string, userID string, role string) error {
+	_, err := r.db.ExecContext(ctx, `
 		INSERT INTO team_members (team_id, user_id, role)
 		VALUES ($1, $2, $3)
 	`, teamID, userID, role)
@@ -31,8 +29,8 @@ func (r *TeamMemberRepo) AddMemberToTeam(teamID string, userID string, role stri
 	return nil
 }
 
-func (r *TeamMemberRepo) GetTeamMembersByTeamID(teamID string) ([]models.TeamMember, error) {
-	rows, err := r.db.QueryContext(r.ctx, `
+func (r *TeamMemberRepo) GetTeamMembersByTeamID(ctx context.Context, teamID string) ([]models.TeamMember, error) {
+	rows, err := r.db.QueryContext(ctx, `
 		SELECT team_id, user_id, role, joined_at
 		FROM team_members
 		WHERE team_id = $1
@@ -58,8 +56,8 @@ func (r *TeamMemberRepo) GetTeamMembersByTeamID(teamID string) ([]models.TeamMem
 	return members, nil
 }
 
-func (r *TeamMemberRepo) UpdateMemberRole(teamID string, userID string, newRole string) error {
-	_, err := r.db.ExecContext(r.ctx, `
+func (r *TeamMemberRepo) UpdateMemberRole(ctx context.Context, teamID string, userID string, newRole string) error {
+	_, err := r.db.ExecContext(ctx, `
 		UPDATE team_members
 		SET role = $1
 		WHERE team_id = $2 AND user_id = $3
@@ -71,8 +69,8 @@ func (r *TeamMemberRepo) UpdateMemberRole(teamID string, userID string, newRole 
 	return nil
 }
 
-func (r *TeamMemberRepo) RemoveMemberFromTeam(teamID string, userID string) error {
-	_, err := r.db.ExecContext(r.ctx, `
+func (r *TeamMemberRepo) RemoveMemberFromTeam(ctx context.Context, teamID string, userID string) error {
+	_, err := r.db.ExecContext(ctx, `
 		DELETE FROM team_members
 		WHERE team_id = $1 AND user_id = $2
 	`, teamID, userID)

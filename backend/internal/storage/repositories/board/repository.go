@@ -9,19 +9,17 @@ import (
 
 type BoardRepo struct {
 	sql *sql.DB
-	ctx context.Context
 }
 
-func Init(sql *sql.DB, ctx context.Context) *BoardRepo {
+func Init(sql *sql.DB) *BoardRepo {
 	return &BoardRepo{
 		sql: sql,
-		ctx: ctx,
 	}
 }
 
-func (r *BoardRepo) CreateBoard(projectID string, name string) (string, error) {
+func (r *BoardRepo) CreateBoard(ctx context.Context, projectID string, name string) (string, error) {
 	var boardID string
-	err := r.sql.QueryRowContext(r.ctx, `
+	err := r.sql.QueryRowContext(ctx, `
 		INSERT INTO boards (board_id, project_id, name)
 		VALUES (gen_random_uuid(), $1, $2)
 		RETURNING board_id
@@ -34,9 +32,9 @@ func (r *BoardRepo) CreateBoard(projectID string, name string) (string, error) {
 	return boardID, nil
 }
 
-func (r *BoardRepo) GetBoardByID(boardID string) (*models.Board, error) {
+func (r *BoardRepo) GetBoardByID(ctx context.Context, boardID string) (*models.Board, error) {
 	var board models.Board
-	err := r.sql.QueryRowContext(r.ctx, `
+	err := r.sql.QueryRowContext(ctx, `
 		SELECT board_id, project_id, name
 		FROM boards
 		WHERE board_id = $1
@@ -49,9 +47,9 @@ func (r *BoardRepo) GetBoardByID(boardID string) (*models.Board, error) {
 	return &board, nil
 }
 
-func (r *BoardRepo) GetBoardByName(name string) (*models.Board, error) {
+func (r *BoardRepo) GetBoardByName(ctx context.Context, name string) (*models.Board, error) {
 	var board models.Board
-	err := r.sql.QueryRowContext(r.ctx, `
+	err := r.sql.QueryRowContext(ctx, `
 		SELECT board_id, project_id, name
 		FROM boards
 		WHERE name = $1
@@ -63,8 +61,8 @@ func (r *BoardRepo) GetBoardByName(name string) (*models.Board, error) {
 	return &board, nil
 }
 
-func (r *BoardRepo) GetBoardsByProjectID(projectID string) ([]models.Board, error) {
-	rows, err := r.sql.QueryContext(r.ctx, `
+func (r *BoardRepo) GetBoardsByProjectID(ctx context.Context, projectID string) ([]models.Board, error) {
+	rows, err := r.sql.QueryContext(ctx, `
 		SELECT board_id, project_id, name
 		FROM boards
 		WHERE project_id = $1
@@ -90,8 +88,8 @@ func (r *BoardRepo) GetBoardsByProjectID(projectID string) ([]models.Board, erro
 	return boards, nil
 }
 
-func (r *BoardRepo) UpdateBoard(boardID string, projectID string, name string) error {
-	_, err := r.sql.ExecContext(r.ctx, `
+func (r *BoardRepo) UpdateBoard(ctx context.Context, boardID string, projectID string, name string) error {
+	_, err := r.sql.ExecContext(ctx, `
 		UPDATE boards
 		SET project_id = $1, name = $2
 		WHERE board_id = $3
@@ -103,8 +101,8 @@ func (r *BoardRepo) UpdateBoard(boardID string, projectID string, name string) e
 	return nil
 }
 
-func (r *BoardRepo) DeleteBoard(boardID string) error {
-	_, err := r.sql.ExecContext(r.ctx, `
+func (r *BoardRepo) DeleteBoard(ctx context.Context, boardID string) error {
+	_, err := r.sql.ExecContext(ctx, `
 		DELETE FROM boards
 		WHERE board_id = $1
 	`, boardID)
