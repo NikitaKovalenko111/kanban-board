@@ -21,29 +21,29 @@ func Init(db *sql.DB, ctx context.Context) *SessionRepo {
 }
 
 func (r *SessionRepo) CreateSession(userID string, refreshTokenHash string, expiresAt time.Time) (string, error) {
-	var id string
+	var sessionID string
 	err := r.db.QueryRowContext(r.ctx, `
-		INSERT INTO sessions (id, user_id, refresh_token_hash, expires_at)
+		INSERT INTO sessions (session_id, user_id, refresh_token_hash, expires_at)
 		VALUES (gen_random_uuid(), $1, $2, $3)
-		RETURNING id
-	`, userID, refreshTokenHash, expiresAt).Scan(&id)
+		RETURNING session_id
+	`, userID, refreshTokenHash, expiresAt).Scan(&sessionID)
 	if err != nil {
 		return "", fmt.Errorf("failed to create session: %v", err)
 	}
 
-	return id, nil
+	return sessionID, nil
 }
 
 func (r *SessionRepo) GetActiveSessionByTokenHash(refreshTokenHash string) (*models.Session, error) {
 	var session models.Session
 	err := r.db.QueryRowContext(r.ctx, `
-		SELECT id, user_id, refresh_token_hash, expires_at, created_at, revoked_at
+		SELECT session_id, user_id, refresh_token_hash, expires_at, created_at, revoked_at
 		FROM sessions
 		WHERE refresh_token_hash = $1
 			AND revoked_at IS NULL
 			AND expires_at > CURRENT_TIMESTAMP
 	`, refreshTokenHash).Scan(
-		&session.ID,
+		&session.SessionID,
 		&session.UserID,
 		&session.RefreshTokenHash,
 		&session.ExpiresAt,
@@ -59,7 +59,7 @@ func (r *SessionRepo) GetActiveSessionByTokenHash(refreshTokenHash string) (*mod
 
 func (r *SessionRepo) GetActiveSessionsByUserID(userID string) ([]models.Session, error) {
 	rows, err := r.db.QueryContext(r.ctx, `
-		SELECT id, user_id, refresh_token_hash, expires_at, created_at, revoked_at
+		SELECT session_id, user_id, refresh_token_hash, expires_at, created_at, revoked_at
 		FROM sessions
 		WHERE user_id = $1
 			AND revoked_at IS NULL
@@ -75,7 +75,7 @@ func (r *SessionRepo) GetActiveSessionsByUserID(userID string) ([]models.Session
 	for rows.Next() {
 		var session models.Session
 		if err := rows.Scan(
-			&session.ID,
+			&session.SessionID,
 			&session.UserID,
 			&session.RefreshTokenHash,
 			&session.ExpiresAt,

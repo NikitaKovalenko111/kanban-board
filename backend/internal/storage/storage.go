@@ -56,17 +56,17 @@ func (s *Storage) CreateTables() error {
 		name  string
 		query string
 	}{
-		{name: "user", query: models.USER_TABLE},
-		{name: "sessions", query: models.SESSION_TABLE},
-		{name: "team", query: models.TEAM_TABLE},
-		{name: "team_member", query: models.TEAM_MEMBER_TABLE},
-		{name: "project", query: models.PROJECT_TABLE},
-		{name: "board", query: models.BOARD_TABLE},
-		{name: "board_column", query: models.BOARD_COLUMN_TABLE},
-		{name: "task", query: models.TASK_TABLE},
-		{name: "task_assignee", query: models.TASK_ASSIGNEE_TABLE},
-		{name: "comment", query: models.COMMENT_TABLE},
-		{name: "attachment", query: models.ATTACHMENT_TABLE},
+		{name: "users", query: models.USERS_TABLE},
+		{name: "sessions", query: models.SESSIONS_TABLE},
+		{name: "teams", query: models.TEAMS_TABLE},
+		{name: "team_members", query: models.TEAM_MEMBERS_TABLE},
+		{name: "projects", query: models.PROJECTS_TABLE},
+		{name: "boards", query: models.BOARDS_TABLE},
+		{name: "board_columns", query: models.BOARD_COLUMNS_TABLE},
+		{name: "tasks", query: models.TASKS_TABLE},
+		{name: "task_assignees", query: models.TASK_ASSIGNEES_TABLE},
+		{name: "comments", query: models.COMMENTS_TABLE},
+		{name: "attachments", query: models.ATTACHMENTS_TABLE},
 	}
 
 	tx, err := s.Db.Begin()
@@ -93,23 +93,23 @@ func (s *Storage) CreateIndexes() error {
 		name  string
 		query string
 	}{
-		{name: "user_username_idx", query: models.USER_USERNAME_INDEX},
-		{name: "user_email_idx", query: models.USER_EMAIL_INDEX},
-		{name: "session_refresh_token_hash_idx", query: models.SESSION_REFRESH_TOKEN_HASH_INDEX},
-		{name: "session_user_id_idx", query: models.SESSION_USER_ID_INDEX},
-		{name: "session_expires_at_idx", query: models.SESSION_EXPIRES_AT_INDEX},
-		{name: "team_member_user_id_idx", query: models.TEAM_MEMBER_USER_ID_INDEX},
-		{name: "project_team_id_idx", query: models.PROJECT_TEAM_ID_INDEX},
-		{name: "board_project_id_idx", query: models.BOARD_PROJECT_ID_INDEX},
-		{name: "board_column_board_position_idx", query: models.BOARD_COLUMN_BOARD_POSITION_INDEX},
-		{name: "task_column_position_idx", query: models.TASK_COLUMN_POSITION_INDEX},
-		{name: "task_created_by_idx", query: models.TASK_CREATED_BY_INDEX},
-		{name: "task_assignee_user_id_idx", query: models.TASK_ASSIGNEE_USER_ID_INDEX},
-		{name: "comment_task_created_at_idx", query: models.COMMENT_TASK_CREATED_AT_INDEX},
-		{name: "comment_author_id_idx", query: models.COMMENT_AUTHOR_ID_INDEX},
-		{name: "attachment_task_created_at_idx", query: models.ATTACHMENT_TASK_CREATED_AT_INDEX},
-		{name: "attachment_uploaded_by_idx", query: models.ATTACHMENT_UPLOADED_BY_INDEX},
-		{name: "attachment_storage_key_idx", query: models.ATTACHMENT_STORAGE_KEY_INDEX},
+		{name: "users_username_idx", query: models.USERS_USERNAME_INDEX},
+		{name: "users_email_idx", query: models.USERS_EMAIL_INDEX},
+		{name: "sessions_refresh_token_hash_idx", query: models.SESSIONS_REFRESH_TOKEN_HASH_INDEX},
+		{name: "sessions_user_id_idx", query: models.SESSIONS_USER_ID_INDEX},
+		{name: "sessions_expires_at_idx", query: models.SESSIONS_EXPIRES_AT_INDEX},
+		{name: "team_members_user_id_idx", query: models.TEAM_MEMBERS_USER_ID_INDEX},
+		{name: "projects_team_id_idx", query: models.PROJECTS_TEAM_ID_INDEX},
+		{name: "boards_project_id_idx", query: models.BOARDS_PROJECT_ID_INDEX},
+		{name: "board_columns_board_position_idx", query: models.BOARD_COLUMNS_BOARD_POSITION_INDEX},
+		{name: "tasks_column_position_idx", query: models.TASKS_COLUMN_POSITION_INDEX},
+		{name: "tasks_created_by_user_id_idx", query: models.TASKS_CREATED_BY_USER_ID_INDEX},
+		{name: "task_assignees_user_id_idx", query: models.TASK_ASSIGNEES_USER_ID_INDEX},
+		{name: "comments_task_created_at_idx", query: models.COMMENTS_TASK_CREATED_AT_INDEX},
+		{name: "comments_author_user_id_idx", query: models.COMMENTS_AUTHOR_USER_ID_INDEX},
+		{name: "attachments_task_created_at_idx", query: models.ATTACHMENTS_TASK_CREATED_AT_INDEX},
+		{name: "attachments_uploaded_by_user_id_idx", query: models.ATTACHMENTS_UPLOADED_BY_USER_ID_INDEX},
+		{name: "attachments_storage_key_idx", query: models.ATTACHMENTS_STORAGE_KEY_INDEX},
 	}
 
 	tx, err := s.Db.Begin()

@@ -19,34 +19,34 @@ func Init(db *sql.DB, ctx context.Context) *AttachmentRepo {
 	}
 }
 
-func (r *AttachmentRepo) CreateAttachment(taskID string, uploadedBy string, fileName string, storageKey string, mimeType string, fileSize int64) (string, error) {
-	var id string
+func (r *AttachmentRepo) CreateAttachment(taskID string, uploadedByUserID string, fileName string, storageKey string, mimeType string, fileSize int64) (string, error) {
+	var attachmentID string
 	err := r.db.QueryRowContext(r.ctx, `
-		INSERT INTO attachment (
-			id, task_id, uploaded_by, file_name,
+		INSERT INTO attachments (
+			attachment_id, task_id, uploaded_by_user_id, file_name,
 			storage_key, mime_type, file_size
 		)
 		VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6)
-		RETURNING id
-	`, taskID, uploadedBy, fileName, storageKey, mimeType, fileSize).Scan(&id)
+		RETURNING attachment_id
+	`, taskID, uploadedByUserID, fileName, storageKey, mimeType, fileSize).Scan(&attachmentID)
 	if err != nil {
 		return "", fmt.Errorf("failed to create attachment: %v", err)
 	}
 
-	return id, nil
+	return attachmentID, nil
 }
 
-func (r *AttachmentRepo) GetAttachmentByID(id string) (*models.Attachment, error) {
+func (r *AttachmentRepo) GetAttachmentByID(attachmentID string) (*models.Attachment, error) {
 	var attachment models.Attachment
 	err := r.db.QueryRowContext(r.ctx, `
-		SELECT id, task_id, uploaded_by, file_name,
+		SELECT attachment_id, task_id, uploaded_by_user_id, file_name,
 			storage_key, mime_type, file_size, created_at
-		FROM attachment
-		WHERE id = $1
-	`, id).Scan(
-		&attachment.ID,
+		FROM attachments
+		WHERE attachment_id = $1
+	`, attachmentID).Scan(
+		&attachment.AttachmentID,
 		&attachment.TaskID,
-		&attachment.UploadedBy,
+		&attachment.UploadedByUserID,
 		&attachment.FileName,
 		&attachment.StorageKey,
 		&attachment.MimeType,
@@ -62,9 +62,9 @@ func (r *AttachmentRepo) GetAttachmentByID(id string) (*models.Attachment, error
 
 func (r *AttachmentRepo) GetAttachmentsByTaskID(taskID string) ([]models.Attachment, error) {
 	rows, err := r.db.QueryContext(r.ctx, `
-		SELECT id, task_id, uploaded_by, file_name,
+		SELECT attachment_id, task_id, uploaded_by_user_id, file_name,
 			storage_key, mime_type, file_size, created_at
-		FROM attachment
+		FROM attachments
 		WHERE task_id = $1
 		ORDER BY created_at
 	`, taskID)
@@ -77,9 +77,9 @@ func (r *AttachmentRepo) GetAttachmentsByTaskID(taskID string) ([]models.Attachm
 	for rows.Next() {
 		var attachment models.Attachment
 		if err := rows.Scan(
-			&attachment.ID,
+			&attachment.AttachmentID,
 			&attachment.TaskID,
-			&attachment.UploadedBy,
+			&attachment.UploadedByUserID,
 			&attachment.FileName,
 			&attachment.StorageKey,
 			&attachment.MimeType,
@@ -97,12 +97,12 @@ func (r *AttachmentRepo) GetAttachmentsByTaskID(taskID string) ([]models.Attachm
 	return attachments, nil
 }
 
-func (r *AttachmentRepo) UpdateAttachment(id string, fileName string, storageKey string, mimeType string, fileSize int64) error {
+func (r *AttachmentRepo) UpdateAttachment(attachmentID string, fileName string, storageKey string, mimeType string, fileSize int64) error {
 	_, err := r.db.ExecContext(r.ctx, `
-		UPDATE attachment
+		UPDATE attachments
 		SET file_name = $1, storage_key = $2, mime_type = $3, file_size = $4
-		WHERE id = $5
-	`, fileName, storageKey, mimeType, fileSize, id)
+		WHERE attachment_id = $5
+	`, fileName, storageKey, mimeType, fileSize, attachmentID)
 	if err != nil {
 		return fmt.Errorf("failed to update attachment: %v", err)
 	}
@@ -110,11 +110,11 @@ func (r *AttachmentRepo) UpdateAttachment(id string, fileName string, storageKey
 	return nil
 }
 
-func (r *AttachmentRepo) DeleteAttachment(id string) error {
+func (r *AttachmentRepo) DeleteAttachment(attachmentID string) error {
 	_, err := r.db.ExecContext(r.ctx, `
-		DELETE FROM attachment
-		WHERE id = $1
-	`, id)
+		DELETE FROM attachments
+		WHERE attachment_id = $1
+	`, attachmentID)
 	if err != nil {
 		return fmt.Errorf("failed to delete attachment: %v", err)
 	}

@@ -12,35 +12,35 @@ type UsersRepo struct {
 	ctx context.Context
 }
 
-func Init(sql *sql.DB, ctx context.Context) *UsersRepo {
+func Init(db *sql.DB, ctx context.Context) *UsersRepo {
 	return &UsersRepo{
-		db:  sql,
+		db:  db,
 		ctx: ctx,
 	}
 }
 
-func (r *UsersRepo) CreateUser(userName string, email string, group string, imageUrl string, passwordHash string) (string, error) {
-	var id string
+func (r *UsersRepo) CreateUser(username string, email string, groupName string, imageURL string, passwordHash string) (string, error) {
+	var userID string
 	err := r.db.QueryRowContext(r.ctx, `
-		INSERT INTO "user" (id, username, email, "group", image_url, password_hash)
+		INSERT INTO users (user_id, username, email, group_name, image_url, password_hash)
 		VALUES (gen_random_uuid(), $1, $2, $3, $4, $5)
-		RETURNING id
-	 `, userName, email, group, imageUrl, passwordHash).Scan(&id)
+		RETURNING user_id
+	 `, username, email, groupName, imageURL, passwordHash).Scan(&userID)
 
 	if err != nil {
 		return "", fmt.Errorf("failed to create user: %v", err)
 	}
 
-	return id, nil
+	return userID, nil
 }
 
-func (r *UsersRepo) GetUserByID(id string) (*models.User, error) {
+func (r *UsersRepo) GetUserByID(userID string) (*models.User, error) {
 	var user models.User
 	err := r.db.QueryRowContext(r.ctx, `
-		SELECT id, username, email, "group", COALESCE(image_url, ''), created_at
-		FROM "user"
-		WHERE id = $1
-	 `, id).Scan(&user.ID, &user.UserName, &user.Email, &user.Group, &user.ImageURL, &user.CreatedAt)
+		SELECT user_id, username, email, group_name, COALESCE(image_url, ''), created_at
+		FROM users
+		WHERE user_id = $1
+	 `, userID).Scan(&user.UserID, &user.Username, &user.Email, &user.GroupName, &user.ImageURL, &user.CreatedAt)
 
 	if err != nil {
 		return nil, fmt.Errorf("failed to select user by id: %v", err)
@@ -52,10 +52,10 @@ func (r *UsersRepo) GetUserByID(id string) (*models.User, error) {
 func (r *UsersRepo) GetUserByEmail(email string) (*models.User, error) {
 	var user models.User
 	err := r.db.QueryRowContext(r.ctx, `
-		SELECT id, username, email, "group", COALESCE(image_url, ''), created_at
-		FROM "user"
+		SELECT user_id, username, email, group_name, COALESCE(image_url, ''), created_at
+		FROM users
 		WHERE email = $1
-	 `, email).Scan(&user.ID, &user.UserName, &user.Email, &user.Group, &user.ImageURL, &user.CreatedAt)
+	 `, email).Scan(&user.UserID, &user.Username, &user.Email, &user.GroupName, &user.ImageURL, &user.CreatedAt)
 
 	if err != nil {
 		return nil, fmt.Errorf("failed to select user by email: %v", err)
@@ -64,54 +64,54 @@ func (r *UsersRepo) GetUserByEmail(email string) (*models.User, error) {
 	return &user, nil
 }
 
-func (r *UsersRepo) GetUserByUserName(userName string) (*models.User, error) {
+func (r *UsersRepo) GetUserByUsername(username string) (*models.User, error) {
 	var user models.User
 	err := r.db.QueryRowContext(r.ctx, `
-		SELECT id, username, email, "group", COALESCE(image_url, ''), created_at
-		FROM "user"
+		SELECT user_id, username, email, group_name, COALESCE(image_url, ''), created_at
+		FROM users
 		WHERE username = $1
-	 `, userName).Scan(&user.ID, &user.UserName, &user.Email, &user.Group, &user.ImageURL, &user.CreatedAt)
+	 `, username).Scan(&user.UserID, &user.Username, &user.Email, &user.GroupName, &user.ImageURL, &user.CreatedAt)
 
 	if err != nil {
-		return nil, fmt.Errorf("failed to select user by userName: %v", err)
+		return nil, fmt.Errorf("failed to select user by username: %v", err)
 	}
 
 	return &user, nil
 }
 
-func (r *UsersRepo) GetUsersByGroup(group string) ([]models.User, error) {
+func (r *UsersRepo) GetUsersByGroupName(groupName string) ([]models.User, error) {
 	var users []models.User
 	rows, err := r.db.QueryContext(r.ctx, `
-		SELECT id, username, email, "group", COALESCE(image_url, ''), created_at
-		FROM "user"
-		WHERE "group" = $1
-	 `, group)
+		SELECT user_id, username, email, group_name, COALESCE(image_url, ''), created_at
+		FROM users
+		WHERE group_name = $1
+	 `, groupName)
 
 	if err != nil {
-		return nil, fmt.Errorf("failed to select users by group: %v", err)
+		return nil, fmt.Errorf("failed to select users by group name: %v", err)
 	}
 	defer rows.Close()
 
 	for rows.Next() {
 		var user models.User
-		if err := rows.Scan(&user.ID, &user.UserName, &user.Email, &user.Group, &user.ImageURL, &user.CreatedAt); err != nil {
-			return nil, fmt.Errorf("failed to scan user(user by group): %v", err)
+		if err := rows.Scan(&user.UserID, &user.Username, &user.Email, &user.GroupName, &user.ImageURL, &user.CreatedAt); err != nil {
+			return nil, fmt.Errorf("failed to scan user by group name: %v", err)
 		}
 		users = append(users, user)
 	}
 	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("failed to iterate users by group: %v", err)
+		return nil, fmt.Errorf("failed to iterate users by group name: %v", err)
 	}
 
 	return users, nil
 }
 
-func (r *UsersRepo) UpdateUser(userName string, group string, imageUrl string, id string) error {
+func (r *UsersRepo) UpdateUser(userID string, username string, groupName string, imageURL string) error {
 	_, err := r.db.ExecContext(r.ctx, `
-		UPDATE "user"
-		SET username = $1, "group" = $2, image_url = $3
-		WHERE id = $4
-	 `, userName, group, imageUrl, id)
+		UPDATE users
+		SET username = $1, group_name = $2, image_url = $3
+		WHERE user_id = $4
+	 `, username, groupName, imageURL, userID)
 
 	if err != nil {
 		return fmt.Errorf("failed to update user: %v", err)
@@ -119,11 +119,11 @@ func (r *UsersRepo) UpdateUser(userName string, group string, imageUrl string, i
 	return nil
 }
 
-func (r *UsersRepo) DeleteUser(id string) error {
+func (r *UsersRepo) DeleteUser(userID string) error {
 	_, err := r.db.ExecContext(r.ctx, `
-		DELETE FROM "user"
-		WHERE id = $1
-	 `, id)
+		DELETE FROM users
+		WHERE user_id = $1
+	 `, userID)
 
 	if err != nil {
 		return fmt.Errorf("failed to delete user: %v", err)

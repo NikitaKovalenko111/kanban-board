@@ -21,7 +21,7 @@ func Init(db *sql.DB, ctx context.Context) *TaskAssigneeRepo {
 
 func (r *TaskAssigneeRepo) AddTaskAssignee(taskID string, userID string) error {
 	_, err := r.db.ExecContext(r.ctx, `
-		INSERT INTO task_assignee (task_id, user_id)
+		INSERT INTO task_assignees (task_id, user_id)
 		VALUES ($1, $2)
 	`, taskID, userID)
 	if err != nil {
@@ -34,7 +34,7 @@ func (r *TaskAssigneeRepo) AddTaskAssignee(taskID string, userID string) error {
 func (r *TaskAssigneeRepo) GetTaskAssigneesByTaskID(taskID string) ([]models.TaskAssignee, error) {
 	rows, err := r.db.QueryContext(r.ctx, `
 		SELECT task_id, user_id
-		FROM task_assignee
+		FROM task_assignees
 		WHERE task_id = $1
 	`, taskID)
 	if err != nil {
@@ -60,7 +60,7 @@ func (r *TaskAssigneeRepo) GetTaskAssigneesByTaskID(taskID string) ([]models.Tas
 func (r *TaskAssigneeRepo) GetTaskAssigneesByUserID(userID string) ([]models.TaskAssignee, error) {
 	rows, err := r.db.QueryContext(r.ctx, `
 		SELECT task_id, user_id
-		FROM task_assignee
+		FROM task_assignees
 		WHERE user_id = $1
 	`, userID)
 	if err != nil {
@@ -85,7 +85,7 @@ func (r *TaskAssigneeRepo) GetTaskAssigneesByUserID(userID string) ([]models.Tas
 
 func (r *TaskAssigneeRepo) UpdateTaskAssignee(taskID string, oldUserID string, newUserID string) error {
 	_, err := r.db.ExecContext(r.ctx, `
-		UPDATE task_assignee
+		UPDATE task_assignees
 		SET user_id = $1
 		WHERE task_id = $2 AND user_id = $3
 	`, newUserID, taskID, oldUserID)
@@ -98,7 +98,7 @@ func (r *TaskAssigneeRepo) UpdateTaskAssignee(taskID string, oldUserID string, n
 
 func (r *TaskAssigneeRepo) RemoveTaskAssignee(taskID string, userID string) error {
 	_, err := r.db.ExecContext(r.ctx, `
-		DELETE FROM task_assignee
+		DELETE FROM task_assignees
 		WHERE task_id = $1 AND user_id = $2
 	`, taskID, userID)
 	if err != nil {

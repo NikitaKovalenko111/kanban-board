@@ -21,7 +21,7 @@ func Init(db *sql.DB, ctx context.Context) *TeamMemberRepo {
 
 func (r *TeamMemberRepo) AddMemberToTeam(teamID string, userID string, role string) error {
 	_, err := r.db.ExecContext(r.ctx, `
-		INSERT INTO team_member (team_id, user_id, role)
+		INSERT INTO team_members (team_id, user_id, role)
 		VALUES ($1, $2, $3)
 	`, teamID, userID, role)
 	if err != nil {
@@ -34,7 +34,7 @@ func (r *TeamMemberRepo) AddMemberToTeam(teamID string, userID string, role stri
 func (r *TeamMemberRepo) GetTeamMembersByTeamID(teamID string) ([]models.TeamMember, error) {
 	rows, err := r.db.QueryContext(r.ctx, `
 		SELECT team_id, user_id, role, joined_at
-		FROM team_member
+		FROM team_members
 		WHERE team_id = $1
 	`, teamID)
 	if err != nil {
@@ -60,7 +60,7 @@ func (r *TeamMemberRepo) GetTeamMembersByTeamID(teamID string) ([]models.TeamMem
 
 func (r *TeamMemberRepo) UpdateMemberRole(teamID string, userID string, newRole string) error {
 	_, err := r.db.ExecContext(r.ctx, `
-		UPDATE team_member
+		UPDATE team_members
 		SET role = $1
 		WHERE team_id = $2 AND user_id = $3
 	`, newRole, teamID, userID)
@@ -73,7 +73,7 @@ func (r *TeamMemberRepo) UpdateMemberRole(teamID string, userID string, newRole 
 
 func (r *TeamMemberRepo) RemoveMemberFromTeam(teamID string, userID string) error {
 	_, err := r.db.ExecContext(r.ctx, `
-		DELETE FROM team_member
+		DELETE FROM team_members
 		WHERE team_id = $1 AND user_id = $2
 	`, teamID, userID)
 	if err != nil {

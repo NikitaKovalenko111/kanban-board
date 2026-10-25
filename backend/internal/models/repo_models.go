@@ -3,16 +3,16 @@ package models
 import "time"
 
 type User struct {
-	ID        string
-	UserName  string
+	UserID    string
+	Username  string
 	Email     string
-	Group     string
+	GroupName string
 	ImageURL  string
 	CreatedAt time.Time
 }
 
 type Session struct {
-	ID               string
+	SessionID        string
 	UserID           string
 	RefreshTokenHash string
 	ExpiresAt        time.Time
@@ -21,7 +21,7 @@ type Session struct {
 }
 
 type Team struct {
-	ID        string
+	TeamID    string
 	Name      string
 	CreatedAt time.Time
 }
@@ -34,7 +34,7 @@ type TeamMember struct {
 }
 
 type Project struct {
-	ID          string
+	ProjectID   string
 	TeamID      string
 	Name        string
 	Description string
@@ -42,29 +42,29 @@ type Project struct {
 }
 
 type Board struct {
-	ID        string
+	BoardID   string
 	ProjectID string
 	Name      string
 }
 
 type BoardColumn struct {
-	ID       string
+	ColumnID string
 	BoardID  string
 	Name     string
 	Position int
 }
 
 type Task struct {
-	ID          string
-	ColumnID    string
-	CreatedBy   string
-	Title       string
-	Description string
-	Priority    string
-	Position    int
-	DueDate     *time.Time
-	CreatedAt   time.Time
-	UpdatedAt   time.Time
+	TaskID          string
+	ColumnID        string
+	CreatedByUserID string
+	Title           string
+	Description     string
+	Priority        string
+	Position        int
+	DueDate         *time.Time
+	CreatedAt       time.Time
+	UpdatedAt       time.Time
 }
 
 type TaskAssignee struct {
@@ -73,20 +73,20 @@ type TaskAssignee struct {
 }
 
 type Comment struct {
-	ID        string
-	TaskID    string
-	AuthorID  string
-	Content   string
-	CreatedAt time.Time
+	CommentID    string
+	TaskID       string
+	AuthorUserID string
+	Content      string
+	CreatedAt    time.Time
 }
 
 type Attachment struct {
-	ID         string
-	TaskID     string
-	UploadedBy string
-	FileName   string
-	StorageKey string
-	MimeType   string
-	FileSize   int64
-	CreatedAt  time.Time
+	AttachmentID     string
+	TaskID           string
+	UploadedByUserID string
+	FileName         string
+	StorageKey       string
+	MimeType         string
+	FileSize         int64
+	CreatedAt        time.Time
 }

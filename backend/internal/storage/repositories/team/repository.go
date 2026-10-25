@@ -20,26 +20,26 @@ func Init(sql *sql.DB, ctx context.Context) *TeamRepo {
 }
 
 func (r *TeamRepo) CreateTeam(name string) (string, error) {
-	var id string
+	var teamID string
 	err := r.db.QueryRowContext(r.ctx, `
-		INSERT INTO team (id, name)
+		INSERT INTO teams (team_id, name)
 		VALUES (gen_random_uuid(), $1)
-		RETURNING id
-	`, name).Scan(&id)
+		RETURNING team_id
+	`, name).Scan(&teamID)
 	if err != nil {
 		return "", fmt.Errorf("failed to create team: %v", err)
 	}
 
-	return id, nil
+	return teamID, nil
 }
 
-func (r *TeamRepo) GetTeamByID(id string) (*models.Team, error) {
+func (r *TeamRepo) GetTeamByID(teamID string) (*models.Team, error) {
 	var team models.Team
 	err := r.db.QueryRowContext(r.ctx, `
-		SELECT id, name, created_at
-		FROM team
-		WHERE id = $1
-	`, id).Scan(&team.ID, &team.Name, &team.CreatedAt)
+		SELECT team_id, name, created_at
+		FROM teams
+		WHERE team_id = $1
+	`, teamID).Scan(&team.TeamID, &team.Name, &team.CreatedAt)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get team: %v", err)
 	}
@@ -49,10 +49,10 @@ func (r *TeamRepo) GetTeamByID(id string) (*models.Team, error) {
 // func (r *TeamRepo) GetTeamByName(name string) (*models.Team, error) {
 // 	var team models.Team
 // 	err := r.db.QueryRowContext(r.ctx, `
-// 		SELECT id, name, created_at
-// 		FROM team
+// 		SELECT team_id, name, created_at
+// 		FROM teams
 // 		WHERE name = $1
-// 	`, name).Scan(&team.ID, &team.Name, &team.CreatedAt)
+// 	`, name).Scan(&team.TeamID, &team.Name, &team.CreatedAt)
 // 	if err != nil {
 // 		return nil, fmt.Errorf("failed to get team: %v", err)
 // 	}
@@ -61,8 +61,8 @@ func (r *TeamRepo) GetTeamByID(id string) (*models.Team, error) {
 
 func (r *TeamRepo) GetAllTeams() ([]models.Team, error) {
 	rows, err := r.db.QueryContext(r.ctx, `
-		SELECT id, name, created_at
-		FROM team
+		SELECT team_id, name, created_at
+		FROM teams
 	`)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get teams: %v", err)
@@ -74,7 +74,7 @@ func (r *TeamRepo) GetAllTeams() ([]models.Team, error) {
 
 	for rows.Next() {
 		var team models.Team
-		if err := rows.Scan(&team.ID, &team.Name, &team.CreatedAt); err != nil {
+		if err := rows.Scan(&team.TeamID, &team.Name, &team.CreatedAt); err != nil {
 			return nil, fmt.Errorf("failed to scan team: %v", err)
 		}
 		teams = append(teams, team)
@@ -86,12 +86,12 @@ func (r *TeamRepo) GetAllTeams() ([]models.Team, error) {
 	return teams, nil
 }
 
-func (r *TeamRepo) UpdateTeam(id string, name string) error {
+func (r *TeamRepo) UpdateTeam(teamID string, name string) error {
 	_, err := r.db.ExecContext(r.ctx, `
-		UPDATE team
+		UPDATE teams
 		SET name = $1
-		WHERE id = $2
-	`, name, id)
+		WHERE team_id = $2
+	`, name, teamID)
 	if err != nil {
 		return fmt.Errorf("failed to update team: %v", err)
 	}
@@ -99,11 +99,11 @@ func (r *TeamRepo) UpdateTeam(id string, name string) error {
 	return nil
 }
 
-func (r *TeamRepo) DeleteTeam(id string) error {
+func (r *TeamRepo) DeleteTeam(teamID string) error {
 	_, err := r.db.ExecContext(r.ctx, `
-		DELETE FROM team
-		WHERE id = $1
-	`, id)
+		DELETE FROM teams
+		WHERE team_id = $1
+	`, teamID)
 	if err != nil {
 		return fmt.Errorf("failed to delete team: %v", err)
 	}
