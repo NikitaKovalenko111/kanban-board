@@ -9,34 +9,30 @@ import (
 )
 
 type SessionRepo struct {
-	db  *sql.DB
-	ctx context.Context
+	db *sql.DB
 }
 
-func Init(db *sql.DB, ctx context.Context) *SessionRepo {
-	return &SessionRepo{
-		db:  db,
-		ctx: ctx,
-	}
+func Init(db *sql.DB) *SessionRepo {
+	return &SessionRepo{db: db}
 }
 
-func (r *SessionRepo) CreateSession(userID string, refreshTokenHash string, expiresAt time.Time) (string, error) {
-	var sessionID string
-	err := r.db.QueryRowContext(r.ctx, `
+// used in auth_service.go
+
+func (r *SessionRepo) CreateSession(ctx context.Context, userID string, refreshTokenHash string, expiresAt time.Time) error {
+	_, err := r.db.ExecContext(ctx, `
 		INSERT INTO sessions (session_id, user_id, refresh_token_hash, expires_at)
 		VALUES (gen_random_uuid(), $1, $2, $3)
-		RETURNING session_id
-	`, userID, refreshTokenHash, expiresAt).Scan(&sessionID)
+	`, userID, refreshTokenHash, expiresAt)
 	if err != nil {
-		return "", fmt.Errorf("failed to create session: %v", err)
+		return fmt.Errorf("failed to create session: %w", err)
 	}
 
-	return sessionID, nil
+	return nil
 }
 
-func (r *SessionRepo) GetActiveSessionByTokenHash(refreshTokenHash string) (*models.Session, error) {
+func (r *SessionRepo) GetActiveSessionByTokenHash(ctx context.Context, refreshTokenHash string) (*models.Session, error) {
 	var session models.Session
-	err := r.db.QueryRowContext(r.ctx, `
+	err := r.db.QueryRowContext(ctx, `
 		SELECT session_id, user_id, refresh_token_hash, expires_at, created_at, revoked_at
 		FROM sessions
 		WHERE refresh_token_hash = $1
@@ -57,8 +53,8 @@ func (r *SessionRepo) GetActiveSessionByTokenHash(refreshTokenHash string) (*mod
 	return &session, nil
 }
 
-func (r *SessionRepo) GetActiveSessionsByUserID(userID string) ([]models.Session, error) {
-	rows, err := r.db.QueryContext(r.ctx, `
+func (r *SessionRepo) GetActiveSessionsByUserID(ctx context.Context, userID string) ([]models.Session, error) {
+	rows, err := r.db.QueryContext(ctx, `
 		SELECT session_id, user_id, refresh_token_hash, expires_at, created_at, revoked_at
 		FROM sessions
 		WHERE user_id = $1
@@ -93,8 +89,8 @@ func (r *SessionRepo) GetActiveSessionsByUserID(userID string) ([]models.Session
 	return sessions, nil
 }
 
-func (r *SessionRepo) RotateRefreshToken(currentTokenHash string, newTokenHash string, expiresAt time.Time) error {
-	result, err := r.db.ExecContext(r.ctx, `
+func (r *SessionRepo) RotateRefreshToken(ctx context.Context, currentTokenHash string, newTokenHash string, expiresAt time.Time) error {
+	result, err := r.db.ExecContext(ctx, `
 		UPDATE sessions
 		SET refresh_token_hash = $1, expires_at = $2
 		WHERE refresh_token_hash = $3
@@ -116,8 +112,8 @@ func (r *SessionRepo) RotateRefreshToken(currentTokenHash string, newTokenHash s
 	return nil
 }
 
-func (r *SessionRepo) RevokeSessionByTokenHash(refreshTokenHash string) error {
-	_, err := r.db.ExecContext(r.ctx, `
+func (r *SessionRepo) RevokeSessionByTokenHash(ctx context.Context, refreshTokenHash string) error {
+	_, err := r.db.ExecContext(ctx, `
 		UPDATE sessions
 		SET revoked_at = CURRENT_TIMESTAMP
 		WHERE refresh_token_hash = $1 AND revoked_at IS NULL
@@ -129,8 +125,8 @@ func (r *SessionRepo) RevokeSessionByTokenHash(refreshTokenHash string) error {
 	return nil
 }
 
-func (r *SessionRepo) RevokeAllUserSessions(userID string) error {
-	_, err := r.db.ExecContext(r.ctx, `
+func (r *SessionRepo) RevokeAllUserSessions(ctx context.Context, userID string) error {
+	_, err := r.db.ExecContext(ctx, `
 		UPDATE sessions
 		SET revoked_at = CURRENT_TIMESTAMP
 		WHERE user_id = $1 AND revoked_at IS NULL
@@ -142,8 +138,8 @@ func (r *SessionRepo) RevokeAllUserSessions(userID string) error {
 	return nil
 }
 
-func (r *SessionRepo) DeleteExpiredSessions() error {
-	_, err := r.db.ExecContext(r.ctx, `
+func (r *SessionRepo) DeleteExpiredSessions(ctx context.Context) error {
+	_, err := r.db.ExecContext(ctx, `
 		DELETE FROM sessions
 		WHERE expires_at <= CURRENT_TIMESTAMP
 			OR revoked_at IS NOT NULL

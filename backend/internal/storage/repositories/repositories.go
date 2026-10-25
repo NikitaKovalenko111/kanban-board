@@ -32,14 +32,14 @@ type Repositories struct {
 
 func Init(storage *storage.Storage, ctx context.Context) *Repositories {
 	return &Repositories{
-		UsersRepo:        users_repository.Init(storage.Db, ctx),
+		UsersRepo:        users_repository.Init(storage.Db),
 		TeamRepo:         team_repo.Init(storage.Db, ctx),
 		TeamMemberRepo:   team_member_repo.Init(storage.Db, ctx),
 		ProjectRepo:      project_repo.Init(storage.Db, ctx),
 		BoardRepo:        board_repo.Init(storage.Db, ctx),
 		BoardColumnRepo:  board_column_repo.Init(storage.Db, ctx),
 		TaskRepo:         task_repo.Init(storage.Db, ctx),
-		SessionRepo:      session_repo.Init(storage.Db, ctx),
+		SessionRepo:      session_repo.Init(storage.Db),
 		TaskAssigneeRepo: task_assignee_repo.Init(storage.Db, ctx),
 		CommentRepo:      comment_repo.Init(storage.Db, ctx),
 		AttachmentRepo:   attachment_repo.Init(storage.Db, ctx),

@@ -1,8 +1,9 @@
 package app
 
 import (
-	"context"
 	"fmt"
+	"net/http"
+
 	"kanban-board/internal/config"
 	"kanban-board/internal/middleware"
 	"kanban-board/internal/services"
@@ -10,18 +11,14 @@ import (
 	transport "kanban-board/internal/transport/http"
 	"kanban-board/internal/transport/http/handlers"
 	"kanban-board/pkg"
-	"net/http"
 )
 
 func Run(cfg *config.Config) {
 	logger := pkg.InitLogger(cfg.LogLevel)
 
 	logger.Debug("Debug is enabled")
-
 	logger.Info("Info is enabled")
-
 	logger.Warn("Warn is enabled")
-
 	logger.Error("Error is enabled")
 
 	storage, err := storage.Connect(cfg.Postgres)
@@ -29,18 +26,24 @@ func Run(cfg *config.Config) {
 		panic(fmt.Errorf("failed connection to storage: %v", err))
 	}
 
-	services := services.Init(storage, cfg.JWT, context.Background())
-
+	services := services.Init(storage, cfg.JWT)
 	handlers := handlers.Init(services, logger)
 
 	mux := http.NewServeMux()
 	transport := transport.Init(handlers)
-
 	transport.Start(mux)
 
-	err = http.ListenAndServe(cfg.HTTP_ADDRESS, middleware.Logger(logger)(mux))
-	if err != nil {
-		panic(err)
+	requestHandler := middleware.Logger(logger)(middleware.Timeout(cfg.TIMEOUT)(mux))
+	server := &http.Server{
+		Addr:              cfg.HTTP_ADDRESS,
+		Handler:           requestHandler,
+		ReadHeaderTimeout: cfg.TIMEOUT,
+		ReadTimeout:       cfg.TIMEOUT,
+		WriteTimeout:      cfg.TIMEOUT,
+		IdleTimeout:       cfg.IDLE_TIMEOUT,
 	}
 
+	if err := server.ListenAndServe(); err != nil {
+		panic(err)
+	}
 }

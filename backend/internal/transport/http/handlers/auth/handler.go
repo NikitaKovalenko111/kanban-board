@@ -1,6 +1,7 @@
 package auth_handler
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"log/slog"
@@ -35,8 +36,13 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	userID, err := h.authService.RegisterUser(req.Username, req.Email, req.Password, req.GroupName)
+	userID, err := h.authService.RegisterUser(r.Context(), req.Username, req.Email, req.Password, req.GroupName)
 	if err != nil {
+		if errors.Is(err, context.DeadlineExceeded) {
+			pkg.WriteError(w, http.StatusGatewayTimeout, "request_timeout", "Request timed out")
+			return
+		}
+
 		pkg.WriteError(w, http.StatusInternalServerError, "registration_failed", "Failed to register user")
 		return
 	}
@@ -56,8 +62,12 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	userID, accessToken, refreshToken, err := h.authService.LoginUser(req.Login, req.Password)
+	userID, accessToken, refreshToken, err := h.authService.LoginUser(r.Context(), req.Login, req.Password)
 	if err != nil {
+		if errors.Is(err, context.DeadlineExceeded) {
+			pkg.WriteError(w, http.StatusGatewayTimeout, "request_timeout", "Request timed out")
+			return
+		}
 		if errors.Is(err, auth_service.ErrInvalidCredentials) {
 			pkg.WriteError(w, http.StatusUnauthorized, "invalid_credentials", "Invalid login or password")
 			return
@@ -76,4 +86,8 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 	}
 
 	pkg.WriteJSON(w, http.StatusOK, response)
+}
+
+func (h *AuthHandler) Logout(w http.ResponseWriter, r *http.Request) {
+
 }

@@ -1,6 +1,7 @@
 package auth_service
 
 import (
+	"context"
 	"database/sql"
 	"errors"
 	"fmt"
@@ -29,7 +30,7 @@ func Init(sessionRepo *session_repo.SessionRepo, userRepo *users_repo.UsersRepo,
 	}
 }
 
-func (s *AuthService) RegisterUser(username, email, password, groupName string) (string, error) {
+func (s *AuthService) RegisterUser(ctx context.Context, username, email, password, groupName string) (string, error) {
 	err := ValidateRegisterRequest(username, email, password, groupName)
 	if err != nil {
 		return "", err
@@ -40,7 +41,7 @@ func (s *AuthService) RegisterUser(username, email, password, groupName string) 
 		return "", err
 	}
 
-	id, err := s.userRepo.CreateUser(username, email, groupName, "", passwordHash)
+	id, err := s.userRepo.CreateUser(ctx, username, email, groupName, "", passwordHash)
 	if err != nil {
 		return "", err
 	}
@@ -48,13 +49,13 @@ func (s *AuthService) RegisterUser(username, email, password, groupName string) 
 	return id, nil
 }
 
-func (s *AuthService) LoginUser(login, password string) (string, string, string, error) {
+func (s *AuthService) LoginUser(ctx context.Context, login, password string) (string, string, string, error) {
 	login = strings.TrimSpace(login)
 	if login == "" || password == "" {
 		return "", "", "", ErrInvalidCredentials
 	}
 
-	credentials, err := s.userRepo.GetUserCredentials(login)
+	credentials, err := s.userRepo.GetUserCredentials(ctx, login)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return "", "", "", ErrInvalidCredentials
@@ -87,7 +88,7 @@ func (s *AuthService) LoginUser(login, password string) (string, string, string,
 	}
 
 	refreshTokenHash := pkg.HashToken(refreshToken)
-	if _, err := s.sessionRepo.CreateSession(credentials.UserID, refreshTokenHash, refreshExpiresAt); err != nil {
+	if err := s.sessionRepo.CreateSession(ctx, credentials.UserID, refreshTokenHash, refreshExpiresAt); err != nil {
 		return "", "", "", fmt.Errorf("failed to create session: %w", err)
 	}
 
