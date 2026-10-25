@@ -4,8 +4,10 @@ go 1.25.3
 
 require (
 	github.com/goccy/go-yaml v1.19.2
+	github.com/golang-jwt/jwt/v5 v5.3.0
 	github.com/jackc/pgx/v5 v5.11.0
 	github.com/lmittmann/tint v1.2.1
+	golang.org/x/crypto v0.43.0
 )
 
 require (
@@ -13,5 +15,5 @@ require (
 	github.com/jackc/pgservicefile v0.0.0-20240606120523-5a60cdf6a761 // indirect
 	github.com/jackc/puddle/v2 v2.2.2 // indirect
 	golang.org/x/sync v0.17.0 // indirect
-	golang.org/x/text v0.29.0 // indirect
+	golang.org/x/text v0.30.0 // indirect
 )

@@ -1,4 +1,4 @@
-package users_repository
+package users_repo
 
 import (
 	"context"
@@ -77,6 +77,24 @@ func (r *UsersRepo) GetUserByUsername(username string) (*models.User, error) {
 	}
 
 	return &user, nil
+}
+
+// used in auth_service.go
+
+func (r *UsersRepo) GetUserCredentials(login string) (*models.UserCredentials, error) {
+	var credentials models.UserCredentials
+	err := r.db.QueryRowContext(r.ctx, `
+		SELECT user_id, username, email, password_hash
+		FROM users
+		WHERE email = $1 OR username = $1
+		LIMIT 1
+	`, login).Scan(&credentials.UserID, &credentials.Username, &credentials.Email, &credentials.PasswordHash)
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to select user credentials: %w", err)
+	}
+
+	return &credentials, nil
 }
 
 func (r *UsersRepo) GetUsersByGroupName(groupName string) ([]models.User, error) {

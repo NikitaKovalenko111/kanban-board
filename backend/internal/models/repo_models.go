@@ -11,6 +11,13 @@ type User struct {
 	CreatedAt time.Time
 }
 
+type UserCredentials struct {
+	UserID       string
+	Username     string
+	Email        string
+	PasswordHash string
+}
+
 type Session struct {
 	SessionID        string
 	UserID           string

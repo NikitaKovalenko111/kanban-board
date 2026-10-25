@@ -1,6 +1,7 @@
 package app
 
 import (
+	"context"
 	"fmt"
 	"kanban-board/internal/config"
 	"kanban-board/internal/middleware"
@@ -28,7 +29,7 @@ func Run(cfg *config.Config) {
 		panic(fmt.Errorf("failed connection to storage: %v", err))
 	}
 
-	services := services.Init(storage)
+	services := services.Init(storage, cfg.JWT, context.Background())
 
 	handlers := handlers.Init(services, logger)
 
