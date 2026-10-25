@@ -10,7 +10,7 @@ import (
 	"testing"
 )
 
-func TestLoggerWritesRequestFailureBeforeDetailedError(t *testing.T) {
+func TestLoggerWritesRequestFailureAndDetailsInOneRecord(t *testing.T) {
 	var output bytes.Buffer
 	logger := slog.New(slog.NewTextHandler(&output, nil))
 	handler := Logger(logger)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -24,16 +24,17 @@ func TestLoggerWritesRequestFailureBeforeDetailedError(t *testing.T) {
 	recorder := httptest.NewRecorder()
 	handler.ServeHTTP(recorder, request)
 
-	logs := output.String()
-	requestFailedIndex := strings.Index(logs, "REQUEST FAILED")
-	detailedErrorIndex := strings.Index(logs, "database operation failed")
-	if requestFailedIndex == -1 {
+	logs := strings.TrimSpace(output.String())
+	if !strings.Contains(logs, "REQUEST FAILED") {
 		t.Fatal("logs do not contain REQUEST FAILED")
 	}
-	if detailedErrorIndex == -1 {
-		t.Fatal("logs do not contain the detailed error")
+	if !strings.Contains(logs, "detail=\"database operation failed\"") {
+		t.Fatalf("logs do not contain the detailed message:\n%s", logs)
 	}
-	if requestFailedIndex > detailedErrorIndex {
-		t.Fatalf("detailed error was logged before REQUEST FAILED:\n%s", logs)
+	if !strings.Contains(logs, "error=\"connection refused\"") {
+		t.Fatalf("logs do not contain the error:\n%s", logs)
+	}
+	if strings.Contains(logs, "\n") {
+		t.Fatalf("request failure was written as multiple log records:\n%s", logs)
 	}
 }

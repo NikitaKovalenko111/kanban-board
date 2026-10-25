@@ -27,7 +27,7 @@ func Run(cfg *config.Config) {
 	}
 
 	services := services.Init(storage, cfg.JWT)
-	handlers := handlers.Init(services, logger)
+	handlers := handlers.Init(services)
 
 	mux := http.NewServeMux()
 	transport := transport.Init(handlers)

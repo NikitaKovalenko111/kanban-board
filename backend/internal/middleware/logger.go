@@ -2,6 +2,7 @@ package middleware
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"sync"
@@ -66,6 +67,7 @@ func Logger(log *slog.Logger) func(http.Handler) http.Handler {
 				slog.Int("status", status),
 				slog.Duration("duration", time.Since(start)),
 			}
+			attrs = appendErrorLogAttributes(attrs, errorLogs.all())
 
 			switch {
 			case status >= 500:
@@ -74,10 +76,6 @@ func Logger(log *slog.Logger) func(http.Handler) http.Handler {
 				log.Warn("REQUEST FAILED", attrs...)
 			default:
 				log.Info("REQUEST COMPLETED", attrs...)
-			}
-
-			for _, entry := range errorLogs.all() {
-				log.Error(entry.message, slog.Any("error", entry.err))
 			}
 		})
 	}
@@ -108,4 +106,25 @@ func (logs *requestErrorLogs) all() []errorLog {
 	copy(entries, logs.entries)
 
 	return entries
+}
+
+func appendErrorLogAttributes(attrs []any, entries []errorLog) []any {
+	if len(entries) == 1 {
+		return append(
+			attrs,
+			slog.String("detail", entries[0].message),
+			slog.Any("error", entries[0].err),
+		)
+	}
+
+	for index, entry := range entries {
+		suffix := index + 1
+		attrs = append(
+			attrs,
+			slog.String(fmt.Sprintf("detail_%d", suffix), entry.message),
+			slog.Any(fmt.Sprintf("error_%d", suffix), entry.err),
+		)
+	}
+
+	return attrs
 }

@@ -4,7 +4,6 @@ import (
 	"kanban-board/internal/services"
 	auth_handler "kanban-board/internal/transport/http/handlers/auth"
 	system_handler "kanban-board/internal/transport/http/handlers/system"
-	"log/slog"
 )
 
 type Handlers struct {
@@ -12,9 +11,9 @@ type Handlers struct {
 	Auth   *auth_handler.AuthHandler
 }
 
-func Init(services *services.Services, logger *slog.Logger) *Handlers {
+func Init(services *services.Services) *Handlers {
 	return &Handlers{
 		System: system_handler.Init(),
-		Auth:   auth_handler.Init(services.Auth, logger),
+		Auth:   auth_handler.Init(services.Auth),
 	}
 }

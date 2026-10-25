@@ -12,10 +12,14 @@ import (
 	session_repo "kanban-board/internal/storage/repositories/session"
 	users_repo "kanban-board/internal/storage/repositories/user"
 	"kanban-board/pkg"
+
+	"github.com/jackc/pgx/v5/pgconn"
 )
 
 var (
 	ErrInvalidCredentials  = errors.New("invalid login or password")
+	ErrUsernameTaken       = errors.New("username is already in use")
+	ErrEmailTaken          = errors.New("email is already in use")
 	ErrInvalidRefreshToken = errors.New("invalid refresh token")
 )
 
@@ -46,12 +50,31 @@ func (s *AuthService) RegisterUser(ctx context.Context, username, email, passwor
 
 	id, err := s.userRepo.CreateUser(ctx, username, email, groupName, "", passwordHash)
 	if err != nil {
+		if conflictErr := registrationConflictError(err); conflictErr != nil {
+			return "", conflictErr
+		}
+
 		return "", err
 	}
 
 	return id, nil
 }
 
+func registrationConflictError(err error) error {
+	var pgError *pgconn.PgError
+	if !errors.As(err, &pgError) || pgError.Code != "23505" {
+		return nil
+	}
+
+	switch pgError.ConstraintName {
+	case "users_username_idx":
+		return ErrUsernameTaken
+	case "users_email_idx":
+		return ErrEmailTaken
+	default:
+		return nil
+	}
+}
 func (s *AuthService) LoginUser(ctx context.Context, login, password string) (string, string, string, error) {
 	login = strings.TrimSpace(login)
 	if login == "" || password == "" {

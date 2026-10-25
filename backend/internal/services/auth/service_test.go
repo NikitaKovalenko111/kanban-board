@@ -14,6 +14,7 @@ import (
 	"kanban-board/pkg"
 
 	"github.com/DATA-DOG/go-sqlmock"
+	"github.com/jackc/pgx/v5/pgconn"
 )
 
 const (
@@ -111,6 +112,58 @@ func TestRegisterUserValidationErrorDoesNotWriteToDatabase(t *testing.T) {
 	assertSQLExpectations(t, mock)
 }
 
+func TestRegisterUserReturnsConflictError(t *testing.T) {
+	tests := []struct {
+		name           string
+		constraintName string
+		expectedError  error
+	}{
+		{
+			name:           "username already exists",
+			constraintName: "users_username_idx",
+			expectedError:  ErrUsernameTaken,
+		},
+		{
+			name:           "email already exists",
+			constraintName: "users_email_idx",
+			expectedError:  ErrEmailTaken,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			service, mock, closeDB := newTestService(t)
+			defer closeDB()
+
+			mock.ExpectQuery(regexp.QuoteMeta(`
+				INSERT INTO users (user_id, username, email, group_name, image_url, password_hash)
+				VALUES (gen_random_uuid(), $1, $2, $3, $4, $5)
+				RETURNING user_id
+			`)).
+				WithArgs(testUsername, testEmail, testGroupName, "", sqlmock.AnyArg()).
+				WillReturnError(&pgconn.PgError{
+					Code:           "23505",
+					ConstraintName: test.constraintName,
+				})
+
+			userID, err := service.RegisterUser(
+				context.Background(),
+				testUsername,
+				testEmail,
+				testPassword,
+				testGroupName,
+			)
+			if !errors.Is(err, test.expectedError) {
+				t.Fatalf("RegisterUser() error = %v, want %v", err, test.expectedError)
+			}
+			if userID != "" {
+				t.Fatalf("RegisterUser() userID = %q, want empty string", userID)
+			}
+
+			assertSQLExpectations(t, mock)
+		})
+	}
+}
 func TestLoginUserSuccessWithUsernameOrEmail(t *testing.T) {
 	passwordHash, err := HashPassword(testPassword)
 	if err != nil {
