@@ -1,6 +1,7 @@
 package app
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 
@@ -27,6 +28,16 @@ func Run(cfg *config.Config) {
 	}
 
 	services := services.Init(storage, cfg.JWT)
+
+	cleanupContext, stopSessionCleanup := context.WithCancel(context.Background())
+	defer stopSessionCleanup()
+	go services.RunSessionCleanup(
+		cleanupContext,
+		cfg.JWT.SessionCleanupInterval,
+		cfg.TIMEOUT,
+		logger,
+	)
+
 	handlers := handlers.Init(services)
 
 	mux := http.NewServeMux()

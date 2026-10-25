@@ -150,15 +150,21 @@ func (r *SessionRepo) RevokeAllUserSessions(ctx context.Context, userID string) 
 	return nil
 }
 
-func (r *SessionRepo) DeleteExpiredSessions(ctx context.Context) error {
-	_, err := r.db.ExecContext(ctx, `
+// used in auth_service.go
+func (r *SessionRepo) DeleteInactiveSessions(ctx context.Context) (int64, error) {
+	result, err := r.db.ExecContext(ctx, `
 		DELETE FROM sessions
 		WHERE expires_at <= CURRENT_TIMESTAMP
 			OR revoked_at IS NOT NULL
 	`)
 	if err != nil {
-		return fmt.Errorf("failed to delete expired sessions: %w", err)
+		return 0, fmt.Errorf("failed to delete inactive sessions: %w", err)
 	}
 
-	return nil
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return 0, fmt.Errorf("failed to get deleted sessions rows count: %w", err)
+	}
+
+	return rowsAffected, nil
 }

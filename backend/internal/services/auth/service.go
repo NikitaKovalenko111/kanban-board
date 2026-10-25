@@ -75,6 +75,7 @@ func registrationConflictError(err error) error {
 		return nil
 	}
 }
+
 func (s *AuthService) LoginUser(ctx context.Context, login, password string) (string, string, string, error) {
 	login = strings.TrimSpace(login)
 	if login == "" || password == "" {
@@ -160,6 +161,15 @@ func (s *AuthService) Logout(ctx context.Context, refreshToken string) error {
 	}
 
 	return nil
+}
+
+func (s *AuthService) CleanupInactiveSessions(ctx context.Context) (int64, error) {
+	deletedSessions, err := s.sessionRepo.DeleteInactiveSessions(ctx)
+	if err != nil {
+		return 0, fmt.Errorf("failed to cleanup inactive sessions: %w", err)
+	}
+
+	return deletedSessions, nil
 }
 
 func (s *AuthService) createTokenPair(userID string) (string, string, time.Time, error) {

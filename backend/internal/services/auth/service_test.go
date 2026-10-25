@@ -377,6 +377,28 @@ func TestLogoutRejectsInvalidRefreshToken(t *testing.T) {
 
 	assertSQLExpectations(t, mock)
 }
+
+func TestCleanupInactiveSessions(t *testing.T) {
+	service, mock, closeDB := newTestService(t)
+	defer closeDB()
+
+	mock.ExpectExec(regexp.QuoteMeta(`
+		DELETE FROM sessions
+		WHERE expires_at <= CURRENT_TIMESTAMP
+			OR revoked_at IS NOT NULL
+	`)).WillReturnResult(sqlmock.NewResult(0, 3))
+
+	deletedSessions, err := service.CleanupInactiveSessions(context.Background())
+	if err != nil {
+		t.Fatalf("CleanupInactiveSessions() error = %v", err)
+	}
+	if deletedSessions != 3 {
+		t.Fatalf("CleanupInactiveSessions() deleted = %d, want 3", deletedSessions)
+	}
+
+	assertSQLExpectations(t, mock)
+}
+
 func newTestService(t *testing.T) (*AuthService, sqlmock.Sqlmock, func()) {
 	t.Helper()
 

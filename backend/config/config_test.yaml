@@ -8,6 +8,7 @@ jwt:
     jwt_refresh_secret: "rrrrrrrrrrrrrrrrr"
     access_token_ttl: "1m"
     refresh_token_ttl: "1h"
+    session_cleanup_interval: "30m"
 postgres:
   db_host: "localhost"
   db_user: "postgres"
