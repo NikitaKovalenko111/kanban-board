@@ -26,6 +26,8 @@ func Init(authService *auth_service.AuthService, logger *slog.Logger) *AuthHandl
 func (h *AuthHandler) Start(mux *http.ServeMux) {
 	mux.HandleFunc("POST /register", h.Register)
 	mux.HandleFunc("POST /login", h.Login)
+	mux.HandleFunc("POST /refresh", h.Refresh)
+	mux.HandleFunc("POST /logout", h.Logout)
 }
 
 func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
@@ -78,16 +80,65 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	response := LoginResponse{
+	pkg.WriteJSON(w, http.StatusOK, newTokenResponse(userID, accessToken, refreshToken))
+}
+
+func (h *AuthHandler) Refresh(w http.ResponseWriter, r *http.Request) {
+	var req RefreshRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		pkg.WriteError(w, http.StatusBadRequest, "invalid_request", "Invalid request payload")
+		return
+	}
+
+	userID, accessToken, refreshToken, err := h.authService.RefreshTokens(r.Context(), req.RefreshToken)
+	if err != nil {
+		if errors.Is(err, context.DeadlineExceeded) {
+			pkg.WriteError(w, http.StatusGatewayTimeout, "request_timeout", "Request timed out")
+			return
+		}
+		if errors.Is(err, auth_service.ErrInvalidRefreshToken) {
+			pkg.WriteError(w, http.StatusUnauthorized, "invalid_refresh_token", "Invalid refresh token")
+			return
+		}
+
+		h.logger.Error("failed to refresh tokens", "error", err)
+		pkg.WriteError(w, http.StatusInternalServerError, "refresh_failed", "Failed to refresh tokens")
+		return
+	}
+
+	pkg.WriteJSON(w, http.StatusOK, newTokenResponse(userID, accessToken, refreshToken))
+}
+
+func (h *AuthHandler) Logout(w http.ResponseWriter, r *http.Request) {
+	var req LogoutRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		pkg.WriteError(w, http.StatusBadRequest, "invalid_request", "Invalid request payload")
+		return
+	}
+
+	if err := h.authService.Logout(r.Context(), req.RefreshToken); err != nil {
+		if errors.Is(err, context.DeadlineExceeded) {
+			pkg.WriteError(w, http.StatusGatewayTimeout, "request_timeout", "Request timed out")
+			return
+		}
+		if errors.Is(err, auth_service.ErrInvalidRefreshToken) {
+			pkg.WriteError(w, http.StatusUnauthorized, "invalid_refresh_token", "Invalid refresh token")
+			return
+		}
+
+		h.logger.Error("failed to logout user", "error", err)
+		pkg.WriteError(w, http.StatusInternalServerError, "logout_failed", "Failed to logout")
+		return
+	}
+
+	pkg.WriteEmpty(w, http.StatusNoContent)
+}
+
+func newTokenResponse(userID, accessToken, refreshToken string) TokenResponse {
+	return TokenResponse{
 		UserID:       userID,
 		AccessToken:  accessToken,
 		RefreshToken: refreshToken,
 		TokenType:    "Bearer",
 	}
-
-	pkg.WriteJSON(w, http.StatusOK, response)
-}
-
-func (h *AuthHandler) Logout(w http.ResponseWriter, r *http.Request) {
-
 }

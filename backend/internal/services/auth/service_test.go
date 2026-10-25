@@ -216,6 +216,114 @@ func TestLoginUserRejectsWrongPassword(t *testing.T) {
 	assertSQLExpectations(t, mock)
 }
 
+func TestRefreshTokensRotatesSession(t *testing.T) {
+	service, mock, closeDB := newTestService(t)
+	defer closeDB()
+
+	currentRefreshToken, _, err := pkg.CreateRefreshToken(testUserID, testRefreshSecret, time.Hour)
+	if err != nil {
+		t.Fatalf("CreateRefreshToken() error = %v", err)
+	}
+	currentTokenHash := pkg.HashToken(currentRefreshToken)
+
+	mock.ExpectQuery(regexp.QuoteMeta(`
+		SELECT session_id, user_id, refresh_token_hash, expires_at, created_at, revoked_at
+		FROM sessions
+		WHERE refresh_token_hash = $1
+			AND revoked_at IS NULL
+			AND expires_at > CURRENT_TIMESTAMP
+	`)).
+		WithArgs(currentTokenHash).
+		WillReturnRows(sqlmock.NewRows(
+			[]string{"session_id", "user_id", "refresh_token_hash", "expires_at", "created_at", "revoked_at"},
+		).AddRow(
+			"session-123",
+			testUserID,
+			currentTokenHash,
+			time.Now().Add(time.Hour),
+			time.Now(),
+			nil,
+		))
+
+	newTokenHash := &stringCapture{}
+	newExpiresAt := &timeCapture{}
+	mock.ExpectExec(regexp.QuoteMeta(`
+		UPDATE sessions
+		SET refresh_token_hash = $1, expires_at = $2
+		WHERE refresh_token_hash = $3
+			AND revoked_at IS NULL
+			AND expires_at > CURRENT_TIMESTAMP
+	`)).
+		WithArgs(newTokenHash, newExpiresAt, currentTokenHash).
+		WillReturnResult(sqlmock.NewResult(0, 1))
+
+	userID, accessToken, refreshToken, err := service.RefreshTokens(
+		context.Background(),
+		currentRefreshToken,
+	)
+	if err != nil {
+		t.Fatalf("RefreshTokens() error = %v", err)
+	}
+	if userID != testUserID {
+		t.Fatalf("RefreshTokens() userID = %q, want %q", userID, testUserID)
+	}
+	if refreshToken == currentRefreshToken {
+		t.Fatal("RefreshTokens() returned the current refresh token instead of rotating it")
+	}
+	if _, err := pkg.ValidateAccessToken(accessToken, testAccessSecret); err != nil {
+		t.Fatalf("ValidateAccessToken() error = %v", err)
+	}
+	if _, err := pkg.ValidateRefreshToken(refreshToken, testRefreshSecret); err != nil {
+		t.Fatalf("ValidateRefreshToken() error = %v", err)
+	}
+	if newTokenHash.value != pkg.HashToken(refreshToken) {
+		t.Fatal("session contains a hash that does not match the new refresh token")
+	}
+	if newExpiresAt.value.IsZero() || !newExpiresAt.value.After(time.Now()) {
+		t.Fatal("session contains an invalid refresh token expiration time")
+	}
+
+	assertSQLExpectations(t, mock)
+}
+
+func TestLogoutRevokesSession(t *testing.T) {
+	service, mock, closeDB := newTestService(t)
+	defer closeDB()
+
+	refreshToken, _, err := pkg.CreateRefreshToken(testUserID, testRefreshSecret, time.Hour)
+	if err != nil {
+		t.Fatalf("CreateRefreshToken() error = %v", err)
+	}
+	refreshTokenHash := pkg.HashToken(refreshToken)
+
+	mock.ExpectExec(regexp.QuoteMeta(`
+		UPDATE sessions
+		SET revoked_at = CURRENT_TIMESTAMP
+		WHERE refresh_token_hash = $1
+			AND revoked_at IS NULL
+			AND expires_at > CURRENT_TIMESTAMP
+	`)).
+		WithArgs(refreshTokenHash).
+		WillReturnResult(sqlmock.NewResult(0, 1))
+
+	if err := service.Logout(context.Background(), refreshToken); err != nil {
+		t.Fatalf("Logout() error = %v", err)
+	}
+
+	assertSQLExpectations(t, mock)
+}
+
+func TestLogoutRejectsInvalidRefreshToken(t *testing.T) {
+	service, mock, closeDB := newTestService(t)
+	defer closeDB()
+
+	err := service.Logout(context.Background(), "invalid-token")
+	if !errors.Is(err, ErrInvalidRefreshToken) {
+		t.Fatalf("Logout() error = %v, want ErrInvalidRefreshToken", err)
+	}
+
+	assertSQLExpectations(t, mock)
+}
 func newTestService(t *testing.T) (*AuthService, sqlmock.Sqlmock, func()) {
 	t.Helper()
 

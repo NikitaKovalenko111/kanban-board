@@ -14,7 +14,10 @@ import (
 	"kanban-board/pkg"
 )
 
-var ErrInvalidCredentials = errors.New("invalid login or password")
+var (
+	ErrInvalidCredentials  = errors.New("invalid login or password")
+	ErrInvalidRefreshToken = errors.New("invalid refresh token")
+)
 
 type AuthService struct {
 	sessionRepo *session_repo.SessionRepo
@@ -68,23 +71,9 @@ func (s *AuthService) LoginUser(ctx context.Context, login, password string) (st
 		return "", "", "", ErrInvalidCredentials
 	}
 
-	accessTokenTTL, err := time.ParseDuration(s.jwtConfig.AccessTokenTTL)
+	accessToken, refreshToken, refreshExpiresAt, err := s.createTokenPair(credentials.UserID)
 	if err != nil {
-		return "", "", "", fmt.Errorf("invalid access token ttl: %w", err)
-	}
-	refreshTokenTTL, err := time.ParseDuration(s.jwtConfig.RefreshTokenTTL)
-	if err != nil {
-		return "", "", "", fmt.Errorf("invalid refresh token ttl: %w", err)
-	}
-
-	accessToken, _, err := pkg.CreateAccessToken(credentials.UserID, s.jwtConfig.AccessSecret, accessTokenTTL)
-	if err != nil {
-		return "", "", "", fmt.Errorf("failed to create access token: %w", err)
-	}
-
-	refreshToken, refreshExpiresAt, err := pkg.CreateRefreshToken(credentials.UserID, s.jwtConfig.RefreshSecret, refreshTokenTTL)
-	if err != nil {
-		return "", "", "", fmt.Errorf("failed to create refresh token: %w", err)
+		return "", "", "", err
 	}
 
 	refreshTokenHash := pkg.HashToken(refreshToken)
@@ -93,4 +82,82 @@ func (s *AuthService) LoginUser(ctx context.Context, login, password string) (st
 	}
 
 	return credentials.UserID, accessToken, refreshToken, nil
+}
+
+func (s *AuthService) RefreshTokens(ctx context.Context, currentRefreshToken string) (string, string, string, error) {
+	currentRefreshToken = strings.TrimSpace(currentRefreshToken)
+	claims, err := pkg.ValidateRefreshToken(currentRefreshToken, s.jwtConfig.RefreshSecret)
+	if err != nil {
+		return "", "", "", ErrInvalidRefreshToken
+	}
+
+	currentTokenHash := pkg.HashToken(currentRefreshToken)
+	session, err := s.sessionRepo.GetActiveSessionByTokenHash(ctx, currentTokenHash)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return "", "", "", ErrInvalidRefreshToken
+		}
+
+		return "", "", "", fmt.Errorf("failed to get active session: %w", err)
+	}
+	if session.UserID != claims.Subject {
+		return "", "", "", ErrInvalidRefreshToken
+	}
+
+	accessToken, refreshToken, refreshExpiresAt, err := s.createTokenPair(session.UserID)
+	if err != nil {
+		return "", "", "", err
+	}
+
+	newTokenHash := pkg.HashToken(refreshToken)
+	if err := s.sessionRepo.RotateRefreshToken(ctx, currentTokenHash, newTokenHash, refreshExpiresAt); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return "", "", "", ErrInvalidRefreshToken
+		}
+
+		return "", "", "", fmt.Errorf("failed to rotate refresh token: %w", err)
+	}
+
+	return session.UserID, accessToken, refreshToken, nil
+}
+
+func (s *AuthService) Logout(ctx context.Context, refreshToken string) error {
+	refreshToken = strings.TrimSpace(refreshToken)
+	if _, err := pkg.ValidateRefreshToken(refreshToken, s.jwtConfig.RefreshSecret); err != nil {
+		return ErrInvalidRefreshToken
+	}
+
+	refreshTokenHash := pkg.HashToken(refreshToken)
+	if err := s.sessionRepo.RevokeSessionByTokenHash(ctx, refreshTokenHash); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return ErrInvalidRefreshToken
+		}
+
+		return fmt.Errorf("failed to revoke session: %w", err)
+	}
+
+	return nil
+}
+
+func (s *AuthService) createTokenPair(userID string) (string, string, time.Time, error) {
+	accessTokenTTL, err := time.ParseDuration(s.jwtConfig.AccessTokenTTL)
+	if err != nil {
+		return "", "", time.Time{}, fmt.Errorf("invalid access token ttl: %w", err)
+	}
+	refreshTokenTTL, err := time.ParseDuration(s.jwtConfig.RefreshTokenTTL)
+	if err != nil {
+		return "", "", time.Time{}, fmt.Errorf("invalid refresh token ttl: %w", err)
+	}
+
+	accessToken, _, err := pkg.CreateAccessToken(userID, s.jwtConfig.AccessSecret, accessTokenTTL)
+	if err != nil {
+		return "", "", time.Time{}, fmt.Errorf("failed to create access token: %w", err)
+	}
+
+	refreshToken, refreshExpiresAt, err := pkg.CreateRefreshToken(userID, s.jwtConfig.RefreshSecret, refreshTokenTTL)
+	if err != nil {
+		return "", "", time.Time{}, fmt.Errorf("failed to create refresh token: %w", err)
+	}
+
+	return accessToken, refreshToken, refreshExpiresAt, nil
 }

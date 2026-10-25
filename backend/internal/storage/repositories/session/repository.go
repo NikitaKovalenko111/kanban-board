@@ -17,7 +17,6 @@ func Init(db *sql.DB) *SessionRepo {
 }
 
 // used in auth_service.go
-
 func (r *SessionRepo) CreateSession(ctx context.Context, userID string, refreshTokenHash string, expiresAt time.Time) error {
 	_, err := r.db.ExecContext(ctx, `
 		INSERT INTO sessions (session_id, user_id, refresh_token_hash, expires_at)
@@ -30,6 +29,7 @@ func (r *SessionRepo) CreateSession(ctx context.Context, userID string, refreshT
 	return nil
 }
 
+// used in auth_service.go
 func (r *SessionRepo) GetActiveSessionByTokenHash(ctx context.Context, refreshTokenHash string) (*models.Session, error) {
 	var session models.Session
 	err := r.db.QueryRowContext(ctx, `
@@ -47,7 +47,7 @@ func (r *SessionRepo) GetActiveSessionByTokenHash(ctx context.Context, refreshTo
 		&session.RevokedAt,
 	)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get active session: %v", err)
+		return nil, fmt.Errorf("failed to get active session: %w", err)
 	}
 
 	return &session, nil
@@ -63,7 +63,7 @@ func (r *SessionRepo) GetActiveSessionsByUserID(ctx context.Context, userID stri
 		ORDER BY created_at DESC
 	`, userID)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get active user sessions: %v", err)
+		return nil, fmt.Errorf("failed to get active user sessions: %w", err)
 	}
 	defer rows.Close()
 
@@ -78,17 +78,18 @@ func (r *SessionRepo) GetActiveSessionsByUserID(ctx context.Context, userID stri
 			&session.CreatedAt,
 			&session.RevokedAt,
 		); err != nil {
-			return nil, fmt.Errorf("failed to scan session: %v", err)
+			return nil, fmt.Errorf("failed to scan session: %w", err)
 		}
 		sessions = append(sessions, session)
 	}
 	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("failed to iterate sessions: %v", err)
+		return nil, fmt.Errorf("failed to iterate sessions: %w", err)
 	}
 
 	return sessions, nil
 }
 
+// used in auth_service.go
 func (r *SessionRepo) RotateRefreshToken(ctx context.Context, currentTokenHash string, newTokenHash string, expiresAt time.Time) error {
 	result, err := r.db.ExecContext(ctx, `
 		UPDATE sessions
@@ -98,12 +99,12 @@ func (r *SessionRepo) RotateRefreshToken(ctx context.Context, currentTokenHash s
 			AND expires_at > CURRENT_TIMESTAMP
 	`, newTokenHash, expiresAt, currentTokenHash)
 	if err != nil {
-		return fmt.Errorf("failed to rotate refresh token: %v", err)
+		return fmt.Errorf("failed to rotate refresh token: %w", err)
 	}
 
 	rowsAffected, err := result.RowsAffected()
 	if err != nil {
-		return fmt.Errorf("failed to get rotated session rows count: %v", err)
+		return fmt.Errorf("failed to get rotated session rows count: %w", err)
 	}
 	if rowsAffected == 0 {
 		return fmt.Errorf("failed to rotate refresh token: %w", sql.ErrNoRows)
@@ -112,14 +113,25 @@ func (r *SessionRepo) RotateRefreshToken(ctx context.Context, currentTokenHash s
 	return nil
 }
 
+// used in auth_service.go
 func (r *SessionRepo) RevokeSessionByTokenHash(ctx context.Context, refreshTokenHash string) error {
-	_, err := r.db.ExecContext(ctx, `
+	result, err := r.db.ExecContext(ctx, `
 		UPDATE sessions
 		SET revoked_at = CURRENT_TIMESTAMP
-		WHERE refresh_token_hash = $1 AND revoked_at IS NULL
+		WHERE refresh_token_hash = $1
+			AND revoked_at IS NULL
+			AND expires_at > CURRENT_TIMESTAMP
 	`, refreshTokenHash)
 	if err != nil {
-		return fmt.Errorf("failed to revoke session: %v", err)
+		return fmt.Errorf("failed to revoke session: %w", err)
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("failed to get revoked session rows count: %w", err)
+	}
+	if rowsAffected == 0 {
+		return fmt.Errorf("failed to revoke session: %w", sql.ErrNoRows)
 	}
 
 	return nil
@@ -132,7 +144,7 @@ func (r *SessionRepo) RevokeAllUserSessions(ctx context.Context, userID string) 
 		WHERE user_id = $1 AND revoked_at IS NULL
 	`, userID)
 	if err != nil {
-		return fmt.Errorf("failed to revoke all user sessions: %v", err)
+		return fmt.Errorf("failed to revoke all user sessions: %w", err)
 	}
 
 	return nil
@@ -145,7 +157,7 @@ func (r *SessionRepo) DeleteExpiredSessions(ctx context.Context) error {
 			OR revoked_at IS NOT NULL
 	`)
 	if err != nil {
-		return fmt.Errorf("failed to delete expired sessions: %v", err)
+		return fmt.Errorf("failed to delete expired sessions: %w", err)
 	}
 
 	return nil
