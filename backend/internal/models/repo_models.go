@@ -11,6 +11,15 @@ type User struct {
 	CreatedAt time.Time
 }
 
+type Session struct {
+	ID               string
+	UserID           string
+	RefreshTokenHash string
+	ExpiresAt        time.Time
+	CreatedAt        time.Time
+	RevokedAt        *time.Time
+}
+
 type Team struct {
 	ID        string
 	Name      string

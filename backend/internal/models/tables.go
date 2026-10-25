@@ -12,6 +12,16 @@ const (
 			created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 		);`
 
+	SESSION_TABLE = `
+		CREATE TABLE IF NOT EXISTS sessions (
+			id UUID PRIMARY KEY,
+			user_id UUID NOT NULL REFERENCES "user" (id) ON DELETE CASCADE,
+			refresh_token_hash VARCHAR(64) NOT NULL,
+			expires_at TIMESTAMPTZ NOT NULL,
+			created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+			revoked_at TIMESTAMPTZ
+		);`
+
 	TEAM_TABLE = `
 		CREATE TABLE IF NOT EXISTS team (
 			id UUID PRIMARY KEY,
@@ -103,6 +113,18 @@ const (
 	USER_EMAIL_INDEX = `
 		CREATE UNIQUE INDEX IF NOT EXISTS user_email_idx
 		ON "user" (email);`
+
+	SESSION_REFRESH_TOKEN_HASH_INDEX = `
+		CREATE UNIQUE INDEX IF NOT EXISTS session_refresh_token_hash_idx
+		ON sessions (refresh_token_hash);`
+
+	SESSION_USER_ID_INDEX = `
+		CREATE INDEX IF NOT EXISTS session_user_id_idx
+		ON sessions (user_id);`
+
+	SESSION_EXPIRES_AT_INDEX = `
+		CREATE INDEX IF NOT EXISTS session_expires_at_idx
+		ON sessions (expires_at);`
 
 	TEAM_MEMBER_USER_ID_INDEX = `
 		CREATE INDEX IF NOT EXISTS team_member_user_id_idx

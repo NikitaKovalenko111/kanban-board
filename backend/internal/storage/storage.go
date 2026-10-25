@@ -57,6 +57,7 @@ func (s *Storage) CreateTables() error {
 		query string
 	}{
 		{name: "user", query: models.USER_TABLE},
+		{name: "sessions", query: models.SESSION_TABLE},
 		{name: "team", query: models.TEAM_TABLE},
 		{name: "team_member", query: models.TEAM_MEMBER_TABLE},
 		{name: "project", query: models.PROJECT_TABLE},
@@ -94,6 +95,9 @@ func (s *Storage) CreateIndexes() error {
 	}{
 		{name: "user_username_idx", query: models.USER_USERNAME_INDEX},
 		{name: "user_email_idx", query: models.USER_EMAIL_INDEX},
+		{name: "session_refresh_token_hash_idx", query: models.SESSION_REFRESH_TOKEN_HASH_INDEX},
+		{name: "session_user_id_idx", query: models.SESSION_USER_ID_INDEX},
+		{name: "session_expires_at_idx", query: models.SESSION_EXPIRES_AT_INDEX},
 		{name: "team_member_user_id_idx", query: models.TEAM_MEMBER_USER_ID_INDEX},
 		{name: "project_team_id_idx", query: models.PROJECT_TEAM_ID_INDEX},
 		{name: "board_project_id_idx", query: models.BOARD_PROJECT_ID_INDEX},

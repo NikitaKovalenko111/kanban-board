@@ -8,6 +8,7 @@ import (
 	board_column_repo "kanban-board/internal/storage/repositories/board_column"
 	comment_repo "kanban-board/internal/storage/repositories/comment"
 	project_repo "kanban-board/internal/storage/repositories/project"
+	session_repo "kanban-board/internal/storage/repositories/session"
 	task_repo "kanban-board/internal/storage/repositories/task"
 	task_assignee_repo "kanban-board/internal/storage/repositories/task_assignee"
 	team_repo "kanban-board/internal/storage/repositories/team"
@@ -23,6 +24,7 @@ type Repositories struct {
 	BoardRepo        *board_repo.BoardRepo
 	BoardColumnRepo  *board_column_repo.BoardColumnRepo
 	TaskRepo         *task_repo.TaskRepo
+	SessionRepo      *session_repo.SessionRepo
 	TaskAssigneeRepo *task_assignee_repo.TaskAssigneeRepo
 	CommentRepo      *comment_repo.CommentRepo
 	AttachmentRepo   *attachment_repo.AttachmentRepo
@@ -37,6 +39,7 @@ func Init(storage *storage.Storage, ctx context.Context) *Repositories {
 		BoardRepo:        board_repo.Init(storage.Db, ctx),
 		BoardColumnRepo:  board_column_repo.Init(storage.Db, ctx),
 		TaskRepo:         task_repo.Init(storage.Db, ctx),
+		SessionRepo:      session_repo.Init(storage.Db, ctx),
 		TaskAssigneeRepo: task_assignee_repo.Init(storage.Db, ctx),
 		CommentRepo:      comment_repo.Init(storage.Db, ctx),
 		AttachmentRepo:   attachment_repo.Init(storage.Db, ctx),
