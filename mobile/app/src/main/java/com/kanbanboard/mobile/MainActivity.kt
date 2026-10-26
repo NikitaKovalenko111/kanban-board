@@ -30,6 +30,8 @@ import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.unit.dp
 import com.kanbanboard.mobile.data.ReminderScheduler
 import com.kanbanboard.mobile.data.SharedPreferencesAppStorage
+import com.kanbanboard.mobile.data.BackendClient
+import com.kanbanboard.mobile.data.RemoteWorkspaceGateway
 import com.kanbanboard.mobile.ui.AppViewModel
 import com.kanbanboard.mobile.ui.KanbanApp
 import com.kanbanboard.mobile.ui.LocalDeviceCornerShape
@@ -41,7 +43,9 @@ class MainActivity : ComponentActivity() {
         object : ViewModelProvider.Factory {
             @Suppress("UNCHECKED_CAST")
             override fun <T : ViewModel> create(modelClass: Class<T>): T =
-                AppViewModel(storage = SharedPreferencesAppStorage(applicationContext)) as T
+                AppViewModel(storage = SharedPreferencesAppStorage(applicationContext),
+                    remote = BuildConfig.API_BASE_URL.takeIf { it.isNotBlank() }
+                        ?.let { RemoteWorkspaceGateway(BackendClient.create(it)) }) as T
         }
     }
 
@@ -51,7 +55,7 @@ class MainActivity : ComponentActivity() {
         ReminderScheduler.ensureChannel(this)
         SharedPreferencesAppStorage(this).events().forEach { ReminderScheduler.schedule(this, it) }
         setContent {
-            KanbanTheme(darkTheme = appViewModel.uiState.theme == AppTheme.DARK) {
+            KanbanTheme(theme = appViewModel.uiState.theme) {
                 DeviceRoundedSurface { KanbanApp(appViewModel) }
             }
         }

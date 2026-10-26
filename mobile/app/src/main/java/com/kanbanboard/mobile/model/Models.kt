@@ -35,6 +35,18 @@ data class Task(
     val completedAt: String? = null,
     val teamId: Long = 1,
     val projectId: Long = 1,
+    val assigneeId: Long? = null,
+    val dueAt: String? = null,
+    val history: List<TaskHistoryEntry> = emptyList(),
+)
+
+data class TaskHistoryEntry(
+    val id: String,
+    val action: String,
+    val actorId: Long?,
+    val actorName: String,
+    val occurredAt: String,
+    val comment: String? = null,
 )
 
 enum class UserRole { LEAD, MEMBER }
@@ -47,6 +59,7 @@ data class User(
     val position: String,
     val active: Boolean = true,
     val joinedAt: String,
+    val contact: String? = null,
 )
 
 data class LoginCredentials(val login: String, val password: String)
@@ -60,7 +73,13 @@ data class Team(
     val memberIds: Set<Long>,
 )
 
-data class Project(val id: Long, val teamId: Long, val name: String)
+data class Project(
+    val id: Long,
+    val teamId: Long,
+    val name: String,
+    val description: String = "",
+    val memberIds: Set<Long> = emptySet(),
+)
 
 data class Lesson(
     val date: String,
@@ -96,6 +115,7 @@ data class TeamEvent(
     val reminderMinutes: Set<Int> = emptySet(),
     val ownerId: Long? = null,
     val teamId: Long = 1,
+    val location: String = "",
 )
 
 data class EventType(
@@ -106,4 +126,4 @@ data class EventType(
     val defaultReminders: Set<Int> = emptySet(),
 )
 
-enum class AppTheme { LIGHT, DARK }
+enum class AppTheme { LIGHT, DARK, AMOLED }

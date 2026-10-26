@@ -6,6 +6,7 @@ import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
+import com.kanbanboard.mobile.model.AppTheme
 
 val AppBackground = Color(0xFFF5F7FB)
 val AppSurface = Color(0xFFFFFFFF)
@@ -39,13 +40,23 @@ private val DarkColors = darkColorScheme(
     onSurface = Color(0xFFF2F3F7),
 )
 
+private val AmoledColors = darkColorScheme(
+    primary = Color(0xFFAEB7FF),
+    background = Color.Black,
+    surface = Color.Black,
+    surfaceVariant = Color(0xFF101116),
+    onBackground = Color.White,
+    onSurface = Color.White,
+    onSurfaceVariant = Color(0xFFC3C5CF),
+)
+
 @Composable
 fun KanbanTheme(
-    darkTheme: Boolean = isSystemInDarkTheme(),
+    theme: AppTheme = if (isSystemInDarkTheme()) AppTheme.DARK else AppTheme.LIGHT,
     content: @Composable () -> Unit,
 ) {
     MaterialTheme(
-        colorScheme = if (darkTheme) DarkColors else LightColors,
+        colorScheme = when (theme) { AppTheme.LIGHT -> LightColors; AppTheme.DARK -> DarkColors; AppTheme.AMOLED -> AmoledColors },
         content = content,
     )
 }

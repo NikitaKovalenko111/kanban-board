@@ -7,6 +7,7 @@ import com.kanbanboard.mobile.model.Lesson
 import com.kanbanboard.mobile.model.LessonKind
 import com.kanbanboard.mobile.model.LoginCredentials
 import com.kanbanboard.mobile.model.Task
+import com.kanbanboard.mobile.model.TaskHistoryEntry
 import com.kanbanboard.mobile.model.TaskStatus
 import com.kanbanboard.mobile.model.TeamEvent
 import com.kanbanboard.mobile.model.User
@@ -62,9 +63,11 @@ class FakeKanbanRepository : KanbanRepository {
     )
 
     override fun projects(): List<Project> = listOf(
-        Project(1, 1, "Kanban Board"), Project(2, 1, "Хакатон"),
-        Project(3, 2, "Мобильная разработка"), Project(4, 2, "Лабораторные"),
-        Project(5, 3, "Исследования"),
+        Project(1, 1, "Kanban Board", "Основное приложение команды.", setOf(1, 2, 3, 4, 5, 6, 7, 8, 9)),
+        Project(2, 1, "Хакатон", "Подготовка и демонстрация проекта.", setOf(1, 2, 6)),
+        Project(3, 2, "Мобильная разработка", "Android и интеграция с API.", setOf(1, 2, 4, 6)),
+        Project(4, 2, "Лабораторные", "Учебные задания.", setOf(1, 4)),
+        Project(5, 3, "Исследования", "Данные и автоматизация.", setOf(3, 5)),
     )
 
     override fun tasks(): List<Task> = listOf(
@@ -77,6 +80,11 @@ class FakeKanbanRepository : KanbanRepository {
             deadline = LocalDate.now().plusDays(2).toString(),
             attachments = listOf(Attachment("a1", "mobile-requirements.pdf", "840 КБ")),
             comments = listOf(Comment("c1", "Никита", "Сохраняем единый стиль с веб-версией.", "Сегодня, 10:20")),
+            assigneeId = 6,
+            history = listOf(
+                TaskHistoryEntry("h101-1", "Создана", 8, "Никита", "2026-10-20T10:00:00+03:00"),
+                TaskHistoryEntry("h101-2", "Взята в работу", 6, "Самир Ахмедов", "2026-10-21T11:30:00+03:00"),
+            ),
         ),
         Task(
             id = 102,
@@ -119,6 +127,7 @@ class FakeKanbanRepository : KanbanRepository {
         Task(107, "Собрать UI-kit", "Согласовать состояния кнопок, полей и типографику.", TaskStatus.DONE, "Мария Волкова", "11 окт", completedAt = "11.10.2026"),
         Task(108, "Экран расписания", "Подготовить мобильное отображение расписания групп.", TaskStatus.WORKING, "Мария Волкова", LocalDate.now().plusDays(2).toString(), teamId = 2, projectId = 3),
         Task(109, "Подготовить демо хакатона", "Собрать сценарий демонстрации.", TaskStatus.WAITING, "Мария Волкова", LocalDate.now().plusDays(5).toString(), projectId = 2),
+        Task(110, "Проверить мобильный сценарий", "Свободная задача для участника команды.", TaskStatus.WAITING, "Не назначен", LocalDate.now().plusDays(3).toString()),
     )
 
     override fun lessons(group: String): List<Lesson> = if (group == "203") {

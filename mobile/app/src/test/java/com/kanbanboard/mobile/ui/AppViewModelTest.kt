@@ -129,4 +129,43 @@ class AppViewModelTest {
         assertEquals("15:30", event.endTime)
         assertEquals("Описание", event.description)
     }
+
+    @Test
+    fun `return for rework requires comment and writes history`() {
+        val viewModel = AppViewModel()
+        viewModel.login("alexey", "lead123")
+        viewModel.moveTask(103, TaskStatus.WORKING)
+        assertEquals(TaskStatus.CHECKING, viewModel.uiState.tasks.first { it.id == 103L }.status)
+        viewModel.moveTask(103, TaskStatus.WORKING, "Исправьте API-контракт")
+        val task = viewModel.uiState.tasks.first { it.id == 103L }
+        assertEquals(TaskStatus.WORKING, task.status)
+        assertEquals("Исправьте API-контракт", task.history.last().comment)
+    }
+
+    @Test
+    fun `custom event type and location are editable`() {
+        val viewModel = AppViewModel()
+        viewModel.login("maria", "member123")
+        val type = viewModel.addEventType("Старое", 0xFF6576DF)!!
+        assertEquals(true, viewModel.updateEventType(type.id, "Новое", 0xFF38A585))
+        assertEquals("Новое", viewModel.uiState.eventTypes.first { it.id == type.id }.title)
+        val event = viewModel.createEvent("Встреча", "2030-01-02", "14:00", EventVisibility.PERSONAL,
+            type.id, setOf(75), "15:00", "Описание", "ауд. 101")!!
+        assertEquals("ауд. 101", event.location)
+        viewModel.setTheme(AppTheme.AMOLED)
+        assertEquals(AppTheme.AMOLED, viewModel.uiState.theme)
+    }
+
+    @Test
+    fun `member can take free task but not another assigned task`() {
+        val viewModel = AppViewModel()
+        viewModel.login("maria", "member123")
+        viewModel.takeTask(101)
+        assertEquals("Самир Ахмедов", viewModel.uiState.tasks.first { it.id == 101L }.assignee)
+        viewModel.takeTask(110)
+        val task = viewModel.uiState.tasks.first { it.id == 110L }
+        assertEquals("Мария Волкова", task.assignee)
+        assertEquals(TaskStatus.WORKING, task.status)
+        assertEquals("Взята в работу", task.history.last().action)
+    }
 }

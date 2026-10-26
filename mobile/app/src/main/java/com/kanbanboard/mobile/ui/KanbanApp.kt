@@ -1,6 +1,7 @@
 package com.kanbanboard.mobile.ui
 
 import android.app.DatePickerDialog
+import android.app.TimePickerDialog
 import android.Manifest
 import android.content.pm.PackageManager
 import android.os.Build
@@ -10,6 +11,7 @@ import androidx.compose.animation.AnimatedContentTransitionScope
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -19,6 +21,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
@@ -48,6 +51,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.AccountCircle
 import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.Groups
+import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.ViewKanban
 import androidx.compose.material3.NavigationBar
@@ -59,6 +63,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -72,7 +77,9 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.window.DialogProperties
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
@@ -84,9 +91,11 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
+import androidx.navigation.compose.dialog
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.kanbanboard.mobile.model.EventVisibility
+import com.kanbanboard.mobile.model.Attachment
 import com.kanbanboard.mobile.data.ReminderScheduler
 import com.kanbanboard.mobile.model.Lesson
 import com.kanbanboard.mobile.model.Task
@@ -111,7 +120,7 @@ private enum class HomeSection(val title: String, val icon: ImageVector) {
     BOARD("Доска", Icons.Filled.ViewKanban),
     SCHEDULE("Расписание", Icons.Filled.CalendarMonth),
     HISTORY("История", Icons.Filled.History),
-    MEMBERS("Участники", Icons.Filled.Groups),
+    PROJECTS("Проекты", Icons.Filled.Folder),
     PROFILE("Профиль", Icons.Filled.AccountCircle),
 }
 
@@ -121,29 +130,41 @@ fun KanbanApp(viewModel: AppViewModel = viewModel()) {
     val context = LocalContext.current
     val notificationPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { }
 
+    viewModel.uiState.apiError?.let { message ->
+        androidx.compose.material3.AlertDialog(onDismissRequest = viewModel::clearApiError,
+            title = { Text("Ошибка сервера") }, text = { Text(message) },
+            confirmButton = { TextButton(onClick = viewModel::clearApiError) { Text("Понятно") } })
+    }
+
     NavHost(
         navController = navController,
         startDestination = if (viewModel.uiState.user == null) "login" else "home",
-        enterTransition = { slideIntoContainer(AnimatedContentTransitionScope.SlideDirection.Left, tween(280)) },
-        exitTransition = { slideOutOfContainer(AnimatedContentTransitionScope.SlideDirection.Left, tween(280)) },
-        popEnterTransition = { slideIntoContainer(AnimatedContentTransitionScope.SlideDirection.Right, tween(280)) },
-        popExitTransition = { slideOutOfContainer(AnimatedContentTransitionScope.SlideDirection.Right, tween(280)) },
+        enterTransition = { slideIntoContainer(AnimatedContentTransitionScope.SlideDirection.Left, tween(200)) },
+        exitTransition = { slideOutOfContainer(AnimatedContentTransitionScope.SlideDirection.Left, tween(200)) },
+        popEnterTransition = { slideIntoContainer(AnimatedContentTransitionScope.SlideDirection.Right, tween(200)) },
+        popExitTransition = { slideOutOfContainer(AnimatedContentTransitionScope.SlideDirection.Right, tween(200)) },
     ) {
         composable("login") {
+            LaunchedEffect(viewModel.uiState.user) {
+                if (viewModel.uiState.user != null) navController.navigate("home") {
+                    popUpTo("login") { inclusive = true }
+                }
+            }
             DestinationSurface { LoginScreen(
                 error = viewModel.uiState.loginError,
-                onLogin = { login, password ->
-                    viewModel.login(login, password)
-                    if (viewModel.uiState.user != null) {
-                        navController.navigate("home") { popUpTo("login") { inclusive = true } }
-                    }
-                },
+                loading = viewModel.uiState.loginLoading,
+                onLogin = viewModel::login,
             ) }
         }
         composable("home") {
+            LaunchedEffect(viewModel.uiState.user) {
+                if (viewModel.uiState.user == null) navController.navigate("login") {
+                    popUpTo("home") { inclusive = true }
+                }
+            }
             DestinationSurface { HomeScreen(
                 viewModel = viewModel,
-                onTaskClick = { navController.navigate("task/${it.id}") },
+                onTaskClick = { viewModel.loadTaskHistory(it.id); navController.navigate("task/${it.id}") },
                 onMemberClick = { navController.navigate("member/${it.id}") },
                 onCreateTask = { navController.navigate("create-task") },
                 onManageTeam = { navController.navigate("team") },
@@ -151,36 +172,49 @@ fun KanbanApp(viewModel: AppViewModel = viewModel()) {
                 onEventClick = { navController.navigate("event/$it") },
                 onOpenSettings = { navController.navigate("settings") },
                 onOpenTeams = { navController.navigate("teams") },
-                onLogout = {
-                    viewModel.logout()
-                    navController.navigate("login") { popUpTo("home") { inclusive = true } }
-                },
+                onProjectClick = { navController.navigate("project-details/$it") },
+                onLogout = viewModel::logout,
             ) }
         }
-        composable(
+        dialog(
             route = "task/{taskId}",
             arguments = listOf(navArgument("taskId") { type = NavType.LongType }),
+            dialogProperties = DialogProperties(usePlatformDefaultWidth = false),
         ) { entry ->
-            val taskId = entry.arguments?.getLong("taskId") ?: return@composable
+            val taskId = entry.arguments?.getLong("taskId") ?: return@dialog
             val task = viewModel.uiState.tasks.firstOrNull { it.id == taskId }
-            DestinationSurface { if (task == null) {
+            var uploadResult by remember { mutableStateOf(false) }
+            var pendingDownload by remember { mutableStateOf<String?>(null) }
+            val pickFile = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+                if (uri != null) viewModel.uploadAttachment(taskId, uri, context, uploadResult)
+            }
+            val saveFile = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/octet-stream")) { uri ->
+                if (uri != null) pendingDownload?.let { viewModel.downloadAttachment(it, uri, context) }
+                pendingDownload = null
+            }
+            Surface(Modifier.fillMaxWidth(0.94f).fillMaxHeight(0.88f), shape = RoundedCornerShape(24.dp),
+                color = MaterialTheme.colorScheme.background) { if (task == null) {
                 EmptyState("Задача не найдена")
             } else {
                 TaskDetailScreen(
                     task = task,
                     currentUser = viewModel.uiState.user,
                     onBack = navController::popBackStack,
-                    onMove = { viewModel.moveTask(taskId, it) },
+                    onMove = { status, note -> viewModel.moveTask(taskId, status, note) },
+                    onTakeFree = { viewModel.takeTask(taskId) },
                     onComment = { viewModel.addComment(taskId, it) },
                     onAssigneeClick = { name -> viewModel.uiState.members.firstOrNull { it.name == name }?.let { navController.navigate("member/${it.id}") } },
+                    onUploadSource = { uploadResult = false; pickFile.launch(arrayOf("*/*")) },
+                    onUploadResult = { uploadResult = true; pickFile.launch(arrayOf("*/*")) },
+                    onDownload = { file -> pendingDownload = file.id; saveFile.launch(file.name) },
                 )
             } }
         }
         composable("create-task") {
             DestinationSurface { CreateTaskScreen(
                 onBack = navController::popBackStack,
-                onCreate = { title, description, deadline ->
-                    viewModel.createTask(title, description, deadline)
+                onCreate = { title, description, deadline, deadlineTime ->
+                    viewModel.createTask(title, description, deadline, deadlineTime)
                     navController.popBackStack()
                 },
             ) }
@@ -235,6 +269,18 @@ fun KanbanApp(viewModel: AppViewModel = viewModel()) {
                 onTeamClick = { navController.navigate("team-details/${it.id}") },
             ) }
         }
+        composable(route = "project-details/{projectId}", arguments = listOf(navArgument("projectId") { type = NavType.LongType })) { entry ->
+            val projectId = entry.arguments?.getLong("projectId") ?: return@composable
+            val project = viewModel.uiState.projects.firstOrNull { it.id == projectId && it.teamId == viewModel.uiState.selectedTeamId }
+            val team = viewModel.uiState.teams.firstOrNull { it.id == viewModel.uiState.selectedTeamId }
+            DestinationSurface { ProjectDetailsScreen(
+                project, viewModel.uiState.members.filter { it.id in (team?.memberIds ?: emptySet()) }, viewModel.uiState.user,
+                onBack = navController::popBackStack,
+                onSelect = { viewModel.selectProject(it); navController.popBackStack() },
+                onSave = viewModel::updateProject,
+                onSetMember = viewModel::setProjectMember,
+            ) }
+        }
         composable(
             route = "team-details/{teamId}",
             arguments = listOf(navArgument("teamId") { type = NavType.LongType }),
@@ -263,7 +309,7 @@ private fun DestinationSurface(content: @Composable () -> Unit) {
 }
 
 @Composable
-private fun LoginScreen(error: String?, onLogin: (String, String) -> Unit) {
+private fun LoginScreen(error: String?, loading: Boolean, onLogin: (String, String) -> Unit) {
     var login by rememberSaveable { mutableStateOf("") }
     var password by rememberSaveable { mutableStateOf("") }
     Box(
@@ -315,10 +361,11 @@ private fun LoginScreen(error: String?, onLogin: (String, String) -> Unit) {
                 Spacer(Modifier.height(16.dp))
                 Button(
                     onClick = { onLogin(login, password) },
+                    enabled = !loading && login.isNotBlank() && password.isNotBlank(),
                     modifier = Modifier.fillMaxWidth().height(52.dp),
                     shape = RoundedCornerShape(12.dp),
                 ) {
-                    Text("Войти", fontWeight = FontWeight.SemiBold)
+                    Text(if (loading) "Подключаемся…" else "Войти", fontWeight = FontWeight.SemiBold)
                 }
                 Spacer(Modifier.height(14.dp))
                 Text(
@@ -360,9 +407,11 @@ private fun HomeScreen(
     onEventClick: (Long) -> Unit,
     onOpenSettings: () -> Unit,
     onOpenTeams: () -> Unit,
+    onProjectClick: (Long) -> Unit,
     onLogout: () -> Unit,
 ) {
     var selectedSection by rememberSaveable { mutableIntStateOf(0) }
+    LaunchedEffect(viewModel.uiState.selectedProjectId) { selectedSection = HomeSection.BOARD.ordinal }
     val section = HomeSection.entries[selectedSection]
     val activeTeam = viewModel.uiState.teams.firstOrNull { it.id == viewModel.uiState.selectedTeamId }
     val teamTasks = viewModel.uiState.tasks.filter { it.teamId == viewModel.uiState.selectedTeamId }
@@ -405,6 +454,8 @@ private fun HomeScreen(
                 canCreate = viewModel.uiState.user?.role == UserRole.LEAD && activeTeam != null,
                 onCreate = onCreateTask,
                 onAssigneeClick = { name -> teamMembers.firstOrNull { it.name == name }?.let(onMemberClick) },
+                onQuickMove = { task, status -> viewModel.moveTask(task.id, status) },
+                currentUser = viewModel.uiState.user,
                 modifier = Modifier.padding(padding),
             )
             HomeSection.SCHEDULE -> ScheduleTimelineScreen(
@@ -417,11 +468,11 @@ private fun HomeScreen(
             HomeSection.HISTORY -> HistoryScreen(teamTasks, onTaskClick,
                 onAssigneeClick = { name -> teamMembers.firstOrNull { it.name == name }?.let(onMemberClick) },
                 modifier = Modifier.padding(padding))
-            HomeSection.MEMBERS -> MembersScreen(
-                members = teamMembers,
-                canManage = viewModel.uiState.user?.role == UserRole.LEAD && activeTeam != null,
-                onMemberClick = onMemberClick,
-                onManage = onManageTeam,
+            HomeSection.PROJECTS -> ProjectsScreen(
+                projects = viewModel.uiState.projects.filter { it.teamId == viewModel.uiState.selectedTeamId },
+                user = viewModel.uiState.user,
+                selectedProjectId = viewModel.uiState.selectedProjectId,
+                onProjectClick = onProjectClick,
                 modifier = Modifier.padding(padding),
             )
             HomeSection.PROFILE -> ProfileScreen(
@@ -430,6 +481,10 @@ private fun HomeScreen(
                 activeTeam = activeTeam,
                 onOpenTeams = onOpenTeams,
                 onOpenSettings = onOpenSettings,
+                members = teamMembers,
+                canManage = viewModel.uiState.user?.role == UserRole.LEAD && activeTeam != null,
+                onMemberClick = onMemberClick,
+                onManageTeam = onManageTeam,
                 onLogout = onLogout,
                 modifier = Modifier.padding(padding),
             )
@@ -478,6 +533,8 @@ private fun BoardScreen(
     canCreate: Boolean,
     onCreate: () -> Unit,
     onAssigneeClick: (String) -> Unit,
+    onQuickMove: (Task, TaskStatus) -> Unit,
+    currentUser: User?,
     modifier: Modifier = Modifier,
 ) {
     var selectedStatus by rememberSaveable { mutableStateOf(TaskStatus.WORKING) }
@@ -527,16 +584,34 @@ private fun BoardScreen(
                 contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 4.dp, bottom = 28.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
-                items(visibleTasks, key = { it.id }) { task -> TaskCard(task, { onTaskClick(task) }, { onAssigneeClick(task.assignee) }) }
+                items(visibleTasks, key = { it.id }) { task ->
+                    TaskCard(task, { onTaskClick(task) }, { onAssigneeClick(task.assignee) },
+                        canSwipe = task.assigneeId == currentUser?.id || task.assignee == currentUser?.name) { direction ->
+                        val next = when {
+                            direction > 0 && task.status == TaskStatus.WAITING -> TaskStatus.WORKING
+                            direction < 0 && task.status == TaskStatus.WORKING -> TaskStatus.CHECKING
+                            else -> null
+                        }
+                        next?.let { onQuickMove(task, it) }
+                    }
+                }
             }
         }
     }
 }
 
 @Composable
-private fun TaskCard(task: Task, onClick: () -> Unit, onAssigneeClick: () -> Unit = {}) {
+private fun TaskCard(task: Task, onClick: () -> Unit, onAssigneeClick: () -> Unit = {},
+    canSwipe: Boolean = false, onSwipe: (Int) -> Unit = {}) {
     Card(
-        modifier = Modifier.fillMaxWidth().clickable(onClick = onClick),
+        modifier = Modifier.fillMaxWidth().then(if (canSwipe) Modifier.pointerInput(task.id, task.status) {
+            var distance = 0f
+            detectHorizontalDragGestures(onHorizontalDrag = { _, amount -> distance += amount },
+                onDragEnd = {
+                    if (kotlin.math.abs(distance) > 90.dp.toPx()) onSwipe(if (distance > 0) 1 else -1)
+                    distance = 0f
+                })
+        } else Modifier).clickable(onClick = onClick),
         shape = RoundedCornerShape(14.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
@@ -558,8 +633,12 @@ private fun TaskCard(task: Task, onClick: () -> Unit, onAssigneeClick: () -> Uni
                     Text(task.assignee, fontSize = 12.sp)
                 }
                 Surface(color = Color(0xFFF5F6F8), shape = RoundedCornerShape(8.dp)) {
-                    Text(task.deadline, color = AppMuted, fontSize = 11.sp, modifier = Modifier.padding(horizontal = 8.dp, vertical = 5.dp))
+                    Text(displayDeadline(task), color = AppMuted, fontSize = 11.sp, modifier = Modifier.padding(horizontal = 8.dp, vertical = 5.dp))
                 }
+            }
+            if (canSwipe && (task.status == TaskStatus.WAITING || task.status == TaskStatus.WORKING)) {
+                Text(if (task.status == TaskStatus.WAITING) "Свайп вправо — взять в работу" else "Свайп влево — сдать на проверку",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 10.sp)
             }
         }
     }
@@ -588,9 +667,9 @@ private fun HistoryScreen(tasks: List<Task>, onTaskClick: (Task) -> Unit, onAssi
     val completed = tasks.filter { it.status == TaskStatus.DONE }
     val assignees = listOf("Все") + completed.map { it.assignee }.distinct()
     val visible = completed.filter { task ->
-        val matchesPeriod = if (periodDays == 0 || task.completedAt == null) true else {
+        val matchesPeriod = if (periodDays == 0) true else {
             runCatching {
-                val date = LocalDate.parse(task.completedAt, DateTimeFormatter.ofPattern("dd.MM.yyyy"))
+                val date = LocalDate.parse(task.completedAt ?: return@runCatching false, DateTimeFormatter.ofPattern("dd.MM.yyyy"))
                 ChronoUnit.DAYS.between(date, LocalDate.now()) in 0..periodDays.toLong()
             }.getOrDefault(false)
         }
@@ -647,6 +726,9 @@ private fun HistoryScreen(tasks: List<Task>, onTaskClick: (Task) -> Unit, onAssi
                             Text(task.assignee, color = AppPrimary, fontSize = 12.sp,
                                 modifier = Modifier.clickable { onAssigneeClick(task.assignee) })
                             Text("Результат: ${task.resultAttachments.size} файл(а)", color = AppPrimary, fontSize = 11.sp)
+                            task.history.lastOrNull()?.let { last ->
+                                Text("${last.action} · ${last.actorName} · ${last.occurredAt}", color = AppMuted, fontSize = 11.sp)
+                            }
                         }
                     }
                 }
@@ -702,8 +784,8 @@ private fun MemberCard(member: User, onClick: () -> Unit) {
             Spacer(Modifier.width(12.dp))
             Column(Modifier.weight(1f)) {
                 Text(member.name, fontWeight = FontWeight.SemiBold)
-                Text(member.position, color = AppMuted, fontSize = 12.sp)
-                Text("@${member.login}", color = AppMuted, fontSize = 11.sp)
+                Text("${if (member.role == UserRole.LEAD) "Тимлид" else "Участник"} · ${member.position}", color = AppMuted, fontSize = 12.sp)
+                Text(member.contact ?: "Контакт не указан", color = AppMuted, fontSize = 11.sp)
             }
             Surface(
                 color = if (member.active) Color(0xFFEAF7EF) else Color(0xFFFFF0F1),
@@ -748,6 +830,7 @@ private fun MemberProfileScreen(member: User?, tasks: List<Task>, onBack: () -> 
                     Text(member.name, fontSize = 23.sp, fontWeight = FontWeight.Bold)
                     Text(member.position, color = AppMuted)
                     Text("@${member.login}", color = AppMuted, fontSize = 12.sp)
+                    member.contact?.let { Text(it, color = AppMuted, fontSize = 12.sp) }
                     Spacer(Modifier.height(10.dp))
                     StatusBadge(member.active)
                 }
@@ -790,10 +873,11 @@ private fun StatusBadge(active: Boolean) {
 }
 
 @Composable
-private fun CreateTaskScreen(onBack: () -> Unit, onCreate: (String, String, String) -> Unit) {
+private fun CreateTaskScreen(onBack: () -> Unit, onCreate: (String, String, String, String) -> Unit) {
     var title by rememberSaveable { mutableStateOf("") }
     var description by rememberSaveable { mutableStateOf("") }
     var deadline by rememberSaveable { mutableStateOf("") }
+    var deadlineTime by rememberSaveable { mutableStateOf("18:00") }
     val context = LocalContext.current
     val calendar = remember { Calendar.getInstance() }
     val openDatePicker = {
@@ -822,9 +906,16 @@ private fun CreateTaskScreen(onBack: () -> Unit, onCreate: (String, String, Stri
             ) {
                 Text(if (deadline.isBlank()) "Выбрать дедлайн: день, месяц, год" else "Дедлайн: $deadline")
             }
+            OutlinedButton(onClick = {
+                val initial = java.time.LocalTime.parse(deadlineTime)
+                TimePickerDialog(context, { _, hour, minute -> deadlineTime = "%02d:%02d".format(hour, minute) },
+                    initial.hour, initial.minute, true).show()
+            }, modifier = Modifier.fillMaxWidth().height(56.dp), shape = RoundedCornerShape(14.dp)) {
+                Text("Время дедлайна: $deadlineTime")
+            }
             MutedPanel("Прикрепление исходников будет подключено через системный выбор файлов после согласования backend API.")
             Button(
-                onClick = { onCreate(title, description, deadline) },
+                onClick = { onCreate(title, description, deadline, deadlineTime) },
                 enabled = title.isNotBlank() && description.isNotBlank(),
                 modifier = Modifier.fillMaxWidth().height(52.dp),
                 shape = RoundedCornerShape(12.dp),
@@ -1100,6 +1191,10 @@ private fun ProfileScreen(
     user: User?,
     tasks: List<Task>,
     activeTeam: Team?,
+    members: List<User>,
+    canManage: Boolean,
+    onMemberClick: (User) -> Unit,
+    onManageTeam: () -> Unit,
     onOpenTeams: () -> Unit,
     onOpenSettings: () -> Unit,
     onLogout: () -> Unit,
@@ -1138,6 +1233,14 @@ private fun ProfileScreen(
         item { InfoCard("Логин", "@${user?.login.orEmpty()}") }
         item { InfoCard("Команды", activeTeam?.name ?: "Команда не выбрана", onOpenTeams) }
         item { InfoCard("Настройки приложения", "Тема и учебная группа", onOpenSettings) }
+        item {
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Text("Участники команды", fontSize = 19.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+                if (canManage) TextButton(onClick = onManageTeam) { Text("Добавить аккаунт") }
+            }
+        }
+        if (members.isEmpty()) item { MutedPanel("Участников пока нет") }
+        items(members, key = { "profile-member-${it.id}" }) { member -> MemberCard(member) { onMemberClick(member) } }
         item {
             Button(
                 onClick = onLogout,
@@ -1180,11 +1283,16 @@ private fun TaskDetailScreen(
     task: Task,
     currentUser: User?,
     onBack: () -> Unit,
-    onMove: (TaskStatus) -> Unit,
+    onMove: (TaskStatus, String) -> Unit,
+    onTakeFree: () -> Unit,
     onComment: (String) -> Unit,
     onAssigneeClick: (String) -> Unit,
+    onUploadSource: () -> Unit,
+    onUploadResult: () -> Unit,
+    onDownload: (Attachment) -> Unit,
 ) {
     var comment by rememberSaveable { mutableStateOf("") }
+    var returnNote by rememberSaveable { mutableStateOf("") }
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
         topBar = {
@@ -1222,22 +1330,31 @@ private fun TaskDetailScreen(
                                 Text(task.assignee, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
                                 Text("Исполнитель", color = AppMuted, fontSize = 11.sp)
                             }
-                            Text(task.deadline, color = AppMuted, fontSize = 12.sp)
+                            Text(displayDeadline(task), color = AppMuted, fontSize = 12.sp)
                         }
-                        val isAssignee = task.assignee == currentUser?.name
+                        val isAssignee = task.assigneeId == currentUser?.id || task.assignee == currentUser?.name
                         val nextAction = when (task.status) {
                             TaskStatus.WAITING -> if (isAssignee) TaskStatus.WORKING to "Взять в работу" else null
                             TaskStatus.WORKING -> if (isAssignee) TaskStatus.CHECKING to "Отправить на проверку" else null
                             TaskStatus.CHECKING -> if (currentUser?.role == UserRole.LEAD) TaskStatus.DONE to "Принять задачу" else null
-                            TaskStatus.DONE -> if (currentUser?.role == UserRole.LEAD) TaskStatus.WORKING to "Вернуть в работу" else null
+                            TaskStatus.DONE -> null
                         }
                         nextAction?.let { (next, label) ->
                             Spacer(Modifier.height(18.dp))
                             Button(
-                                onClick = { onMove(next) },
+                                onClick = { onMove(next, "") },
                                 modifier = Modifier.fillMaxWidth(),
                                 shape = RoundedCornerShape(12.dp),
                             ) { Text(label) }
+                        }
+                        if (task.status == TaskStatus.WAITING && task.assignee == "Не назначен" && currentUser != null) {
+                            Button(onClick = onTakeFree, modifier = Modifier.fillMaxWidth()) { Text("Взять свободную задачу") }
+                        }
+                        if (currentUser?.role == UserRole.LEAD && task.status in setOf(TaskStatus.CHECKING, TaskStatus.DONE)) {
+                            OutlinedTextField(returnNote, { returnNote = it }, modifier = Modifier.fillMaxWidth(),
+                                label = { Text("Замечания для доработки") }, minLines = 2)
+                            OutlinedButton(onClick = { onMove(TaskStatus.WORKING, returnNote); returnNote = "" },
+                                enabled = returnNote.isNotBlank(), modifier = Modifier.fillMaxWidth()) { Text("Вернуть на доработку") }
                         }
                         if (nextAction == null && task.status != TaskStatus.DONE && currentUser != null) {
                             Spacer(Modifier.height(14.dp))
@@ -1251,16 +1368,31 @@ private fun TaskDetailScreen(
                     }
                 }
             }
+            item { SectionTitle("История задачи", task.history.size) }
+            if (task.history.isEmpty()) item { MutedPanel("Переходов статуса пока нет") }
+            items(task.history.sortedBy { it.occurredAt }, key = { it.id }) { change ->
+                Surface(color = MaterialTheme.colorScheme.surface, shape = RoundedCornerShape(14.dp)) {
+                    Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Text(change.action, fontWeight = FontWeight.SemiBold)
+                        Text("${change.actorName} · ${change.occurredAt}", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
+                        if (!change.comment.isNullOrBlank()) Text(change.comment)
+                    }
+                }
+            }
             item { SectionTitle("Файлы", task.attachments.size) }
+            if (currentUser?.role == UserRole.LEAD) item { OutlinedButton(onClick = onUploadSource, modifier = Modifier.fillMaxWidth()) { Text("+ Прикрепить исходный файл") } }
             if (task.attachments.isEmpty()) {
                 item { MutedPanel("К задаче пока не прикреплены файлы") }
             } else {
-                items(task.attachments) { file -> InfoCard(file.name, file.sizeLabel) }
+                items(task.attachments) { file -> InfoCard(file.name, file.sizeLabel) { onDownload(file) } }
             }
-            if (task.status == TaskStatus.CHECKING || task.status == TaskStatus.DONE) {
+            if (task.assigneeId == currentUser?.id || task.assignee == currentUser?.name) {
+                item { OutlinedButton(onClick = onUploadResult, modifier = Modifier.fillMaxWidth()) { Text("+ Прикрепить результат") } }
+            }
+            if (task.status == TaskStatus.CHECKING || task.status == TaskStatus.DONE || task.resultAttachments.isNotEmpty()) {
                 item { SectionTitle("Результат работы", task.resultAttachments.size) }
                 if (task.resultAttachments.isEmpty()) item { MutedPanel("Результат пока не прикреплён") }
-                items(task.resultAttachments) { file -> InfoCard(file.name, file.sizeLabel) }
+                items(task.resultAttachments) { file -> InfoCard(file.name, file.sizeLabel) { onDownload(file) } }
             }
             item { SectionTitle("Комментарии", task.comments.size) }
             if (task.comments.isEmpty()) item { MutedPanel("Комментариев пока нет") }
@@ -1294,6 +1426,11 @@ private fun TaskDetailScreen(
         }
     }
 }
+
+private fun displayDeadline(task: Task): String = task.dueAt?.let { value ->
+    runCatching { java.time.OffsetDateTime.parse(value).format(DateTimeFormatter.ofPattern("dd.MM.yyyy HH:mm")) }.getOrNull()
+} ?: runCatching { LocalDate.parse(task.deadline).format(DateTimeFormatter.ofPattern("dd.MM.yyyy")) }
+    .getOrDefault(task.deadline)
 
 @Composable
 private fun SectionTitle(title: String, count: Int) {
