@@ -27,9 +27,9 @@ describe('tasksSaga', () => {
       await vi.waitFor(() => expect(store.getState().items).toHaveLength(2))
       expect(create).toHaveBeenCalledWith(task)
       const files = [{ id: 'r', name: 'result.zip', size: 10 }]
-      store.dispatch(updateTaskStatusRequest({ taskId: task.taskId, status: 'checking', author: 'Автор', resultAttachments: files }))
+      store.dispatch(updateTaskStatusRequest({ taskId: task.taskId, status: 'checking', author: 'Автор', resultAttachments: files, assignee: task.assignee }))
       await vi.waitFor(() => expect(store.getState().items[1]).toEqual(updated))
-      expect(update).toHaveBeenCalledWith(task.taskId, 'checking', 'Автор', undefined, files)
+      expect(update).toHaveBeenCalledWith(task.taskId, 'checking', 'Автор', undefined, files, task.assignee)
       expect(store.getState().saving).toBe(false)
     } finally { saga.cancel() }
   })

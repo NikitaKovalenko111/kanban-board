@@ -9,6 +9,8 @@ npm ci
 npm run dev
 ```
 
+После `git pull`, если изменились `package.json` или `package-lock.json`, обновите зависимости командой `npm ci` перед запуском. Git не обновляет локальный `node_modules`.
+
 ## Проверки
 
 ```bash

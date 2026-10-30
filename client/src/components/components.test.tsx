@@ -28,12 +28,12 @@ function renderModal(currentTask: TaskType | null = null) {
 }
 
 describe('основные компоненты доски', () => {
-  it('показывает пустую колонку и вызывает добавление задачи', async () => {
-    const onAdd = vi.fn()
-    render(<BoardElement name="Ожидание" accent="#123456" tasks={[]} onTaskClick={vi.fn()} onAdd={onAdd} />)
+  it('показывает пустую колонку и открывает историю задач', async () => {
+    const onHistory = vi.fn()
+    render(<BoardElement name="Выполнено" accent="#123456" tasks={[]} onTaskClick={vi.fn()} onHistory={onHistory} />)
     expect(screen.getByText('Здесь пока пусто')).toBeInTheDocument()
-    await userEvent.click(screen.getByRole('button', { name: 'Добавить задачу' }))
-    expect(onAdd).toHaveBeenCalledOnce()
+    await userEvent.click(screen.getByRole('button', { name: /Вся история/ }))
+    expect(onHistory).toHaveBeenCalledOnce()
   })
 
   it('показывает карточку с проектом и передаёт выбранную задачу', async () => {

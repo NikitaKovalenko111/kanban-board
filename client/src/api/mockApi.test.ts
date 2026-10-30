@@ -1,5 +1,6 @@
 import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest'
 import type { mockApi as Api } from './mockApi'
+import { scheduleEvent } from '../test/fixtures'
 
 let api: typeof Api
 // Новый модуль для каждого теста изолирует изменяемые данные mock API.
@@ -66,13 +67,14 @@ describe('mockApi', () => {
     const project = await request(api.createProject({ name: ' Новый проект ', description: ' Описание ', color: '#123456' }))
     expect(project).toMatchObject({ name: 'Новый проект', description: 'Описание', sources: [] })
     expect(await request(api.getProjects())).toContainEqual(project)
-    const event = await request(api.createScheduleEvent({ projectId: project.id, title: 'Встреча', description: '', startsAt: '2026-10-23T10:00:00', type: 'meeting', author: 'Тимлид' }))
+    const { id: _id, ...eventPayload } = scheduleEvent
+    const event = await request(api.createScheduleEvent({ ...eventPayload, projectId: project.id }))
     expect(await request(api.getSchedule(project.id))).toEqual([event])
     expect(await request(api.getSchedule('all'))).toContainEqual(event)
   })
 
   it('создаёт участника и запрещает повторный нормализованный логин', async () => {
-    const member = { name: 'Участник', login: ' NEW ', password: 'secret', role: 'member' as const, position: 'QA' }
+    const member = { name: 'Участник', login: ' NEW ', password: 'secret', role: 'member' as const, position: 'QA', projectRoles: { 'ai-hackathon': 'QA' } }
     expect(await request(api.createMember(member))).toMatchObject({ login: 'new', active: true })
     await expect(request(api.createMember({ ...member, login: 'new' }))).rejects.toThrow('Такой логин уже занят')
     expect((await request(api.getTeam())).members.every(member => !('password' in member))).toBe(true)

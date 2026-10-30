@@ -4,7 +4,7 @@ import tasks, * as t from './tasksSlice'
 import projects, * as p from './projectsSlice'
 import schedule, * as s from './scheduleSlice'
 import team, * as m from './teamSlice'
-import { task, user, project } from '../../test/fixtures'
+import { task, user, project, scheduleEvent } from '../../test/fixtures'
 
 describe('состояние приложения', () => {
   it('сохраняет сессию и аватар, очищает сессию при выходе', () => {
@@ -63,7 +63,7 @@ describe('состояние приложения', () => {
   })
 
   it('очищает старое расписание при переключении проекта и добавляет событие', () => {
-    const event = { id: 1, projectId: project.id, title: 'Встреча', description: '', startsAt: '2026-10-23T10:00:00', type: 'meeting' as const, author: user.name }
+    const event = scheduleEvent
     let state = schedule(undefined, s.loadScheduleSuccess([event]))
     state = schedule(state, s.loadScheduleRequest('other'))
     expect(state).toMatchObject({ items: [], loading: true })
