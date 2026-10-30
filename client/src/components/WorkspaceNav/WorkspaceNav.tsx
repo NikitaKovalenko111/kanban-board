@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { Link, NavLink, useNavigate } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { useAppDispatch, useAppSelector } from '../../store/hooks'
 import { loadProjectsRequest, setActiveProject } from '../../store/slices/projectsSlice'
 
@@ -53,21 +53,7 @@ const WorkspaceNav = () => {
           <Link className="project-menu__manage" to="/projects" onClick={() => setProjectsOpen(false)}><span>{user.role === 'lead' ? '＋' : '→'}</span> {user.role === 'lead' ? 'Управление проектами' : 'Все проекты'}</Link>
         </div>}
       </div>
-
-      <nav className="workspace-tabs" aria-label="Раздел проекта">
-        <NavLink to="/" end className="workspace-tab">
-          <span className="workspace-tab__icon" aria-hidden="true">
-            <svg viewBox="0 0 24 24"><path d="M4 5.5h4.5v13H4zM10.25 5.5h4.5v8h-4.5zM16.5 5.5H21v10.5h-4.5z" /></svg>
-          </span>
-          <span className="workspace-tab__copy"><strong>Доска задач</strong><small>Работа по статусам</small></span>
-        </NavLink>
-        <NavLink to="/schedule" className="workspace-tab">
-          <span className="workspace-tab__icon" aria-hidden="true">
-            <svg viewBox="0 0 24 24"><path d="M7 3v3M17 3v3M4 9h16M5 5h14a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1Z" /><path d="m9 14 2 2 4-4" /></svg>
-          </span>
-          <span className="workspace-tab__copy"><strong>Расписание</strong><small>События и дедлайны</small></span>
-        </NavLink>
-      </nav>
+      {user.role === 'lead' && activeProject && <Link className="project-nav-manage" to={`/projects/${activeProject.id}/manage`}>Управление проектом</Link>}
     </div>
   </div>
 }

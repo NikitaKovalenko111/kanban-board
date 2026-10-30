@@ -12,6 +12,8 @@ import MembersPage from './pages/MembersPage/MembersPage'
 import MemberProfilePage from './pages/MembersPage/MemberProfilePage'
 import SchedulePage from './pages/SchedulePage/SchedulePage'
 import ProjectsPage from './pages/ProjectsPage/ProjectsPage'
+import SettingsPage from './pages/SettingsPage/SettingsPage'
+import ProjectManagementPage from './pages/ProjectsPage/ProjectManagementPage'
 import { useAppSelector } from './store/hooks'
 
 import './styles/style.scss'
@@ -38,6 +40,8 @@ function App() {
         <Route path="/users/:userId" element={<MemberProfilePage />} />
         <Route path="/team" element={user.role === 'lead' ? <TeamPage /> : <Navigate to="/" replace />} />
         <Route path="/projects" element={<ProjectsPage />} />
+        <Route path="/settings" element={<SettingsPage />} />
+        <Route path="/projects/:projectId/manage" element={<ProjectManagementPage />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </div>

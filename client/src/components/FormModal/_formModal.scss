@@ -1,0 +1,18 @@
+.form-modal { position: fixed; inset: 0; z-index: 1000; display: grid; place-items: center; padding: 20px; &__backdrop { position: absolute; inset: 0; border: 0; background: rgba(28,33,43,.32); backdrop-filter: blur(3px); animation: backdrop-in .2s ease both; } &__panel { position: relative; width: min(650px,100%); max-height: calc(100vh - 40px); overflow-y: auto; padding: 22px; border-radius: 18px; background: white; box-shadow: 0 24px 70px rgba(25,32,52,.2); animation: soft-pop .24s ease both; > header { display: flex; align-items: center; justify-content: space-between; gap: 15px; margin-bottom: 20px; h2 { font-size: 20px; } } } }
+@media (max-width: 600px) { .form-modal { align-items: end; padding: 0; &__panel { width: 100%; max-height: 92vh; border-radius: 18px 18px 0 0; } } }
+
+@media (max-width: 600px) {
+  .notifications-modal .form-modal__panel {
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+    height: 100dvh;
+    max-height: none;
+    border-radius: 0;
+    overflow: hidden;
+    padding: max(20px, env(safe-area-inset-top)) max(20px, env(safe-area-inset-right)) max(20px, env(safe-area-inset-bottom)) max(20px, env(safe-area-inset-left));
+
+    > header, .notifications-toolbar { flex-shrink: 0; }
+    .notifications-list { min-height: 0; flex: 1; overflow-y: auto; overscroll-behavior: contain; }
+  }
+}

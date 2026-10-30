@@ -1,6 +1,8 @@
 export type TaskStatus = 'waiting' | 'working' | 'checking' | 'done'
 export type UserRole = 'lead' | 'member'
-export type ScheduleEventType = 'meeting' | 'milestone' | 'class' | 'presentation'
+export type ScheduleEventType = string
+export type StudyGroup = '203' | '204' | 'both'
+export type ReminderScenario = 'none' | 'at-start' | '15-min' | '1-hour' | '1-day'
 
 export interface Project {
   id: string
@@ -17,6 +19,11 @@ export interface ProjectSource extends Attachment {
 
 export type NewProject = Omit<Project, 'id' | 'sources'>
 
+export interface UpdateProjectPayload extends NewProject {
+  id: string
+  members: { userId: number; role: string }[]
+}
+
 export interface AddProjectSourcesPayload {
   projectId: string
   files: Attachment[]
@@ -29,7 +36,12 @@ export interface ScheduleEvent {
   title: string
   description: string
   startsAt: string
+  endsAt?: string
   type: ScheduleEventType
+  typeLabel: string
+  typeColor: string
+  group: StudyGroup
+  reminder: ReminderScenario
   location?: string
   author: string
 }
@@ -40,6 +52,13 @@ export interface Attachment {
   id: string
   name: string
   size: number
+}
+
+export interface TaskComment {
+  id: string
+  author: string
+  text: string
+  createdAt: string
 }
 
 export interface TaskHistoryEvent {
@@ -66,6 +85,7 @@ export interface Task {
   completedAt?: string
   revisionComment?: string
   history: TaskHistoryEvent[]
+  comments: TaskComment[]
 }
 
 export interface User {
@@ -74,6 +94,7 @@ export interface User {
   login: string
   role: UserRole
   position: string
+  projectRoles: Record<string, string>
   avatarUrl?: string
 }
 
@@ -98,6 +119,7 @@ export interface NewTeamMember {
   password: string
   position: string
   role: UserRole
+  projectRoles: Record<string, string>
 }
 
 export type NewTask = Pick<Task, 'projectId' | 'taskName' | 'taskDesc' | 'taskDeadline' | 'attachments'>
@@ -108,4 +130,11 @@ export interface TaskStatusUpdate {
   revisionComment?: string
   resultAttachments?: Attachment[]
   author: string
+  assignee?: string
+}
+
+export interface AddTaskCommentPayload {
+  taskId: number
+  author: string
+  text: string
 }

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type JSX, type TouchEvent } from 'react'
 import type React from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import AddTaskModal from '../../components/AddTaskModal/AddTaskModal'
 import BoardElement from '../../components/BoardElement/BoardElement'
 import { useAppDispatch, useAppSelector } from '../../store/hooks'
@@ -12,6 +12,7 @@ type PropsType = {}
 const BoardPage: React.FC<PropsType> = (): JSX.Element => {
     const dispatch = useAppDispatch()
     const navigate = useNavigate()
+    const [searchParams, setSearchParams] = useSearchParams()
     const { items, loading, error } = useAppSelector((state) => state.tasks)
     const user = useAppSelector((state) => state.auth.user)!
     const activeProjectId = useAppSelector((state) => state.projects.activeProjectId)
@@ -23,6 +24,8 @@ const BoardPage: React.FC<PropsType> = (): JSX.Element => {
     const touchStart = useRef<number | null>(null)
 
     useEffect(() => { if (!items.length) dispatch(loadTasksRequest()) }, [dispatch, items.length])
+    const notificationTaskId = Number(searchParams.get('task'))
+    const notificationTask = items.find((task) => task.taskId === notificationTaskId)
     const allProjectsSelected = activeProjectId === 'all'
     const filtered = useMemo(() => items.filter((task) => (allProjectsSelected || task.projectId === activeProjectId) && `${task.taskName} ${task.taskDesc}`.toLowerCase().includes(query.toLowerCase())), [activeProjectId, allProjectsSelected, items, query])
     const latestDoneIds = useMemo(() => new Set([...items].filter((task) => (allProjectsSelected || task.projectId === activeProjectId) && task.taskStatus === 'done').sort((a, b) => (b.completedAt ?? '').localeCompare(a.completedAt ?? '')).slice(0, 5).map((task) => task.taskId)), [activeProjectId, allProjectsSelected, items])
@@ -50,7 +53,7 @@ const BoardPage: React.FC<PropsType> = (): JSX.Element => {
                   <div><span className="eyebrow">{allProjectsSelected ? 'Все проекты команды' : activeProject?.name ?? 'Проект'}</span><h1>Доска задач</h1></div>
                   {user.role === 'lead' && !allProjectsSelected && <button className="button" onClick={openCreate}>＋ Новая задача</button>}
                 </div>
-                <div className="board-page__toolbar"><label className="search">⌕<input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Поиск по задачам" /></label><div className="team-stack"><span>АЛ</span><span>МВ</span><span>ИГ</span><small>+2</small></div></div>
+                <div className="board-page__toolbar"><label className="search">⌕<input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Поиск по задачам" /></label></div>
                 {error && <div className="error-banner">{error}</div>}
                 <div className="board-slider" onTouchStart={handleTouchStart} onTouchEnd={handleTouchEnd}>
                   <div className="board-page__tables">
@@ -58,14 +61,14 @@ const BoardPage: React.FC<PropsType> = (): JSX.Element => {
                     {loading ? <div className="loader">Загружаем доску…</div> : columns.map((column) => {
                       const columnTasks = filtered.filter((task) => task.taskStatus === column.status)
                       const visibleTasks = column.status === 'done' ? columnTasks.filter((task) => latestDoneIds.has(task.taskId)).sort((a, b) => (b.completedAt ?? '').localeCompare(a.completedAt ?? '')) : columnTasks
-                      return <BoardElement key={column.status} name={column.name} accent={column.accent} tasks={visibleTasks} onTaskClick={openTask} showProject={allProjectsSelected} onAdd={column.status === 'waiting' && user.role === 'lead' && !allProjectsSelected ? openCreate : undefined} onHistory={column.status === 'done' ? () => navigate('/history') : undefined} />
+                      return <BoardElement key={column.status} name={column.name} accent={column.accent} tasks={visibleTasks} onTaskClick={openTask} showProject={allProjectsSelected} onHistory={column.status === 'done' ? () => navigate('/history') : undefined} />
                     })}
                     </div>
                   </div>
                   {!loading && <div className="board-slider__controls"><button onClick={() => showColumn(activeColumn - 1)} disabled={activeColumn === 0} aria-label="Предыдущая колонка">←</button><div>{columns.map((column, index) => <button key={column.status} className={index === activeColumn ? 'is-active' : ''} onClick={() => showColumn(index)} aria-label={`Открыть колонку ${column.name}`} />)}</div><button onClick={() => showColumn(activeColumn + 1)} disabled={activeColumn === columns.length - 1} aria-label="Следующая колонка">→</button></div>}
                 </div>
             </div>
-            {drawerOpen && <AddTaskModal task={selectedTask} onClose={() => setDrawerOpen(false)} />}
+            {(drawerOpen || notificationTask) && <AddTaskModal task={notificationTask ?? selectedTask} onClose={() => { setDrawerOpen(false); if (notificationTaskId) setSearchParams({}, { replace: true }) }} />}
         </main>
     )
 }

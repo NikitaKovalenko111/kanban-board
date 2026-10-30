@@ -1,5 +1,5 @@
 import { createSlice, type PayloadAction } from '@reduxjs/toolkit'
-import type { AddProjectSourcesPayload, NewProject, Project } from '../../types'
+import type { AddProjectSourcesPayload, NewProject, Project, UpdateProjectPayload } from '../../types'
 
 interface ProjectsState { items: Project[]; activeProjectId: string; loading: boolean; saving: boolean; error: string | null }
 const initialState: ProjectsState = { items: [], activeProjectId: localStorage.getItem('active-project') ?? 'ai-hackathon', loading: false, saving: false, error: null }
@@ -8,6 +8,11 @@ const projectsSlice = createSlice({
   name: 'projects', initialState,
   reducers: {
     loadProjectsRequest(state) { state.loading = true; state.error = null },
+    updateProjectRequest(state, _action: PayloadAction<UpdateProjectPayload>) { state.saving = true; state.error = null },
+    updateProjectSuccess(state, action: PayloadAction<Project>) {
+      state.items = state.items.map((item) => item.id === action.payload.id ? action.payload : item)
+      state.saving = false
+    },
     loadProjectsSuccess(state, action: PayloadAction<Project[]>) {
       state.items = action.payload
       if (state.activeProjectId !== 'all' && !action.payload.some((project) => project.id === state.activeProjectId)) state.activeProjectId = action.payload[0]?.id ?? ''
@@ -30,5 +35,5 @@ const projectsSlice = createSlice({
   },
 })
 
-export const { loadProjectsRequest, loadProjectsSuccess, createProjectRequest, createProjectSuccess, addProjectSourcesRequest, addProjectSourcesSuccess, setActiveProject, projectsFailure } = projectsSlice.actions
+export const { loadProjectsRequest, loadProjectsSuccess, createProjectRequest, createProjectSuccess, addProjectSourcesRequest, addProjectSourcesSuccess, setActiveProject, projectsFailure, updateProjectRequest, updateProjectSuccess } = projectsSlice.actions
 export default projectsSlice.reducer

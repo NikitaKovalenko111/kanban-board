@@ -8,6 +8,7 @@
 @import './../components/Header/header',
         './../components/Sidebar/sidebar',
         './../components/WorkspaceNav/workspaceNav',
+        './../components/FormModal/formModal',
         './../components/BoardElement/boardElement',
         './../components/Task/task',
         './../components/AddTaskModal/addTaskModal';
@@ -19,4 +20,8 @@
         './../pages/TeamPage/teamPage',
         './../pages/MembersPage/membersPage',
         './../pages/SchedulePage/schedulePage',
-        './../pages/ProjectsPage/projectsPage';
+        './../pages/ProjectsPage/projectsPage',
+        './../pages/SettingsPage/settingsPage';
+
+@import './../pages/SchedulePage/calendar',
+        './interaction';

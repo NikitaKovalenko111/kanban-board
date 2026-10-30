@@ -1,5 +1,5 @@
 import { createSlice, type PayloadAction } from '@reduxjs/toolkit'
-import type { NewTask, Task, TaskStatusUpdate } from '../../types'
+import type { AddTaskCommentPayload, NewTask, Task, TaskStatusUpdate } from '../../types'
 
 interface TasksState { items: Task[]; loading: boolean; saving: boolean; error: string | null }
 const initialState: TasksState = { items: [], loading: false, saving: false, error: null }
@@ -12,6 +12,7 @@ const tasksSlice = createSlice({
     createTaskRequest(state, _action: PayloadAction<NewTask>) { state.saving = true; state.error = null },
     createTaskSuccess(state, action: PayloadAction<Task>) { state.items.unshift(action.payload); state.saving = false },
     updateTaskStatusRequest(state, _action: PayloadAction<TaskStatusUpdate>) { state.saving = true },
+    addTaskCommentRequest(state, _action: PayloadAction<AddTaskCommentPayload>) { state.saving = true; state.error = null },
     updateTaskSuccess(state, action: PayloadAction<Task>) {
       const index = state.items.findIndex((task) => task.taskId === action.payload.taskId)
       if (index >= 0) state.items[index] = action.payload
@@ -21,5 +22,5 @@ const tasksSlice = createSlice({
   },
 })
 
-export const { loadTasksRequest, loadTasksSuccess, createTaskRequest, createTaskSuccess, updateTaskStatusRequest, updateTaskSuccess, tasksFailure } = tasksSlice.actions
+export const { loadTasksRequest, loadTasksSuccess, createTaskRequest, createTaskSuccess, updateTaskStatusRequest, addTaskCommentRequest, updateTaskSuccess, tasksFailure } = tasksSlice.actions
 export default tasksSlice.reducer

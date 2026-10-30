@@ -7,6 +7,15 @@ body {
     background: var(--color-bg);
 }
 
+.app-shell { min-height: 100vh; padding-left: 252px; }
+@media (max-width: 1024px) { .app-shell { padding-left: 0; } }
+
+/* Минимальный читаемый кегль для служебного текста интерфейса. */
+.app-shell :where(button, input, select, textarea, label, small, time, em) { font-size: 12px !important; }
+.form-modal :where(button, input, select, textarea, label, small, p) { font-size: 12px !important; }
+.app-shell p { font-size: max(12px, .8rem) !important; }
+.app-shell :where(.eyebrow, .task__meta, .task__project, .task__deadline, .task__revision, .status-badge, .role-badge, .page-heading__count, .project-card__active, .project-card__stats, .text-button, .history-event__heading strong, .task-comments strong) { font-size: 12px !important; }
+
 a,
 button,
 input,
@@ -62,7 +71,7 @@ button { color: inherit; }
     &--large { width: 52px; height: 52px; font-size: 15px; }
     &--xl { width: 92px; height: 92px; font-size: 24px; }
 }
-.eyebrow { color: var(--color-muted); font-size: 11px; font-weight: 750; letter-spacing: .08em; text-transform: uppercase; }
+.eyebrow { color: var(--color-muted); font-size: 12px; font-weight: 750; letter-spacing: .08em; text-transform: uppercase; }
 .muted { color: var(--color-muted); }
 
 @keyframes page-enter {
