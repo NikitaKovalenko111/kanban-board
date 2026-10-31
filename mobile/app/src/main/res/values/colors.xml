@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="kanban_background">#F5F7FB</color>
+    <color name="kanban_primary">#6576DF</color>
+</resources>
