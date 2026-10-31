@@ -8,41 +8,39 @@ import (
 )
 
 type CommentRepo struct {
-	db  *sql.DB
-	ctx context.Context
+	db *sql.DB
 }
 
-func Init(db *sql.DB, ctx context.Context) *CommentRepo {
+func Init(db *sql.DB) *CommentRepo {
 	return &CommentRepo{
-		db:  db,
-		ctx: ctx,
+		db: db,
 	}
 }
 
-func (r *CommentRepo) CreateComment(taskID string, authorID string, content string) (string, error) {
-	var id string
-	err := r.db.QueryRowContext(r.ctx, `
-		INSERT INTO comment (id, task_id, author_id, content)
+func (r *CommentRepo) CreateComment(ctx context.Context, taskID string, authorID string, content string) (string, error) {
+	var commentID string
+	err := r.db.QueryRowContext(ctx, `
+		INSERT INTO comments (comment_id, task_id, author_user_id, content)
 		VALUES (gen_random_uuid(), $1, $2, $3)
-		RETURNING id
-	`, taskID, authorID, content).Scan(&id)
+		RETURNING comment_id
+	`, taskID, authorID, content).Scan(&commentID)
 	if err != nil {
 		return "", fmt.Errorf("failed to create comment: %v", err)
 	}
 
-	return id, nil
+	return commentID, nil
 }
 
-func (r *CommentRepo) GetCommentByID(id string) (*models.Comment, error) {
+func (r *CommentRepo) GetCommentByID(ctx context.Context, commentID string) (*models.Comment, error) {
 	var comment models.Comment
-	err := r.db.QueryRowContext(r.ctx, `
-		SELECT id, task_id, author_id, content, created_at
-		FROM comment
-		WHERE id = $1
-	`, id).Scan(
-		&comment.ID,
+	err := r.db.QueryRowContext(ctx, `
+		SELECT comment_id, task_id, author_user_id, content, created_at
+		FROM comments
+		WHERE comment_id = $1
+	`, commentID).Scan(
+		&comment.CommentID,
 		&comment.TaskID,
-		&comment.AuthorID,
+		&comment.AuthorUserID,
 		&comment.Content,
 		&comment.CreatedAt,
 	)
@@ -53,10 +51,10 @@ func (r *CommentRepo) GetCommentByID(id string) (*models.Comment, error) {
 	return &comment, nil
 }
 
-func (r *CommentRepo) GetCommentsByTaskID(taskID string) ([]models.Comment, error) {
-	rows, err := r.db.QueryContext(r.ctx, `
-		SELECT id, task_id, author_id, content, created_at
-		FROM comment
+func (r *CommentRepo) GetCommentsByTaskID(ctx context.Context, taskID string) ([]models.Comment, error) {
+	rows, err := r.db.QueryContext(ctx, `
+		SELECT comment_id, task_id, author_user_id, content, created_at
+		FROM comments
 		WHERE task_id = $1
 		ORDER BY created_at
 	`, taskID)
@@ -69,9 +67,9 @@ func (r *CommentRepo) GetCommentsByTaskID(taskID string) ([]models.Comment, erro
 	for rows.Next() {
 		var comment models.Comment
 		if err := rows.Scan(
-			&comment.ID,
+			&comment.CommentID,
 			&comment.TaskID,
-			&comment.AuthorID,
+			&comment.AuthorUserID,
 			&comment.Content,
 			&comment.CreatedAt,
 		); err != nil {
@@ -86,12 +84,12 @@ func (r *CommentRepo) GetCommentsByTaskID(taskID string) ([]models.Comment, erro
 	return comments, nil
 }
 
-func (r *CommentRepo) UpdateComment(id string, content string) error {
-	_, err := r.db.ExecContext(r.ctx, `
-		UPDATE comment
+func (r *CommentRepo) UpdateComment(ctx context.Context, commentID string, content string) error {
+	_, err := r.db.ExecContext(ctx, `
+		UPDATE comments
 		SET content = $1
-		WHERE id = $2
-	`, content, id)
+		WHERE comment_id = $2
+	`, content, commentID)
 	if err != nil {
 		return fmt.Errorf("failed to update comment: %v", err)
 	}
@@ -99,11 +97,11 @@ func (r *CommentRepo) UpdateComment(id string, content string) error {
 	return nil
 }
 
-func (r *CommentRepo) DeleteComment(id string) error {
-	_, err := r.db.ExecContext(r.ctx, `
-		DELETE FROM comment
-		WHERE id = $1
-	`, id)
+func (r *CommentRepo) DeleteComment(ctx context.Context, commentID string) error {
+	_, err := r.db.ExecContext(ctx, `
+		DELETE FROM comments
+		WHERE comment_id = $1
+	`, commentID)
 	if err != nil {
 		return fmt.Errorf("failed to delete comment: %v", err)
 	}

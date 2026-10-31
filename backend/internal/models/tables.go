@@ -1,62 +1,72 @@
 package models
 
 const (
-	USER_TABLE = `
-		CREATE TABLE IF NOT EXISTS "user" (
-			id UUID PRIMARY KEY,
+	USERS_TABLE = `
+		CREATE TABLE IF NOT EXISTS users (
+			user_id UUID PRIMARY KEY,
 			username VARCHAR NOT NULL,
 			email VARCHAR NOT NULL,
-			"group" VARCHAR NOT NULL,
+			group_name VARCHAR NOT NULL,
 			image_url VARCHAR,
 			password_hash VARCHAR NOT NULL,
 			created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 		);`
 
-	TEAM_TABLE = `
-		CREATE TABLE IF NOT EXISTS team (
-			id UUID PRIMARY KEY,
+	SESSIONS_TABLE = `
+		CREATE TABLE IF NOT EXISTS sessions (
+			session_id UUID PRIMARY KEY,
+			user_id UUID NOT NULL REFERENCES users (user_id) ON DELETE CASCADE,
+			refresh_token_hash VARCHAR(64) NOT NULL,
+			expires_at TIMESTAMPTZ NOT NULL,
+			created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+			revoked_at TIMESTAMPTZ
+		);`
+
+	TEAMS_TABLE = `
+		CREATE TABLE IF NOT EXISTS teams (
+			team_id UUID PRIMARY KEY,
 			name VARCHAR NOT NULL,
 			created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 		);`
 
-	TEAM_MEMBER_TABLE = `
-		CREATE TABLE IF NOT EXISTS team_member (
-			team_id UUID NOT NULL REFERENCES team (id) ON DELETE CASCADE,
-			user_id UUID NOT NULL REFERENCES "user" (id) ON DELETE CASCADE,
+	TEAM_MEMBERS_TABLE = `
+		CREATE TABLE IF NOT EXISTS team_members (
+			team_id UUID NOT NULL REFERENCES teams (team_id) ON DELETE CASCADE,
+			user_id UUID NOT NULL REFERENCES users (user_id) ON DELETE CASCADE,
 			role VARCHAR NOT NULL,
 			joined_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
 			PRIMARY KEY (team_id, user_id)
 		);`
 
-	PROJECT_TABLE = `
-		CREATE TABLE IF NOT EXISTS project (
-			id UUID PRIMARY KEY,
-			team_id UUID NOT NULL REFERENCES team (id) ON DELETE CASCADE,
+	PROJECTS_TABLE = `
+		CREATE TABLE IF NOT EXISTS projects (
+			project_id UUID PRIMARY KEY,
+			team_id UUID NOT NULL REFERENCES teams (team_id) ON DELETE CASCADE,
 			name VARCHAR NOT NULL,
 			description TEXT,
 			created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 		);`
 
-	BOARD_TABLE = `
-		CREATE TABLE IF NOT EXISTS board (
-			id UUID PRIMARY KEY,
-			project_id UUID NOT NULL REFERENCES project (id) ON DELETE CASCADE,
+	BOARDS_TABLE = `
+		CREATE TABLE IF NOT EXISTS boards (
+			board_id UUID PRIMARY KEY,
+			project_id UUID NOT NULL REFERENCES projects (project_id) ON DELETE CASCADE,
 			name VARCHAR NOT NULL
 		);`
 
-	BOARD_COLUMN_TABLE = `
-		CREATE TABLE IF NOT EXISTS board_column (
-			id UUID PRIMARY KEY,
-			board_id UUID NOT NULL REFERENCES board (id) ON DELETE CASCADE,
+	BOARD_COLUMNS_TABLE = `
+		CREATE TABLE IF NOT EXISTS board_columns (
+			column_id UUID PRIMARY KEY,
+			board_id UUID NOT NULL REFERENCES boards (board_id) ON DELETE CASCADE,
 			name VARCHAR NOT NULL,
 			position INTEGER NOT NULL
 		);`
 
-	TASK_TABLE = `
-		CREATE TABLE IF NOT EXISTS task (
-			id UUID PRIMARY KEY,
-			column_id UUID NOT NULL REFERENCES board_column (id) ON DELETE CASCADE,
-			created_by UUID NOT NULL REFERENCES "user" (id),
+	TASKS_TABLE = `
+		CREATE TABLE IF NOT EXISTS tasks (
+			task_id UUID PRIMARY KEY,
+			column_id UUID NOT NULL REFERENCES board_columns (column_id) ON DELETE CASCADE,
+			created_by_user_id UUID NOT NULL REFERENCES users (user_id),
 			title VARCHAR NOT NULL,
 			description TEXT,
 			priority VARCHAR NOT NULL,
@@ -66,27 +76,27 @@ const (
 			updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 		);`
 
-	TASK_ASSIGNEE_TABLE = `
-		CREATE TABLE IF NOT EXISTS task_assignee (
-			task_id UUID NOT NULL REFERENCES task (id) ON DELETE CASCADE,
-			user_id UUID NOT NULL REFERENCES "user" (id) ON DELETE CASCADE,
+	TASK_ASSIGNEES_TABLE = `
+		CREATE TABLE IF NOT EXISTS task_assignees (
+			task_id UUID NOT NULL REFERENCES tasks (task_id) ON DELETE CASCADE,
+			user_id UUID NOT NULL REFERENCES users (user_id) ON DELETE CASCADE,
 			PRIMARY KEY (task_id, user_id)
 		);`
 
-	COMMENT_TABLE = `
-		CREATE TABLE IF NOT EXISTS comment (
-			id UUID PRIMARY KEY,
-			task_id UUID NOT NULL REFERENCES task (id) ON DELETE CASCADE,
-			author_id UUID NOT NULL REFERENCES "user" (id),
+	COMMENTS_TABLE = `
+		CREATE TABLE IF NOT EXISTS comments (
+			comment_id UUID PRIMARY KEY,
+			task_id UUID NOT NULL REFERENCES tasks (task_id) ON DELETE CASCADE,
+			author_user_id UUID NOT NULL REFERENCES users (user_id),
 			content TEXT NOT NULL,
 			created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 		);`
 
-	ATTACHMENT_TABLE = `
-		CREATE TABLE IF NOT EXISTS attachment (
-			id UUID PRIMARY KEY,
-			task_id UUID NOT NULL REFERENCES task (id) ON DELETE CASCADE,
-			uploaded_by UUID NOT NULL REFERENCES "user" (id),
+	ATTACHMENTS_TABLE = `
+		CREATE TABLE IF NOT EXISTS attachments (
+			attachment_id UUID PRIMARY KEY,
+			task_id UUID NOT NULL REFERENCES tasks (task_id) ON DELETE CASCADE,
+			uploaded_by_user_id UUID NOT NULL REFERENCES users (user_id),
 			file_name VARCHAR NOT NULL,
 			storage_key VARCHAR NOT NULL,
 			mime_type VARCHAR NOT NULL,
@@ -96,59 +106,71 @@ const (
 )
 
 const (
-	USER_USERNAME_INDEX = `
-		CREATE UNIQUE INDEX IF NOT EXISTS user_username_idx
-		ON "user" (username);`
+	USERS_USERNAME_INDEX = `
+		CREATE UNIQUE INDEX IF NOT EXISTS users_username_idx
+		ON users (username);`
 
-	USER_EMAIL_INDEX = `
-		CREATE UNIQUE INDEX IF NOT EXISTS user_email_idx
-		ON "user" (email);`
+	USERS_EMAIL_INDEX = `
+		CREATE UNIQUE INDEX IF NOT EXISTS users_email_idx
+		ON users (email);`
 
-	TEAM_MEMBER_USER_ID_INDEX = `
-		CREATE INDEX IF NOT EXISTS team_member_user_id_idx
-		ON team_member (user_id);`
+	SESSIONS_REFRESH_TOKEN_HASH_INDEX = `
+		CREATE UNIQUE INDEX IF NOT EXISTS sessions_refresh_token_hash_idx
+		ON sessions (refresh_token_hash);`
 
-	PROJECT_TEAM_ID_INDEX = `
-		CREATE INDEX IF NOT EXISTS project_team_id_idx
-		ON project (team_id);`
+	SESSIONS_USER_ID_INDEX = `
+		CREATE INDEX IF NOT EXISTS sessions_user_id_idx
+		ON sessions (user_id);`
 
-	BOARD_PROJECT_ID_INDEX = `
-		CREATE INDEX IF NOT EXISTS board_project_id_idx
-		ON board (project_id);`
+	SESSIONS_EXPIRES_AT_INDEX = `
+		CREATE INDEX IF NOT EXISTS sessions_expires_at_idx
+		ON sessions (expires_at);`
 
-	BOARD_COLUMN_BOARD_POSITION_INDEX = `
-		CREATE INDEX IF NOT EXISTS board_column_board_position_idx
-		ON board_column (board_id, position);`
+	TEAM_MEMBERS_USER_ID_INDEX = `
+		CREATE INDEX IF NOT EXISTS team_members_user_id_idx
+		ON team_members (user_id);`
 
-	TASK_COLUMN_POSITION_INDEX = `
-		CREATE INDEX IF NOT EXISTS task_column_position_idx
-		ON task (column_id, position);`
+	PROJECTS_TEAM_ID_INDEX = `
+		CREATE INDEX IF NOT EXISTS projects_team_id_idx
+		ON projects (team_id);`
 
-	TASK_CREATED_BY_INDEX = `
-		CREATE INDEX IF NOT EXISTS task_created_by_idx
-		ON task (created_by);`
+	BOARDS_PROJECT_ID_INDEX = `
+		CREATE INDEX IF NOT EXISTS boards_project_id_idx
+		ON boards (project_id);`
 
-	TASK_ASSIGNEE_USER_ID_INDEX = `
-		CREATE INDEX IF NOT EXISTS task_assignee_user_id_idx
-		ON task_assignee (user_id);`
+	BOARD_COLUMNS_BOARD_POSITION_INDEX = `
+		CREATE INDEX IF NOT EXISTS board_columns_board_position_idx
+		ON board_columns (board_id, position);`
 
-	COMMENT_TASK_CREATED_AT_INDEX = `
-		CREATE INDEX IF NOT EXISTS comment_task_created_at_idx
-		ON comment (task_id, created_at);`
+	TASKS_COLUMN_POSITION_INDEX = `
+		CREATE INDEX IF NOT EXISTS tasks_column_position_idx
+		ON tasks (column_id, position);`
 
-	COMMENT_AUTHOR_ID_INDEX = `
-		CREATE INDEX IF NOT EXISTS comment_author_id_idx
-		ON comment (author_id);`
+	TASKS_CREATED_BY_USER_ID_INDEX = `
+		CREATE INDEX IF NOT EXISTS tasks_created_by_user_id_idx
+		ON tasks (created_by_user_id);`
 
-	ATTACHMENT_TASK_CREATED_AT_INDEX = `
-		CREATE INDEX IF NOT EXISTS attachment_task_created_at_idx
-		ON attachment (task_id, created_at);`
+	TASK_ASSIGNEES_USER_ID_INDEX = `
+		CREATE INDEX IF NOT EXISTS task_assignees_user_id_idx
+		ON task_assignees (user_id);`
 
-	ATTACHMENT_UPLOADED_BY_INDEX = `
-		CREATE INDEX IF NOT EXISTS attachment_uploaded_by_idx
-		ON attachment (uploaded_by);`
+	COMMENTS_TASK_CREATED_AT_INDEX = `
+		CREATE INDEX IF NOT EXISTS comments_task_created_at_idx
+		ON comments (task_id, created_at);`
 
-	ATTACHMENT_STORAGE_KEY_INDEX = `
-		CREATE UNIQUE INDEX IF NOT EXISTS attachment_storage_key_idx
-		ON attachment (storage_key);`
+	COMMENTS_AUTHOR_USER_ID_INDEX = `
+		CREATE INDEX IF NOT EXISTS comments_author_user_id_idx
+		ON comments (author_user_id);`
+
+	ATTACHMENTS_TASK_CREATED_AT_INDEX = `
+		CREATE INDEX IF NOT EXISTS attachments_task_created_at_idx
+		ON attachments (task_id, created_at);`
+
+	ATTACHMENTS_UPLOADED_BY_USER_ID_INDEX = `
+		CREATE INDEX IF NOT EXISTS attachments_uploaded_by_user_id_idx
+		ON attachments (uploaded_by_user_id);`
+
+	ATTACHMENTS_STORAGE_KEY_INDEX = `
+		CREATE UNIQUE INDEX IF NOT EXISTS attachments_storage_key_idx
+		ON attachments (storage_key);`
 )

@@ -17,12 +17,16 @@ func Init(handlers *handlers.Handlers) *HTTP {
 
 func (h *HTTP) Start(mux *http.ServeMux) {
 	systemRouter := http.NewServeMux()
-
 	mux.Handle(
 		"/system/",
 		http.StripPrefix("/system", systemRouter),
 	)
-
 	h.handlers.System.Start(systemRouter)
 
+	authRouter := http.NewServeMux()
+	mux.Handle(
+		"/auth/",
+		http.StripPrefix("/auth", authRouter),
+	)
+	h.handlers.Auth.Start(authRouter)
 }

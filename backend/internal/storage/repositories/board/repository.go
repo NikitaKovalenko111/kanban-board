@@ -9,38 +9,36 @@ import (
 
 type BoardRepo struct {
 	sql *sql.DB
-	ctx context.Context
 }
 
-func Init(sql *sql.DB, ctx context.Context) *BoardRepo {
+func Init(sql *sql.DB) *BoardRepo {
 	return &BoardRepo{
 		sql: sql,
-		ctx: ctx,
 	}
 }
 
-func (r *BoardRepo) CreateBoard(projectID string, name string) (string, error) {
-	var id string
-	err := r.sql.QueryRowContext(r.ctx, `
-		INSERT INTO board (id, project_id, name)
+func (r *BoardRepo) CreateBoard(ctx context.Context, projectID string, name string) (string, error) {
+	var boardID string
+	err := r.sql.QueryRowContext(ctx, `
+		INSERT INTO boards (board_id, project_id, name)
 		VALUES (gen_random_uuid(), $1, $2)
-		RETURNING id
-	`, projectID, name).Scan(&id)
+		RETURNING board_id
+	`, projectID, name).Scan(&boardID)
 
 	if err != nil {
 		return "", fmt.Errorf("failed to create board: %v", err)
 	}
 
-	return id, nil
+	return boardID, nil
 }
 
-func (r *BoardRepo) GetBoardByID(id string) (*models.Board, error) {
+func (r *BoardRepo) GetBoardByID(ctx context.Context, boardID string) (*models.Board, error) {
 	var board models.Board
-	err := r.sql.QueryRowContext(r.ctx, `
-		SELECT id, project_id, name
-		FROM board 
-		WHERE id = $1
-	`, id).Scan(&board.ID, &board.ProjectID, &board.Name)
+	err := r.sql.QueryRowContext(ctx, `
+		SELECT board_id, project_id, name
+		FROM boards
+		WHERE board_id = $1
+	`, boardID).Scan(&board.BoardID, &board.ProjectID, &board.Name)
 
 	if err != nil {
 		return nil, fmt.Errorf("failed to get board by id: %v", err)
@@ -49,13 +47,13 @@ func (r *BoardRepo) GetBoardByID(id string) (*models.Board, error) {
 	return &board, nil
 }
 
-func (r *BoardRepo) GetBoardByName(name string) (*models.Board, error) {
+func (r *BoardRepo) GetBoardByName(ctx context.Context, name string) (*models.Board, error) {
 	var board models.Board
-	err := r.sql.QueryRowContext(r.ctx, `
-		SELECT id, project_id, name
-		FROM board
+	err := r.sql.QueryRowContext(ctx, `
+		SELECT board_id, project_id, name
+		FROM boards
 		WHERE name = $1
-	`, name).Scan(&board.ID, &board.ProjectID, &board.Name)
+	`, name).Scan(&board.BoardID, &board.ProjectID, &board.Name)
 
 	if err != nil {
 		return nil, fmt.Errorf("failed to get board by name: %v", err)
@@ -63,10 +61,10 @@ func (r *BoardRepo) GetBoardByName(name string) (*models.Board, error) {
 	return &board, nil
 }
 
-func (r *BoardRepo) GetBoardsByProjectID(projectID string) ([]models.Board, error) {
-	rows, err := r.sql.QueryContext(r.ctx, `
-		SELECT id, project_id, name
-		FROM board
+func (r *BoardRepo) GetBoardsByProjectID(ctx context.Context, projectID string) ([]models.Board, error) {
+	rows, err := r.sql.QueryContext(ctx, `
+		SELECT board_id, project_id, name
+		FROM boards
 		WHERE project_id = $1
 		ORDER BY name
 	`, projectID)
@@ -78,7 +76,7 @@ func (r *BoardRepo) GetBoardsByProjectID(projectID string) ([]models.Board, erro
 	var boards []models.Board
 	for rows.Next() {
 		var board models.Board
-		if err := rows.Scan(&board.ID, &board.ProjectID, &board.Name); err != nil {
+		if err := rows.Scan(&board.BoardID, &board.ProjectID, &board.Name); err != nil {
 			return nil, fmt.Errorf("failed to scan board: %v", err)
 		}
 		boards = append(boards, board)
@@ -90,12 +88,12 @@ func (r *BoardRepo) GetBoardsByProjectID(projectID string) ([]models.Board, erro
 	return boards, nil
 }
 
-func (r *BoardRepo) UpdateBoard(id string, projectID string, name string) error {
-	_, err := r.sql.ExecContext(r.ctx, `
-		UPDATE board
+func (r *BoardRepo) UpdateBoard(ctx context.Context, boardID string, projectID string, name string) error {
+	_, err := r.sql.ExecContext(ctx, `
+		UPDATE boards
 		SET project_id = $1, name = $2
-		WHERE id = $3
-	`, projectID, name, id)
+		WHERE board_id = $3
+	`, projectID, name, boardID)
 	if err != nil {
 		return fmt.Errorf("failed to update board: %v", err)
 	}
@@ -103,11 +101,11 @@ func (r *BoardRepo) UpdateBoard(id string, projectID string, name string) error 
 	return nil
 }
 
-func (r *BoardRepo) DeleteBoard(id string) error {
-	_, err := r.sql.ExecContext(r.ctx, `
-		DELETE FROM board
-		WHERE id = $1
-	`, id)
+func (r *BoardRepo) DeleteBoard(ctx context.Context, boardID string) error {
+	_, err := r.sql.ExecContext(ctx, `
+		DELETE FROM boards
+		WHERE board_id = $1
+	`, boardID)
 	if err != nil {
 		return fmt.Errorf("failed to delete board: %v", err)
 	}
