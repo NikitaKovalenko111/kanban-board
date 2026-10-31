@@ -41,7 +41,7 @@ func Run(cfg *config.Config) {
 	handlers := handlers.Init(services)
 
 	mux := http.NewServeMux()
-	transport := transport.Init(handlers)
+	transport := transport.Init(handlers, cfg.JWT.AccessSecret, logger)
 	transport.Start(mux)
 
 	requestHandler := middleware.Logger(logger)(middleware.Timeout(cfg.TIMEOUT)(mux))

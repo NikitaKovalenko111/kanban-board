@@ -35,7 +35,11 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	userID, err := h.authService.RegisterUser(r.Context(), req.Username, req.Email, req.Password, req.GroupName)
+	groupName := req.GroupName
+	if groupName == "" {
+		groupName = req.LegacyGroupName
+	}
+	userID, err := h.authService.RegisterUser(r.Context(), req.Username, req.Email, req.Password, groupName)
 	if err != nil {
 		middleware.QueueErrorLog(r.Context(), "registration failed", err)
 		if errors.Is(err, context.DeadlineExceeded) {
@@ -98,7 +102,11 @@ func (h *AuthHandler) Refresh(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	userID, accessToken, refreshToken, err := h.authService.RefreshTokens(r.Context(), req.RefreshToken)
+	refreshTokenValue := req.RefreshToken
+	if refreshTokenValue == "" {
+		refreshTokenValue = req.LegacyRefreshToken
+	}
+	userID, accessToken, refreshToken, err := h.authService.RefreshTokens(r.Context(), refreshTokenValue)
 	if err != nil {
 		middleware.QueueErrorLog(r.Context(), "token refresh failed", err)
 		if errors.Is(err, context.DeadlineExceeded) {
@@ -125,7 +133,11 @@ func (h *AuthHandler) Logout(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := h.authService.Logout(r.Context(), req.RefreshToken); err != nil {
+	refreshTokenValue := req.RefreshToken
+	if refreshTokenValue == "" {
+		refreshTokenValue = req.LegacyRefreshToken
+	}
+	if err := h.authService.Logout(r.Context(), refreshTokenValue); err != nil {
 		middleware.QueueErrorLog(r.Context(), "logout failed", err)
 		if errors.Is(err, context.DeadlineExceeded) {
 			pkg.WriteError(w, http.StatusGatewayTimeout, "request_timeout", "Request timed out")

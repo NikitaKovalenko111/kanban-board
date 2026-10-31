@@ -6,41 +6,31 @@ import (
 	board_repo "kanban-board/internal/storage/repositories/board"
 	board_column_repo "kanban-board/internal/storage/repositories/board_column"
 	comment_repo "kanban-board/internal/storage/repositories/comment"
-	project_repo "kanban-board/internal/storage/repositories/project"
 	session_repo "kanban-board/internal/storage/repositories/session"
 	task_repo "kanban-board/internal/storage/repositories/task"
 	task_assignee_repo "kanban-board/internal/storage/repositories/task_assignee"
-	team_repo "kanban-board/internal/storage/repositories/team"
-	team_member_repo "kanban-board/internal/storage/repositories/team_member"
-	users_repository "kanban-board/internal/storage/repositories/user"
+	users_repo "kanban-board/internal/storage/repositories/user"
+	workspace_repo "kanban-board/internal/storage/repositories/workspace"
 )
 
 type Repositories struct {
-	UsersRepo        *users_repository.UsersRepo
-	TeamRepo         *team_repo.TeamRepo
-	TeamMemberRepo   *team_member_repo.TeamMemberRepo
-	ProjectRepo      *project_repo.ProjectRepo
-	BoardRepo        *board_repo.BoardRepo
-	BoardColumnRepo  *board_column_repo.BoardColumnRepo
-	TaskRepo         *task_repo.TaskRepo
-	SessionRepo      *session_repo.SessionRepo
-	TaskAssigneeRepo *task_assignee_repo.TaskAssigneeRepo
-	CommentRepo      *comment_repo.CommentRepo
-	AttachmentRepo   *attachment_repo.AttachmentRepo
+	Users         *users_repo.UsersRepo
+	Sessions      *session_repo.SessionRepo
+	Boards        *board_repo.BoardRepo
+	BoardColumns  *board_column_repo.BoardColumnRepo
+	Tasks         *task_repo.TaskRepo
+	TaskAssignees *task_assignee_repo.TaskAssigneeRepo
+	Comments      *comment_repo.CommentRepo
+	Attachments   *attachment_repo.AttachmentRepo
+	Workspace     *workspace_repo.Repository
 }
 
-func Init(storage *storage.Storage) *Repositories {
+func Init(appStorage *storage.Storage) *Repositories {
 	return &Repositories{
-		UsersRepo:        users_repository.Init(storage.Db),
-		TeamRepo:         team_repo.Init(storage.Db),
-		TeamMemberRepo:   team_member_repo.Init(storage.Db),
-		ProjectRepo:      project_repo.Init(storage.Db),
-		BoardRepo:        board_repo.Init(storage.Db),
-		BoardColumnRepo:  board_column_repo.Init(storage.Db),
-		TaskRepo:         task_repo.Init(storage.Db),
-		SessionRepo:      session_repo.Init(storage.Db),
-		TaskAssigneeRepo: task_assignee_repo.Init(storage.Db),
-		CommentRepo:      comment_repo.Init(storage.Db),
-		AttachmentRepo:   attachment_repo.Init(storage.Db),
+		Users: users_repo.Init(appStorage.Db), Sessions: session_repo.Init(appStorage.Db),
+		Boards: board_repo.Init(appStorage.Db), BoardColumns: board_column_repo.Init(appStorage.Db),
+		Tasks: task_repo.Init(appStorage.Db), TaskAssignees: task_assignee_repo.Init(appStorage.Db),
+		Comments: comment_repo.Init(appStorage.Db), Attachments: attachment_repo.Init(appStorage.Db),
+		Workspace: workspace_repo.Init(appStorage.Db),
 	}
 }

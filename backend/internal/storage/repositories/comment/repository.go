@@ -7,104 +7,50 @@ import (
 	"kanban-board/internal/models"
 )
 
-type CommentRepo struct {
-	db *sql.DB
-}
+type CommentRepo struct{ db *sql.DB }
 
-func Init(db *sql.DB) *CommentRepo {
-	return &CommentRepo{
-		db: db,
-	}
-}
-
-func (r *CommentRepo) CreateComment(ctx context.Context, taskID string, authorID string, content string) (string, error) {
-	var commentID string
-	err := r.db.QueryRowContext(ctx, `
-		INSERT INTO comments (comment_id, task_id, author_user_id, content)
-		VALUES (gen_random_uuid(), $1, $2, $3)
-		RETURNING comment_id
-	`, taskID, authorID, content).Scan(&commentID)
+func Init(db *sql.DB) *CommentRepo { return &CommentRepo{db: db} }
+func (r *CommentRepo) CreateComment(ctx context.Context, taskID, authorID, content string) (string, error) {
+	var id string
+	err := r.db.QueryRowContext(ctx, `INSERT INTO comments(comment_id,task_id,author_user_id,content) VALUES(gen_random_uuid(),$1,$2,$3) RETURNING comment_id`, taskID, authorID, content).Scan(&id)
 	if err != nil {
-		return "", fmt.Errorf("failed to create comment: %v", err)
+		return "", fmt.Errorf("failed to create comment: %w", err)
 	}
-
-	return commentID, nil
+	return id, nil
 }
-
-func (r *CommentRepo) GetCommentByID(ctx context.Context, commentID string) (*models.Comment, error) {
-	var comment models.Comment
-	err := r.db.QueryRowContext(ctx, `
-		SELECT comment_id, task_id, author_user_id, content, created_at
-		FROM comments
-		WHERE comment_id = $1
-	`, commentID).Scan(
-		&comment.CommentID,
-		&comment.TaskID,
-		&comment.AuthorUserID,
-		&comment.Content,
-		&comment.CreatedAt,
-	)
+func scanComment(row interface{ Scan(...any) error }) (*models.Comment, error) {
+	var c models.Comment
+	err := row.Scan(&c.CommentID, &c.TaskID, &c.AuthorUserID, &c.Content, &c.CreatedAt, &c.UpdatedAt)
+	return &c, err
+}
+func (r *CommentRepo) GetCommentByID(ctx context.Context, id string) (*models.Comment, error) {
+	c, err := scanComment(r.db.QueryRowContext(ctx, `SELECT comment_id,task_id,author_user_id,content,created_at,updated_at FROM comments WHERE comment_id=$1`, id))
 	if err != nil {
-		return nil, fmt.Errorf("failed to get comment by id: %v", err)
+		return nil, fmt.Errorf("failed to get comment: %w", err)
 	}
-
-	return &comment, nil
+	return c, nil
 }
-
 func (r *CommentRepo) GetCommentsByTaskID(ctx context.Context, taskID string) ([]models.Comment, error) {
-	rows, err := r.db.QueryContext(ctx, `
-		SELECT comment_id, task_id, author_user_id, content, created_at
-		FROM comments
-		WHERE task_id = $1
-		ORDER BY created_at
-	`, taskID)
+	rows, err := r.db.QueryContext(ctx, `SELECT comment_id,task_id,author_user_id,content,created_at,updated_at FROM comments WHERE task_id=$1 ORDER BY created_at`, taskID)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get comments: %v", err)
+		return nil, err
 	}
 	defer rows.Close()
-
-	var comments []models.Comment
+	items := make([]models.Comment, 0)
 	for rows.Next() {
-		var comment models.Comment
-		if err := rows.Scan(
-			&comment.CommentID,
-			&comment.TaskID,
-			&comment.AuthorUserID,
-			&comment.Content,
-			&comment.CreatedAt,
-		); err != nil {
-			return nil, fmt.Errorf("failed to scan comment: %v", err)
+		c, err := scanComment(rows)
+		if err != nil {
+			return nil, err
 		}
-		comments = append(comments, comment)
+		items = append(items, *c)
 	}
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("failed to iterate comments: %v", err)
-	}
-
-	return comments, nil
+	return items, rows.Err()
 }
-
-func (r *CommentRepo) UpdateComment(ctx context.Context, commentID string, content string) error {
-	_, err := r.db.ExecContext(ctx, `
-		UPDATE comments
-		SET content = $1
-		WHERE comment_id = $2
-	`, content, commentID)
-	if err != nil {
-		return fmt.Errorf("failed to update comment: %v", err)
-	}
-
-	return nil
+func (r *CommentRepo) UpdateComment(ctx context.Context, id, content string) error {
+	_, err := r.db.ExecContext(ctx, `UPDATE comments SET content=$1,updated_at=CURRENT_TIMESTAMP WHERE comment_id=$2`, content, id)
+	return err
 }
-
-func (r *CommentRepo) DeleteComment(ctx context.Context, commentID string) error {
-	_, err := r.db.ExecContext(ctx, `
-		DELETE FROM comments
-		WHERE comment_id = $1
-	`, commentID)
-	if err != nil {
-		return fmt.Errorf("failed to delete comment: %v", err)
-	}
-
-	return nil
+func (r *CommentRepo) DeleteComment(ctx context.Context, id string) error {
+	_, err := r.db.ExecContext(ctx, `DELETE FROM comments WHERE comment_id=$1`, id)
+	return err
 }

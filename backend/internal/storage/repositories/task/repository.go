@@ -39,7 +39,7 @@ func (r *TaskRepo) GetTaskByID(ctx context.Context, taskID string) (*models.Task
 	var task models.Task
 	err := r.db.QueryRowContext(ctx, `
 		SELECT task_id, column_id, created_by_user_id, title, COALESCE(description, ''),
-			priority, position, due_date, created_at, updated_at
+			priority, position, due_date, completed_at, created_at, updated_at
 		FROM tasks
 		WHERE task_id = $1
 	`, taskID).Scan(
@@ -51,6 +51,7 @@ func (r *TaskRepo) GetTaskByID(ctx context.Context, taskID string) (*models.Task
 		&task.Priority,
 		&task.Position,
 		&task.DueDate,
+		&task.CompletedAt,
 		&task.CreatedAt,
 		&task.UpdatedAt,
 	)
@@ -64,7 +65,7 @@ func (r *TaskRepo) GetTaskByID(ctx context.Context, taskID string) (*models.Task
 func (r *TaskRepo) GetTasksByColumnID(ctx context.Context, columnID string) ([]models.Task, error) {
 	rows, err := r.db.QueryContext(ctx, `
 		SELECT task_id, column_id, created_by_user_id, title, COALESCE(description, ''),
-			priority, position, due_date, created_at, updated_at
+			priority, position, due_date, completed_at, created_at, updated_at
 		FROM tasks
 		WHERE column_id = $1
 		ORDER BY position
@@ -86,6 +87,7 @@ func (r *TaskRepo) GetTasksByColumnID(ctx context.Context, columnID string) ([]m
 			&task.Priority,
 			&task.Position,
 			&task.DueDate,
+			&task.CompletedAt,
 			&task.CreatedAt,
 			&task.UpdatedAt,
 		); err != nil {

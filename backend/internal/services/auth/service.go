@@ -91,7 +91,7 @@ func (s *AuthService) LoginUser(ctx context.Context, login, password string) (st
 		return "", "", "", fmt.Errorf("failed to get user credentials: %w", err)
 	}
 
-	if !VerifyPassword(password, credentials.PasswordHash) {
+	if !credentials.IsActive || !VerifyPassword(password, credentials.PasswordHash) {
 		return "", "", "", ErrInvalidCredentials
 	}
 

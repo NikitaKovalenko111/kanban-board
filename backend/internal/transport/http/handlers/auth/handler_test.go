@@ -21,6 +21,21 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 )
 
+const createUserQuery = `
+	WITH selected_group AS (
+		INSERT INTO student_groups (student_group_id, group_code, name)
+		VALUES (gen_random_uuid(), $3, $3)
+		ON CONFLICT (group_code) DO UPDATE SET updated_at = CURRENT_TIMESTAMP
+		RETURNING student_group_id
+	)
+	INSERT INTO users (
+		user_id, username, email, display_name, student_group_id, image_url, password_hash
+	)
+	SELECT gen_random_uuid(), $1, $2, $1, student_group_id, $4, $5
+	FROM selected_group
+	RETURNING user_id
+`
+
 func TestRegisterReturnsConflictForExistingUsernameOrEmail(t *testing.T) {
 	tests := []struct {
 		name            string
@@ -55,11 +70,7 @@ func TestRegisterReturnsConflictForExistingUsernameOrEmail(t *testing.T) {
 				}
 			}()
 
-			mock.ExpectQuery(regexp.QuoteMeta(`
-				INSERT INTO users (user_id, username, email, group_name, image_url, password_hash)
-				VALUES (gen_random_uuid(), $1, $2, $3, $4, $5)
-				RETURNING user_id
-			`)).
+			mock.ExpectQuery(regexp.QuoteMeta(createUserQuery)).
 				WithArgs("student.one", "student@example.com", "ТОП-203Б", "", sqlmock.AnyArg()).
 				WillReturnError(&pgconn.PgError{
 					Code:           "23505",
