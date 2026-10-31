@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"kanban-board/internal/models"
+	servicecommon "kanban-board/internal/services/common"
 	board_repo "kanban-board/internal/storage/repositories/board"
 )
 
@@ -18,18 +19,55 @@ func Init(repo *board_repo.Repository) *Service {
 	}
 }
 
+// переписать uid, pid, code, cid в полные названия типа userID (везде)
 func (s *Service) GetBoard(ctx context.Context, uid, pid string) (*Board, error) {
-	return s.repo.GetBoard(ctx, uid, pid)
+	if err := servicecommon.ValidateUUID(uid, pid); err != nil {
+		return nil, err
+	}
+
+	board, err := s.repo.GetBoard(ctx, uid, pid)
+	if err != nil {
+		return nil, err
+	}
+
+	return board, nil
 }
 
 func (s *Service) CreateColumn(ctx context.Context, uid, pid, code, name string, position int) (string, error) {
-	return s.repo.CreateColumn(ctx, uid, pid, code, name, position)
+	if err := VallidateBoard(name, position, code, uid, pid); err != nil {
+		return "", err
+	}
+
+	id, err := s.repo.CreateColumn(ctx, uid, pid, code, name, position)
+	if err != nil {
+		return "", err
+	}
+
+	return id, nil
 }
 
 func (s *Service) UpdateColumn(ctx context.Context, uid, cid, code, name string, position int) error {
-	return s.repo.UpdateColumn(ctx, uid, cid, code, name, position)
+	if err := VallidateBoard(name, position, code, uid, cid); err != nil {
+		return err
+	}
+
+	err := s.repo.UpdateColumn(ctx, uid, cid, code, name, position)
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
 
 func (s *Service) DeleteColumn(ctx context.Context, uid, cid string) error {
-	return s.repo.DeleteColumn(ctx, uid, cid)
+	if err := servicecommon.ValidateUUID(uid, cid); err != nil {
+		return err
+	}
+
+	err := s.repo.DeleteColumn(ctx, uid, cid)
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
