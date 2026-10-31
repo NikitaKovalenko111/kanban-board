@@ -8,9 +8,15 @@ import (
 	"kanban-board/pkg"
 )
 
-type Handler struct{ service *comment_service.Service }
+type Handler struct {
+	service *comment_service.Service
+}
 
-func Init(service *comment_service.Service) *Handler { return &Handler{service: service} }
+func Init(service *comment_service.Service) *Handler {
+	return &Handler{
+		service: service,
+	}
+}
 
 func (h *Handler) Start(mux *http.ServeMux) {
 	mux.HandleFunc("GET /tasks/{taskId}/comments", h.listComments)
@@ -35,6 +41,7 @@ func (h *Handler) listComments(w http.ResponseWriter, r *http.Request) {
 	}
 	pkg.WriteJSON(w, 200, items)
 }
+
 func (h *Handler) addComment(w http.ResponseWriter, r *http.Request) {
 	id, ok := handlercommon.UserID(r)
 	if !ok {
@@ -51,6 +58,7 @@ func (h *Handler) addComment(w http.ResponseWriter, r *http.Request) {
 	}
 	pkg.WriteJSON(w, 201, map[string]string{"id": commentID})
 }
+
 func (h *Handler) updateComment(w http.ResponseWriter, r *http.Request) {
 	id, ok := handlercommon.UserID(r)
 	if !ok {
@@ -66,6 +74,7 @@ func (h *Handler) updateComment(w http.ResponseWriter, r *http.Request) {
 	}
 	pkg.WriteEmpty(w, 204)
 }
+
 func (h *Handler) deleteComment(w http.ResponseWriter, r *http.Request) {
 	id, ok := handlercommon.UserID(r)
 	if !ok {

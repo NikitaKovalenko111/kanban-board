@@ -1,9 +1,9 @@
 package servicecommon
 
-import workspace_repo "kanban-board/internal/storage/repositories/workspace"
+import repositorycommon "kanban-board/internal/storage/repositories/common"
 
 var (
-	ErrNotFound  = workspace_repo.ErrNotFound
-	ErrForbidden = workspace_repo.ErrForbidden
-	ErrConflict  = workspace_repo.ErrConflict
+	ErrNotFound  = repositorycommon.ErrNotFound
+	ErrForbidden = repositorycommon.ErrForbidden
+	ErrConflict  = repositorycommon.ErrConflict
 )

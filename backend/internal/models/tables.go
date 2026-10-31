@@ -192,16 +192,38 @@ const SCHEMA_MIGRATION = `
 	ALTER TABLE users ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP;
 	DO $$
 	BEGIN
-		IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'users' AND column_name = 'group_name') THEN
-			INSERT INTO student_groups (student_group_id, group_code, name)
-			SELECT gen_random_uuid(), group_name, group_name FROM users
-			WHERE group_name IS NOT NULL AND group_name <> '' ON CONFLICT (group_code) DO NOTHING;
-			UPDATE users u SET student_group_id = sg.student_group_id
-			FROM student_groups sg WHERE sg.group_code = u.group_name AND u.student_group_id IS NULL;
+		IF EXISTS (
+			SELECT 1
+			FROM information_schema.columns
+			WHERE table_name = 'users'
+				AND column_name = 'group_name'
+		) THEN
+			INSERT INTO student_groups (
+				student_group_id,
+				group_code,
+				name
+			)
+			SELECT
+				gen_random_uuid(),
+				group_name,
+				group_name
+			FROM users
+			WHERE group_name IS NOT NULL
+				AND group_name <> ''
+			ON CONFLICT (group_code) DO NOTHING;
+
+			UPDATE users u
+			SET student_group_id = sg.student_group_id
+			FROM student_groups sg
+			WHERE sg.group_code = u.group_name
+				AND u.student_group_id IS NULL;
 			ALTER TABLE users DROP COLUMN group_name;
 		END IF;
 	END $$;
-	UPDATE users SET display_name = username WHERE display_name IS NULL OR display_name = '';
+	UPDATE users
+	SET display_name = username
+	WHERE display_name IS NULL
+		OR display_name = '';
 	ALTER TABLE users ALTER COLUMN display_name SET NOT NULL;
 	ALTER TABLE projects ADD COLUMN IF NOT EXISTS created_by_user_id UUID REFERENCES users (user_id);
 	ALTER TABLE projects ADD COLUMN IF NOT EXISTS join_policy VARCHAR NOT NULL DEFAULT 'INVITE_ONLY';
@@ -209,30 +231,65 @@ const SCHEMA_MIGRATION = `
 	ALTER TABLE projects ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP;
 	DO $$
 	BEGIN
-		IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'projects' AND column_name = 'team_id')
-			AND EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'team_members') THEN
-			INSERT INTO project_members (project_id, user_id, role, status, joined_at, updated_at)
-			SELECT p.project_id, tm.user_id,
+		IF EXISTS (
+			SELECT 1
+			FROM information_schema.columns
+			WHERE table_name = 'projects'
+				AND column_name = 'team_id'
+		)
+			AND EXISTS (
+				SELECT 1
+				FROM information_schema.tables
+				WHERE table_name = 'team_members'
+			) THEN
+			INSERT INTO project_members (
+				project_id,
+				user_id,
+				role,
+				status,
+				joined_at,
+				updated_at
+			)
+			SELECT
+				p.project_id,
+				tm.user_id,
 				CASE WHEN UPPER(tm.role) IN ('LEAD', 'TEAM_LEAD') THEN 'LEAD' ELSE 'MEMBER' END,
-				'ACTIVE', tm.joined_at, CURRENT_TIMESTAMP
-			FROM projects p JOIN team_members tm ON tm.team_id = p.team_id
+				'ACTIVE',
+				tm.joined_at,
+				CURRENT_TIMESTAMP
+			FROM projects p
+			JOIN team_members tm ON tm.team_id = p.team_id
 			ON CONFLICT (project_id, user_id) DO NOTHING;
 
 			UPDATE projects p
 			SET created_by_user_id = (
-				SELECT pm.user_id FROM project_members pm
+				SELECT pm.user_id
+				FROM project_members pm
 				WHERE pm.project_id = p.project_id
 				ORDER BY CASE WHEN pm.role = 'LEAD' THEN 0 ELSE 1 END, pm.joined_at
 				LIMIT 1
 			)
 			WHERE p.created_by_user_id IS NULL
-				AND EXISTS (SELECT 1 FROM project_members pm WHERE pm.project_id = p.project_id);
+				AND EXISTS (
+					SELECT 1
+					FROM project_members pm
+					WHERE pm.project_id = p.project_id
+				);
 		END IF;
 	END $$;
 	ALTER TABLE projects DROP CONSTRAINT IF EXISTS projects_team_id_fkey;
 	ALTER TABLE projects DROP COLUMN IF EXISTS team_id;
 	ALTER TABLE board_columns ADD COLUMN IF NOT EXISTS code VARCHAR;
-	UPDATE board_columns SET code = CASE position WHEN 0 THEN 'WAITING' WHEN 1 THEN 'WORKING' WHEN 2 THEN 'CHECKING' WHEN 3 THEN 'DONE' ELSE 'COLUMN_' || position::text END WHERE code IS NULL OR code = '';
+	UPDATE board_columns
+	SET code = CASE position
+		WHEN 0 THEN 'WAITING'
+		WHEN 1 THEN 'WORKING'
+		WHEN 2 THEN 'CHECKING'
+		WHEN 3 THEN 'DONE'
+		ELSE 'COLUMN_' || position::text
+	END
+	WHERE code IS NULL
+		OR code = '';
 	ALTER TABLE board_columns ALTER COLUMN code SET NOT NULL;
 	ALTER TABLE tasks ADD COLUMN IF NOT EXISTS completed_at TIMESTAMPTZ;
 	ALTER TABLE comments ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ;

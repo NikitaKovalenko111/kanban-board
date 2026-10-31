@@ -9,9 +9,15 @@ import (
 	"kanban-board/pkg"
 )
 
-type Handler struct{ service *task_service.Service }
+type Handler struct {
+	service *task_service.Service
+}
 
-func Init(service *task_service.Service) *Handler { return &Handler{service: service} }
+func Init(service *task_service.Service) *Handler {
+	return &Handler{
+		service: service,
+	}
+}
 
 func (h *Handler) Start(mux *http.ServeMux) {
 	mux.HandleFunc("GET /projects/{projectId}/tasks", h.listTasks)
@@ -56,6 +62,7 @@ func (h *Handler) listTasks(w http.ResponseWriter, r *http.Request) {
 	}
 	pkg.WriteJSON(w, 200, items)
 }
+
 func (h *Handler) getTask(w http.ResponseWriter, r *http.Request) {
 	id, ok := handlercommon.UserID(r)
 	if !ok {
@@ -68,6 +75,7 @@ func (h *Handler) getTask(w http.ResponseWriter, r *http.Request) {
 	}
 	pkg.WriteJSON(w, 200, item)
 }
+
 func (h *Handler) createTask(w http.ResponseWriter, r *http.Request) {
 	id, ok := handlercommon.UserID(r)
 	if !ok {
@@ -87,6 +95,7 @@ func (h *Handler) createTask(w http.ResponseWriter, r *http.Request) {
 	}
 	pkg.WriteJSON(w, 201, map[string]string{"id": taskID})
 }
+
 func (h *Handler) updateTask(w http.ResponseWriter, r *http.Request) {
 	id, ok := handlercommon.UserID(r)
 	if !ok {
@@ -105,6 +114,7 @@ func (h *Handler) updateTask(w http.ResponseWriter, r *http.Request) {
 	}
 	h.getTask(w, r)
 }
+
 func (h *Handler) deleteTask(w http.ResponseWriter, r *http.Request) {
 	id, ok := handlercommon.UserID(r)
 	if !ok {
@@ -116,6 +126,7 @@ func (h *Handler) deleteTask(w http.ResponseWriter, r *http.Request) {
 	}
 	pkg.WriteEmpty(w, 204)
 }
+
 func (h *Handler) takeTask(w http.ResponseWriter, r *http.Request) {
 	id, ok := handlercommon.UserID(r)
 	if !ok {
@@ -127,6 +138,7 @@ func (h *Handler) takeTask(w http.ResponseWriter, r *http.Request) {
 	}
 	h.getTask(w, r)
 }
+
 func (h *Handler) moveTask(w http.ResponseWriter, r *http.Request) {
 	id, ok := handlercommon.UserID(r)
 	if !ok {
@@ -142,6 +154,7 @@ func (h *Handler) moveTask(w http.ResponseWriter, r *http.Request) {
 	}
 	h.getTask(w, r)
 }
+
 func (h *Handler) addTaskAssignee(w http.ResponseWriter, r *http.Request) {
 	id, ok := handlercommon.UserID(r)
 	if !ok {
@@ -157,6 +170,7 @@ func (h *Handler) addTaskAssignee(w http.ResponseWriter, r *http.Request) {
 	}
 	pkg.WriteEmpty(w, 204)
 }
+
 func (h *Handler) listTaskAssignees(w http.ResponseWriter, r *http.Request) {
 	id, ok := handlercommon.UserID(r)
 	if !ok {
@@ -169,6 +183,7 @@ func (h *Handler) listTaskAssignees(w http.ResponseWriter, r *http.Request) {
 	}
 	pkg.WriteJSON(w, http.StatusOK, task.AssigneeIDs)
 }
+
 func (h *Handler) removeTaskAssignee(w http.ResponseWriter, r *http.Request) {
 	id, ok := handlercommon.UserID(r)
 	if !ok {
@@ -180,6 +195,7 @@ func (h *Handler) removeTaskAssignee(w http.ResponseWriter, r *http.Request) {
 	}
 	pkg.WriteEmpty(w, 204)
 }
+
 func (h *Handler) taskHistory(w http.ResponseWriter, r *http.Request) {
 	id, ok := handlercommon.UserID(r)
 	if !ok {

@@ -23,15 +23,33 @@ import (
 
 const createUserQuery = `
 	WITH selected_group AS (
-		INSERT INTO student_groups (student_group_id, group_code, name)
+		INSERT INTO student_groups (
+			student_group_id,
+			group_code,
+			name
+		)
 		VALUES (gen_random_uuid(), $3, $3)
-		ON CONFLICT (group_code) DO UPDATE SET updated_at = CURRENT_TIMESTAMP
+		ON CONFLICT (group_code)
+		DO UPDATE SET updated_at = CURRENT_TIMESTAMP
 		RETURNING student_group_id
 	)
 	INSERT INTO users (
-		user_id, username, email, display_name, student_group_id, image_url, password_hash
+		user_id,
+		username,
+		email,
+		display_name,
+		student_group_id,
+		image_url,
+		password_hash
 	)
-	SELECT gen_random_uuid(), $1, $2, $1, student_group_id, $4, $5
+	SELECT
+		gen_random_uuid(),
+		$1,
+		$2,
+		$1,
+		student_group_id,
+		$4,
+		$5
 	FROM selected_group
 	RETURNING user_id
 `

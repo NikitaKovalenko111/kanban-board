@@ -459,7 +459,7 @@ curl -X POST http://localhost:8080/api/v1/tasks/$TASK_ID/attachments \
 GET /api/v1/schedule/lessons?group=РИ-230912&from=2026-11-01&to=2026-11-07
 ```
 
-В текущей реализации модели расписания возвращаются с Go-названиями полей: `StudentGroupID`, `GroupCode`, `Name`, а для занятия — `LessonID`, `StudentGroupID`, `ExternalID`, `Title`, `Room`, `Teacher`, `LessonKind`, `StartsAt`, `EndsAt`, `SourceStatus`, `SourceUpdatedAt`, `CreatedAt`, `UpdatedAt`.
+Учебная группа содержит поля `id`, `groupCode`, `name`, `createdAt`, `updatedAt`. Занятие содержит `id`, `studentGroupId`, `externalId`, `title`, `room`, `teacher`, `lessonKind`, `startsAt`, `endsAt`, `sourceStatus`, необязательное `sourceUpdatedAt`, `createdAt`, `updatedAt`.
 
 ## Типы событий
 

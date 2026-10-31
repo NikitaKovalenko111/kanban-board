@@ -13,13 +13,20 @@ type SessionRepo struct {
 }
 
 func Init(db *sql.DB) *SessionRepo {
-	return &SessionRepo{db: db}
+	return &SessionRepo{
+		db: db,
+	}
 }
 
 // used in auth_service.go
 func (r *SessionRepo) CreateSession(ctx context.Context, userID string, refreshTokenHash string, expiresAt time.Time) error {
 	_, err := r.db.ExecContext(ctx, `
-		INSERT INTO sessions (session_id, user_id, refresh_token_hash, expires_at)
+		INSERT INTO sessions (
+			session_id,
+			user_id,
+			refresh_token_hash,
+			expires_at
+		)
 		VALUES (gen_random_uuid(), $1, $2, $3)
 	`, userID, refreshTokenHash, expiresAt)
 	if err != nil {
@@ -33,7 +40,13 @@ func (r *SessionRepo) CreateSession(ctx context.Context, userID string, refreshT
 func (r *SessionRepo) GetActiveSessionByTokenHash(ctx context.Context, refreshTokenHash string) (*models.Session, error) {
 	var session models.Session
 	err := r.db.QueryRowContext(ctx, `
-		SELECT session_id, user_id, refresh_token_hash, expires_at, created_at, revoked_at
+		SELECT
+			session_id,
+			user_id,
+			refresh_token_hash,
+			expires_at,
+			created_at,
+			revoked_at
 		FROM sessions
 		WHERE refresh_token_hash = $1
 			AND revoked_at IS NULL
@@ -55,7 +68,13 @@ func (r *SessionRepo) GetActiveSessionByTokenHash(ctx context.Context, refreshTo
 
 func (r *SessionRepo) GetActiveSessionsByUserID(ctx context.Context, userID string) ([]models.Session, error) {
 	rows, err := r.db.QueryContext(ctx, `
-		SELECT session_id, user_id, refresh_token_hash, expires_at, created_at, revoked_at
+		SELECT
+			session_id,
+			user_id,
+			refresh_token_hash,
+			expires_at,
+			created_at,
+			revoked_at
 		FROM sessions
 		WHERE user_id = $1
 			AND revoked_at IS NULL
@@ -93,7 +112,9 @@ func (r *SessionRepo) GetActiveSessionsByUserID(ctx context.Context, userID stri
 func (r *SessionRepo) RotateRefreshToken(ctx context.Context, currentTokenHash string, newTokenHash string, expiresAt time.Time) error {
 	result, err := r.db.ExecContext(ctx, `
 		UPDATE sessions
-		SET refresh_token_hash = $1, expires_at = $2
+		SET
+			refresh_token_hash = $1,
+			expires_at = $2
 		WHERE refresh_token_hash = $3
 			AND revoked_at IS NULL
 			AND expires_at > CURRENT_TIMESTAMP

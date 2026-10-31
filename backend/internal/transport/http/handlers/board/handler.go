@@ -8,9 +8,15 @@ import (
 	"kanban-board/pkg"
 )
 
-type Handler struct{ service *board_service.Service }
+type Handler struct {
+	service *board_service.Service
+}
 
-func Init(service *board_service.Service) *Handler { return &Handler{service: service} }
+func Init(service *board_service.Service) *Handler {
+	return &Handler{
+		service: service,
+	}
+}
 
 func (h *Handler) Start(mux *http.ServeMux) {
 	mux.HandleFunc("GET /projects/{projectId}/board", h.getBoard)
@@ -37,6 +43,7 @@ func (h *Handler) getBoard(w http.ResponseWriter, r *http.Request) {
 	}
 	pkg.WriteJSON(w, 200, board)
 }
+
 func (h *Handler) createColumn(w http.ResponseWriter, r *http.Request) {
 	id, ok := handlercommon.UserID(r)
 	if !ok {
@@ -53,6 +60,7 @@ func (h *Handler) createColumn(w http.ResponseWriter, r *http.Request) {
 	}
 	pkg.WriteJSON(w, 201, map[string]string{"id": columnID})
 }
+
 func (h *Handler) updateColumn(w http.ResponseWriter, r *http.Request) {
 	id, ok := handlercommon.UserID(r)
 	if !ok {
@@ -68,6 +76,7 @@ func (h *Handler) updateColumn(w http.ResponseWriter, r *http.Request) {
 	}
 	pkg.WriteEmpty(w, 204)
 }
+
 func (h *Handler) deleteColumn(w http.ResponseWriter, r *http.Request) {
 	id, ok := handlercommon.UserID(r)
 	if !ok {

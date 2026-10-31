@@ -9,7 +9,7 @@ type SystemHandler struct {
 }
 
 func Init() *SystemHandler {
-	return &SystemHandler{}
+	return new(SystemHandler)
 }
 
 func (h *SystemHandler) Start(mux *http.ServeMux) {

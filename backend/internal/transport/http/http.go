@@ -15,7 +15,11 @@ type HTTP struct {
 }
 
 func Init(handlers *handlers.Handlers, accessSecret string, logger *slog.Logger) *HTTP {
-	return &HTTP{handlers: handlers, accessSecret: accessSecret, logger: logger}
+	return &HTTP{
+		handlers:     handlers,
+		accessSecret: accessSecret,
+		logger:       logger,
+	}
 }
 
 func (h *HTTP) Start(mux *http.ServeMux) {
@@ -28,15 +32,15 @@ func (h *HTTP) Start(mux *http.ServeMux) {
 	mux.Handle("/auth/", http.StripPrefix("/auth", authRouter))
 	mux.Handle("/api/v1/auth/", http.StripPrefix("/api/v1/auth", authRouter))
 
-	workspaceRouter := http.NewServeMux()
-	h.handlers.Profile.Start(workspaceRouter)
-	h.handlers.Project.Start(workspaceRouter)
-	h.handlers.Board.Start(workspaceRouter)
-	h.handlers.Task.Start(workspaceRouter)
-	h.handlers.Comment.Start(workspaceRouter)
-	h.handlers.Attachment.Start(workspaceRouter)
-	h.handlers.Schedule.Start(workspaceRouter)
-	h.handlers.Event.Start(workspaceRouter)
-	protectedWorkspace := middleware.Authorization(h.accessSecret, h.logger)(workspaceRouter)
-	mux.Handle("/api/v1/", http.StripPrefix("/api/v1", protectedWorkspace))
+	apiRouter := http.NewServeMux()
+	h.handlers.Profile.Start(apiRouter)
+	h.handlers.Project.Start(apiRouter)
+	h.handlers.Board.Start(apiRouter)
+	h.handlers.Task.Start(apiRouter)
+	h.handlers.Comment.Start(apiRouter)
+	h.handlers.Attachment.Start(apiRouter)
+	h.handlers.Schedule.Start(apiRouter)
+	h.handlers.Event.Start(apiRouter)
+	protectedAPI := middleware.Authorization(h.accessSecret, h.logger)(apiRouter)
+	mux.Handle("/api/v1/", http.StripPrefix("/api/v1", protectedAPI))
 }

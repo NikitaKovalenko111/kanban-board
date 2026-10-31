@@ -16,7 +16,9 @@ type AuthHandler struct {
 }
 
 func Init(authService *auth_service.AuthService) *AuthHandler {
-	return &AuthHandler{authService: authService}
+	return &AuthHandler{
+		authService: authService,
+	}
 }
 
 func (h *AuthHandler) Start(mux *http.ServeMux) {

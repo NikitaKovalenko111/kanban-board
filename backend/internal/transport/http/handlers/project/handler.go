@@ -8,9 +8,15 @@ import (
 	"kanban-board/pkg"
 )
 
-type Handler struct{ service *project_service.Service }
+type Handler struct {
+	service *project_service.Service
+}
 
-func Init(service *project_service.Service) *Handler { return &Handler{service: service} }
+func Init(service *project_service.Service) *Handler {
+	return &Handler{
+		service: service,
+	}
+}
 
 func (h *Handler) Start(mux *http.ServeMux) {
 	mux.HandleFunc("GET /projects", h.listProjects)
@@ -51,6 +57,7 @@ func (h *Handler) listProjects(w http.ResponseWriter, r *http.Request) {
 	}
 	pkg.WriteJSON(w, 200, items)
 }
+
 func (h *Handler) getProject(w http.ResponseWriter, r *http.Request) {
 	id, ok := handlercommon.UserID(r)
 	if !ok {
@@ -63,6 +70,7 @@ func (h *Handler) getProject(w http.ResponseWriter, r *http.Request) {
 	}
 	pkg.WriteJSON(w, 200, item)
 }
+
 func (h *Handler) createProject(w http.ResponseWriter, r *http.Request) {
 	id, ok := handlercommon.UserID(r)
 	if !ok {
@@ -82,6 +90,7 @@ func (h *Handler) createProject(w http.ResponseWriter, r *http.Request) {
 	}
 	pkg.WriteJSON(w, 201, map[string]string{"id": projectID})
 }
+
 func (h *Handler) updateProject(w http.ResponseWriter, r *http.Request) {
 	id, ok := handlercommon.UserID(r)
 	if !ok {
@@ -100,6 +109,7 @@ func (h *Handler) updateProject(w http.ResponseWriter, r *http.Request) {
 	}
 	h.getProject(w, r)
 }
+
 func (h *Handler) deleteProject(w http.ResponseWriter, r *http.Request) {
 	id, ok := handlercommon.UserID(r)
 	if !ok {
@@ -111,6 +121,7 @@ func (h *Handler) deleteProject(w http.ResponseWriter, r *http.Request) {
 	}
 	pkg.WriteEmpty(w, 204)
 }
+
 func (h *Handler) listProjectMembers(w http.ResponseWriter, r *http.Request) {
 	id, ok := handlercommon.UserID(r)
 	if !ok {
@@ -123,6 +134,7 @@ func (h *Handler) listProjectMembers(w http.ResponseWriter, r *http.Request) {
 	}
 	pkg.WriteJSON(w, 200, items)
 }
+
 func (h *Handler) addProjectMember(w http.ResponseWriter, r *http.Request) {
 	id, ok := handlercommon.UserID(r)
 	if !ok {
@@ -141,6 +153,7 @@ func (h *Handler) addProjectMember(w http.ResponseWriter, r *http.Request) {
 	}
 	pkg.WriteEmpty(w, 204)
 }
+
 func (h *Handler) updateProjectMember(w http.ResponseWriter, r *http.Request) {
 	id, ok := handlercommon.UserID(r)
 	if !ok {
@@ -156,6 +169,7 @@ func (h *Handler) updateProjectMember(w http.ResponseWriter, r *http.Request) {
 	}
 	pkg.WriteEmpty(w, 204)
 }
+
 func (h *Handler) removeProjectMember(w http.ResponseWriter, r *http.Request) {
 	id, ok := handlercommon.UserID(r)
 	if !ok {
@@ -167,6 +181,7 @@ func (h *Handler) removeProjectMember(w http.ResponseWriter, r *http.Request) {
 	}
 	pkg.WriteEmpty(w, 204)
 }
+
 func (h *Handler) joinProject(w http.ResponseWriter, r *http.Request) {
 	id, ok := handlercommon.UserID(r)
 	if !ok {
@@ -178,6 +193,7 @@ func (h *Handler) joinProject(w http.ResponseWriter, r *http.Request) {
 	}
 	pkg.WriteEmpty(w, 204)
 }
+
 func (h *Handler) leaveProject(w http.ResponseWriter, r *http.Request) {
 	id, ok := handlercommon.UserID(r)
 	if !ok {

@@ -12,9 +12,16 @@ import (
 	schedule_service "kanban-board/internal/services/schedule"
 	task_service "kanban-board/internal/services/task"
 	"kanban-board/internal/storage"
+	attachment_repo "kanban-board/internal/storage/repositories/attachment"
+	board_repo "kanban-board/internal/storage/repositories/board"
+	comment_repo "kanban-board/internal/storage/repositories/comment"
+	event_repo "kanban-board/internal/storage/repositories/event"
+	profile_repo "kanban-board/internal/storage/repositories/profile"
+	project_repo "kanban-board/internal/storage/repositories/project"
+	schedule_repo "kanban-board/internal/storage/repositories/schedule"
 	session_repo "kanban-board/internal/storage/repositories/session"
+	task_repo "kanban-board/internal/storage/repositories/task"
 	users_repo "kanban-board/internal/storage/repositories/user"
-	workspace_repo "kanban-board/internal/storage/repositories/workspace"
 )
 
 type Services struct {
@@ -32,17 +39,16 @@ type Services struct {
 func Init(appStorage *storage.Storage, jwtConfig config.JWT) *Services {
 	userRepo := users_repo.Init(appStorage.Db)
 	sessionRepo := session_repo.Init(appStorage.Db)
-	workspaceRepo := workspace_repo.Init(appStorage.Db)
 
 	return &Services{
 		Auth:       auth_service.Init(sessionRepo, userRepo, jwtConfig),
-		Profile:    profile_service.Init(workspaceRepo),
-		Project:    project_service.Init(workspaceRepo),
-		Board:      board_service.Init(workspaceRepo),
-		Task:       task_service.Init(workspaceRepo),
-		Comment:    comment_service.Init(workspaceRepo),
-		Attachment: attachment_service.Init(workspaceRepo),
-		Schedule:   schedule_service.Init(workspaceRepo),
-		Event:      event_service.Init(workspaceRepo),
+		Profile:    profile_service.Init(profile_repo.Init(appStorage.Db)),
+		Project:    project_service.Init(project_repo.Init(appStorage.Db)),
+		Board:      board_service.Init(board_repo.Init(appStorage.Db)),
+		Task:       task_service.Init(task_repo.Init(appStorage.Db)),
+		Comment:    comment_service.Init(comment_repo.Init(appStorage.Db)),
+		Attachment: attachment_service.Init(attachment_repo.Init(appStorage.Db)),
+		Schedule:   schedule_service.Init(schedule_repo.Init(appStorage.Db)),
+		Event:      event_service.Init(event_repo.Init(appStorage.Db)),
 	}
 }

@@ -9,9 +9,15 @@ import (
 	"kanban-board/pkg"
 )
 
-type Handler struct{ service *event_service.Service }
+type Handler struct {
+	service *event_service.Service
+}
 
-func Init(service *event_service.Service) *Handler { return &Handler{service: service} }
+func Init(service *event_service.Service) *Handler {
+	return &Handler{
+		service: service,
+	}
+}
 
 func (h *Handler) Start(mux *http.ServeMux) {
 	mux.HandleFunc("GET /event-types", h.listEventTypes)
@@ -59,6 +65,7 @@ func (h *Handler) listEventTypes(w http.ResponseWriter, r *http.Request) {
 	}
 	pkg.WriteJSON(w, 200, items)
 }
+
 func (h *Handler) createEventType(w http.ResponseWriter, r *http.Request) {
 	id, ok := handlercommon.UserID(r)
 	if !ok {
@@ -78,6 +85,7 @@ func (h *Handler) createEventType(w http.ResponseWriter, r *http.Request) {
 	}
 	pkg.WriteJSON(w, 201, map[string]string{"id": eventTypeID})
 }
+
 func (h *Handler) getEventType(w http.ResponseWriter, r *http.Request) {
 	id, ok := handlercommon.UserID(r)
 	if !ok {
@@ -90,6 +98,7 @@ func (h *Handler) getEventType(w http.ResponseWriter, r *http.Request) {
 	}
 	pkg.WriteJSON(w, http.StatusOK, item)
 }
+
 func (h *Handler) updateEventType(w http.ResponseWriter, r *http.Request) {
 	id, ok := handlercommon.UserID(r)
 	if !ok {
@@ -105,6 +114,7 @@ func (h *Handler) updateEventType(w http.ResponseWriter, r *http.Request) {
 	}
 	pkg.WriteEmpty(w, 204)
 }
+
 func (h *Handler) deleteEventType(w http.ResponseWriter, r *http.Request) {
 	id, ok := handlercommon.UserID(r)
 	if !ok {
@@ -137,6 +147,7 @@ func (h *Handler) listEvents(w http.ResponseWriter, r *http.Request) {
 	}
 	pkg.WriteJSON(w, 200, items)
 }
+
 func (h *Handler) createEvent(w http.ResponseWriter, r *http.Request) {
 	id, ok := handlercommon.UserID(r)
 	if !ok {
@@ -153,6 +164,7 @@ func (h *Handler) createEvent(w http.ResponseWriter, r *http.Request) {
 	}
 	pkg.WriteJSON(w, 201, map[string]string{"id": eventID})
 }
+
 func (h *Handler) getEvent(w http.ResponseWriter, r *http.Request) {
 	id, ok := handlercommon.UserID(r)
 	if !ok {
@@ -165,6 +177,7 @@ func (h *Handler) getEvent(w http.ResponseWriter, r *http.Request) {
 	}
 	pkg.WriteJSON(w, http.StatusOK, item)
 }
+
 func (h *Handler) updateEvent(w http.ResponseWriter, r *http.Request) {
 	id, ok := handlercommon.UserID(r)
 	if !ok {
@@ -180,6 +193,7 @@ func (h *Handler) updateEvent(w http.ResponseWriter, r *http.Request) {
 	}
 	pkg.WriteEmpty(w, 204)
 }
+
 func (h *Handler) deleteEvent(w http.ResponseWriter, r *http.Request) {
 	id, ok := handlercommon.UserID(r)
 	if !ok {

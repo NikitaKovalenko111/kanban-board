@@ -9,9 +9,15 @@ import (
 	"kanban-board/pkg"
 )
 
-type Handler struct{ service *profile_service.Service }
+type Handler struct {
+	service *profile_service.Service
+}
 
-func Init(service *profile_service.Service) *Handler { return &Handler{service: service} }
+func Init(service *profile_service.Service) *Handler {
+	return &Handler{
+		service: service,
+	}
+}
 
 func (h *Handler) Start(mux *http.ServeMux) {
 	mux.HandleFunc("GET /users/me", h.getMe)
@@ -38,6 +44,7 @@ func (h *Handler) getMe(w http.ResponseWriter, r *http.Request) {
 	}
 	pkg.WriteJSON(w, http.StatusOK, profile)
 }
+
 func (h *Handler) getUser(w http.ResponseWriter, r *http.Request) {
 	if _, ok := handlercommon.UserID(r); !ok {
 		return
@@ -51,6 +58,7 @@ func (h *Handler) getUser(w http.ResponseWriter, r *http.Request) {
 	profile.Memberships = nil
 	pkg.WriteJSON(w, http.StatusOK, profile)
 }
+
 func (h *Handler) updateMe(w http.ResponseWriter, r *http.Request) {
 	id, ok := handlercommon.UserID(r)
 	if !ok {

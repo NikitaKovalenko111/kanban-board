@@ -8,9 +8,15 @@ import (
 	"kanban-board/pkg"
 )
 
-type Handler struct{ service *schedule_service.Service }
+type Handler struct {
+	service *schedule_service.Service
+}
 
-func Init(service *schedule_service.Service) *Handler { return &Handler{service: service} }
+func Init(service *schedule_service.Service) *Handler {
+	return &Handler{
+		service: service,
+	}
+}
 
 func (h *Handler) Start(mux *http.ServeMux) {
 	mux.HandleFunc("GET /student-groups", h.listStudentGroups)
@@ -28,6 +34,7 @@ func (h *Handler) listStudentGroups(w http.ResponseWriter, r *http.Request) {
 	}
 	pkg.WriteJSON(w, 200, items)
 }
+
 func (h *Handler) listLessons(w http.ResponseWriter, r *http.Request) {
 	if _, ok := handlercommon.UserID(r); !ok {
 		return

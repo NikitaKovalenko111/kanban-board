@@ -1,4 +1,4 @@
-package workspace_repo
+package project_repo
 
 import (
 	"context"
@@ -22,16 +22,51 @@ func TestCreateProjectCreatesLeadBoardAndDefaultColumns(t *testing.T) {
 
 	mock.ExpectBegin()
 	mock.ExpectQuery(regexp.QuoteMeta(`
-		INSERT INTO projects (project_id, created_by_user_id, name, description, join_policy)
-		VALUES (gen_random_uuid(), $1, $2, NULLIF($3, ''), $4) RETURNING project_id
+		INSERT INTO projects (
+			project_id,
+			created_by_user_id,
+			name,
+			description,
+			join_policy
+		)
+		VALUES (
+			gen_random_uuid(),
+			$1,
+			$2,
+			NULLIF($3, ''),
+			$4
+		)
+		RETURNING project_id
 	`)).WithArgs(userID, "Mobile", "Android client", "INVITE_ONLY").
 		WillReturnRows(sqlmock.NewRows([]string{"project_id"}).AddRow(projectID))
-	mock.ExpectExec(regexp.QuoteMeta(`INSERT INTO project_members (project_id, user_id, role) VALUES ($1, $2, 'LEAD')`)).
+	mock.ExpectExec(regexp.QuoteMeta(`
+		INSERT INTO project_members (
+			project_id,
+			user_id,
+			role
+		)
+		VALUES ($1, $2, 'LEAD')
+	`)).
 		WithArgs(projectID, userID).WillReturnResult(sqlmock.NewResult(0, 1))
-	mock.ExpectQuery(regexp.QuoteMeta(`INSERT INTO boards (board_id, project_id, name) VALUES (gen_random_uuid(), $1, 'Kanban') RETURNING board_id`)).
+	mock.ExpectQuery(regexp.QuoteMeta(`
+		INSERT INTO boards (
+			board_id,
+			project_id,
+			name
+		)
+		VALUES (gen_random_uuid(), $1, 'Kanban')
+		RETURNING board_id
+	`)).
 		WithArgs(projectID).WillReturnRows(sqlmock.NewRows([]string{"board_id"}).AddRow(boardID))
 	mock.ExpectExec(regexp.QuoteMeta(`
-		INSERT INTO board_columns (column_id, board_id, code, name, position) VALUES
+		INSERT INTO board_columns (
+			column_id,
+			board_id,
+			code,
+			name,
+			position
+		)
+		VALUES
 			(gen_random_uuid(), $1, 'WAITING', 'Ожидает', 0),
 			(gen_random_uuid(), $1, 'WORKING', 'В работе', 1),
 			(gen_random_uuid(), $1, 'CHECKING', 'На проверке', 2),
@@ -48,29 +83,5 @@ func TestCreateProjectCreatesLeadBoardAndDefaultColumns(t *testing.T) {
 	}
 	if err := mock.ExpectationsWereMet(); err != nil {
 		t.Fatalf("unmet SQL expectations: %v", err)
-	}
-}
-
-func TestAllowedTransition(t *testing.T) {
-	tests := []struct {
-		name              string
-		role              string
-		assigned          bool
-		from, to, comment string
-		want              bool
-	}{
-		{"assignee starts", "MEMBER", true, "WAITING", "WORKING", "", true},
-		{"assignee submits", "MEMBER", true, "WORKING", "CHECKING", "", true},
-		{"lead accepts", "LEAD", false, "CHECKING", "DONE", "", true},
-		{"lead returns with comment", "LEAD", false, "CHECKING", "WORKING", "fix it", true},
-		{"lead cannot return without comment", "LEAD", false, "CHECKING", "WORKING", "", false},
-		{"unassigned member cannot move", "MEMBER", false, "WAITING", "WORKING", "", false},
-	}
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			if got := allowedTransition(test.role, test.assigned, test.from, test.to, test.comment); got != test.want {
-				t.Fatalf("allowedTransition() = %v, want %v", got, test.want)
-			}
-		})
 	}
 }

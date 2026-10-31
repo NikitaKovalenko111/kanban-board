@@ -13,9 +13,15 @@ import (
 	"kanban-board/pkg"
 )
 
-type Handler struct{ service *attachment_service.Service }
+type Handler struct {
+	service *attachment_service.Service
+}
 
-func Init(service *attachment_service.Service) *Handler { return &Handler{service: service} }
+func Init(service *attachment_service.Service) *Handler {
+	return &Handler{
+		service: service,
+	}
+}
 
 func (h *Handler) Start(mux *http.ServeMux) {
 	mux.HandleFunc("GET /tasks/{taskId}/attachments", h.listAttachments)
@@ -38,6 +44,7 @@ func (h *Handler) listAttachments(w http.ResponseWriter, r *http.Request) {
 	}
 	pkg.WriteJSON(w, 200, items)
 }
+
 func (h *Handler) uploadAttachment(w http.ResponseWriter, r *http.Request) {
 	id, ok := handlercommon.UserID(r)
 	if !ok {
@@ -88,6 +95,7 @@ func (h *Handler) uploadAttachment(w http.ResponseWriter, r *http.Request) {
 	}
 	pkg.WriteJSON(w, 201, map[string]string{"id": attachmentID})
 }
+
 func (h *Handler) downloadAttachment(w http.ResponseWriter, r *http.Request) {
 	id, ok := handlercommon.UserID(r)
 	if !ok {
@@ -102,6 +110,7 @@ func (h *Handler) downloadAttachment(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%q", a.FileName))
 	http.ServeFile(w, r, a.StorageKey)
 }
+
 func (h *Handler) deleteAttachment(w http.ResponseWriter, r *http.Request) {
 	id, ok := handlercommon.UserID(r)
 	if !ok {
