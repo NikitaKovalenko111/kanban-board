@@ -8,38 +8,36 @@ import (
 )
 
 type BoardColumnRepo struct {
-	db  *sql.DB
-	ctx context.Context
+	db *sql.DB
 }
 
-func Init(db *sql.DB, ctx context.Context) *BoardColumnRepo {
+func Init(db *sql.DB) *BoardColumnRepo {
 	return &BoardColumnRepo{
-		db:  db,
-		ctx: ctx,
+		db: db,
 	}
 }
 
-func (r *BoardColumnRepo) CreateBoardColumn(boardID string, name string, position int) (string, error) {
-	var id string
-	err := r.db.QueryRowContext(r.ctx, `
-		INSERT INTO board_column (id, board_id, name, position)
+func (r *BoardColumnRepo) CreateBoardColumn(ctx context.Context, boardID string, name string, position int) (string, error) {
+	var columnID string
+	err := r.db.QueryRowContext(ctx, `
+		INSERT INTO board_columns (column_id, board_id, name, position)
 		VALUES (gen_random_uuid(), $1, $2, $3)
-		RETURNING id
-	`, boardID, name, position).Scan(&id)
+		RETURNING column_id
+	`, boardID, name, position).Scan(&columnID)
 	if err != nil {
 		return "", fmt.Errorf("failed to create board column: %v", err)
 	}
 
-	return id, nil
+	return columnID, nil
 }
 
-func (r *BoardColumnRepo) GetBoardColumnByID(id string) (*models.BoardColumn, error) {
+func (r *BoardColumnRepo) GetBoardColumnByID(ctx context.Context, columnID string) (*models.BoardColumn, error) {
 	var column models.BoardColumn
-	err := r.db.QueryRowContext(r.ctx, `
-		SELECT id, board_id, name, position
-		FROM board_column
-		WHERE id = $1
-	`, id).Scan(&column.ID, &column.BoardID, &column.Name, &column.Position)
+	err := r.db.QueryRowContext(ctx, `
+		SELECT column_id, board_id, name, position
+		FROM board_columns
+		WHERE column_id = $1
+	`, columnID).Scan(&column.ColumnID, &column.BoardID, &column.Name, &column.Position)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get board column by id: %v", err)
 	}
@@ -47,10 +45,10 @@ func (r *BoardColumnRepo) GetBoardColumnByID(id string) (*models.BoardColumn, er
 	return &column, nil
 }
 
-func (r *BoardColumnRepo) GetBoardColumnsByBoardID(boardID string) ([]models.BoardColumn, error) {
-	rows, err := r.db.QueryContext(r.ctx, `
-		SELECT id, board_id, name, position
-		FROM board_column
+func (r *BoardColumnRepo) GetBoardColumnsByBoardID(ctx context.Context, boardID string) ([]models.BoardColumn, error) {
+	rows, err := r.db.QueryContext(ctx, `
+		SELECT column_id, board_id, name, position
+		FROM board_columns
 		WHERE board_id = $1
 		ORDER BY position
 	`, boardID)
@@ -62,7 +60,7 @@ func (r *BoardColumnRepo) GetBoardColumnsByBoardID(boardID string) ([]models.Boa
 	var columns []models.BoardColumn
 	for rows.Next() {
 		var column models.BoardColumn
-		if err := rows.Scan(&column.ID, &column.BoardID, &column.Name, &column.Position); err != nil {
+		if err := rows.Scan(&column.ColumnID, &column.BoardID, &column.Name, &column.Position); err != nil {
 			return nil, fmt.Errorf("failed to scan board column: %v", err)
 		}
 		columns = append(columns, column)
@@ -74,12 +72,12 @@ func (r *BoardColumnRepo) GetBoardColumnsByBoardID(boardID string) ([]models.Boa
 	return columns, nil
 }
 
-func (r *BoardColumnRepo) UpdateBoardColumn(id string, boardID string, name string, position int) error {
-	_, err := r.db.ExecContext(r.ctx, `
-		UPDATE board_column
+func (r *BoardColumnRepo) UpdateBoardColumn(ctx context.Context, columnID string, boardID string, name string, position int) error {
+	_, err := r.db.ExecContext(ctx, `
+		UPDATE board_columns
 		SET board_id = $1, name = $2, position = $3
-		WHERE id = $4
-	`, boardID, name, position, id)
+		WHERE column_id = $4
+	`, boardID, name, position, columnID)
 	if err != nil {
 		return fmt.Errorf("failed to update board column: %v", err)
 	}
@@ -87,11 +85,11 @@ func (r *BoardColumnRepo) UpdateBoardColumn(id string, boardID string, name stri
 	return nil
 }
 
-func (r *BoardColumnRepo) DeleteBoardColumn(id string) error {
-	_, err := r.db.ExecContext(r.ctx, `
-		DELETE FROM board_column
-		WHERE id = $1
-	`, id)
+func (r *BoardColumnRepo) DeleteBoardColumn(ctx context.Context, columnID string) error {
+	_, err := r.db.ExecContext(ctx, `
+		DELETE FROM board_columns
+		WHERE column_id = $1
+	`, columnID)
 	if err != nil {
 		return fmt.Errorf("failed to delete board column: %v", err)
 	}

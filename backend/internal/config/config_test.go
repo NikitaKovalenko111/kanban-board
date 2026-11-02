@@ -12,6 +12,7 @@ func TestLoadHTTPServerFromYAML(t *testing.T) {
 		"http_address",
 		"timeout",
 		"idle_timeout",
+		"session_cleanup_interval",
 		"db_host",
 		"db_user",
 		"db_port",
@@ -35,5 +36,8 @@ func TestLoadHTTPServerFromYAML(t *testing.T) {
 	}
 	if cfg.IDLE_TIMEOUT != 60*time.Second {
 		t.Errorf("IDLE_TIMEOUT = %s, want %s", cfg.IDLE_TIMEOUT, 60*time.Second)
+	}
+	if cfg.SessionCleanupInterval != 30*time.Minute {
+		t.Errorf("SessionCleanupInterval = %s, want %s", cfg.SessionCleanupInterval, 30*time.Minute)
 	}
 }

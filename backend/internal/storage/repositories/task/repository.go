@@ -9,45 +9,43 @@ import (
 )
 
 type TaskRepo struct {
-	db  *sql.DB
-	ctx context.Context
+	db *sql.DB
 }
 
-func Init(db *sql.DB, ctx context.Context) *TaskRepo {
+func Init(db *sql.DB) *TaskRepo {
 	return &TaskRepo{
-		db:  db,
-		ctx: ctx,
+		db: db,
 	}
 }
 
-func (r *TaskRepo) CreateTask(columnID string, createdBy string, title string, description string, priority string, position int, dueDate *time.Time) (string, error) {
-	var id string
-	err := r.db.QueryRowContext(r.ctx, `
-		INSERT INTO task (
-			id, column_id, created_by, title, description,
+func (r *TaskRepo) CreateTask(ctx context.Context, columnID string, createdBy string, title string, description string, priority string, position int, dueDate *time.Time) (string, error) {
+	var taskID string
+	err := r.db.QueryRowContext(ctx, `
+		INSERT INTO tasks (
+			task_id, column_id, created_by_user_id, title, description,
 			priority, position, due_date
 		)
 		VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7)
-		RETURNING id
-	`, columnID, createdBy, title, description, priority, position, dueDate).Scan(&id)
+		RETURNING task_id
+	`, columnID, createdBy, title, description, priority, position, dueDate).Scan(&taskID)
 	if err != nil {
 		return "", fmt.Errorf("failed to create task: %v", err)
 	}
 
-	return id, nil
+	return taskID, nil
 }
 
-func (r *TaskRepo) GetTaskByID(id string) (*models.Task, error) {
+func (r *TaskRepo) GetTaskByID(ctx context.Context, taskID string) (*models.Task, error) {
 	var task models.Task
-	err := r.db.QueryRowContext(r.ctx, `
-		SELECT id, column_id, created_by, title, COALESCE(description, ''),
+	err := r.db.QueryRowContext(ctx, `
+		SELECT task_id, column_id, created_by_user_id, title, COALESCE(description, ''),
 			priority, position, due_date, created_at, updated_at
-		FROM task
-		WHERE id = $1
-	`, id).Scan(
-		&task.ID,
+		FROM tasks
+		WHERE task_id = $1
+	`, taskID).Scan(
+		&task.TaskID,
 		&task.ColumnID,
-		&task.CreatedBy,
+		&task.CreatedByUserID,
 		&task.Title,
 		&task.Description,
 		&task.Priority,
@@ -63,11 +61,11 @@ func (r *TaskRepo) GetTaskByID(id string) (*models.Task, error) {
 	return &task, nil
 }
 
-func (r *TaskRepo) GetTasksByColumnID(columnID string) ([]models.Task, error) {
-	rows, err := r.db.QueryContext(r.ctx, `
-		SELECT id, column_id, created_by, title, COALESCE(description, ''),
+func (r *TaskRepo) GetTasksByColumnID(ctx context.Context, columnID string) ([]models.Task, error) {
+	rows, err := r.db.QueryContext(ctx, `
+		SELECT task_id, column_id, created_by_user_id, title, COALESCE(description, ''),
 			priority, position, due_date, created_at, updated_at
-		FROM task
+		FROM tasks
 		WHERE column_id = $1
 		ORDER BY position
 	`, columnID)
@@ -80,9 +78,9 @@ func (r *TaskRepo) GetTasksByColumnID(columnID string) ([]models.Task, error) {
 	for rows.Next() {
 		var task models.Task
 		if err := rows.Scan(
-			&task.ID,
+			&task.TaskID,
 			&task.ColumnID,
-			&task.CreatedBy,
+			&task.CreatedByUserID,
 			&task.Title,
 			&task.Description,
 			&task.Priority,
@@ -102,9 +100,9 @@ func (r *TaskRepo) GetTasksByColumnID(columnID string) ([]models.Task, error) {
 	return tasks, nil
 }
 
-func (r *TaskRepo) UpdateTask(id string, columnID string, title string, description string, priority string, position int, dueDate *time.Time) error {
-	_, err := r.db.ExecContext(r.ctx, `
-		UPDATE task
+func (r *TaskRepo) UpdateTask(ctx context.Context, taskID string, columnID string, title string, description string, priority string, position int, dueDate *time.Time) error {
+	_, err := r.db.ExecContext(ctx, `
+		UPDATE tasks
 		SET column_id = $1,
 			title = $2,
 			description = $3,
@@ -112,8 +110,8 @@ func (r *TaskRepo) UpdateTask(id string, columnID string, title string, descript
 			position = $5,
 			due_date = $6,
 			updated_at = CURRENT_TIMESTAMP
-		WHERE id = $7
-	`, columnID, title, description, priority, position, dueDate, id)
+		WHERE task_id = $7
+	`, columnID, title, description, priority, position, dueDate, taskID)
 	if err != nil {
 		return fmt.Errorf("failed to update task: %v", err)
 	}
@@ -121,11 +119,11 @@ func (r *TaskRepo) UpdateTask(id string, columnID string, title string, descript
 	return nil
 }
 
-func (r *TaskRepo) DeleteTask(id string) error {
-	_, err := r.db.ExecContext(r.ctx, `
-		DELETE FROM task
-		WHERE id = $1
-	`, id)
+func (r *TaskRepo) DeleteTask(ctx context.Context, taskID string) error {
+	_, err := r.db.ExecContext(ctx, `
+		DELETE FROM tasks
+		WHERE task_id = $1
+	`, taskID)
 	if err != nil {
 		return fmt.Errorf("failed to delete task: %v", err)
 	}

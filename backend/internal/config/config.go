@@ -11,6 +11,7 @@ type Config struct {
 	LogLevel string `yaml:"log_level" env-required:"true"`
 	HTTP     `yaml:"http_server" env-required:"true"`
 	Postgres `yaml:"postgres" env-required:"true"`
+	JWT      `yaml:"jwt" env-required:"true"`
 }
 
 func Load(path string) (*Config, error) {
@@ -65,6 +66,11 @@ func loadENV(cfg *Config) error {
 		return err
 	}
 
+	err = loadJWT(cfg)
+	if err != nil {
+		return err
+	}
+
 	return nil
 }
 
@@ -79,6 +85,11 @@ func validate(cfg *Config) error {
 	}
 
 	err = validatePostgres(cfg)
+	if err != nil {
+		return err
+	}
+
+	err = validateJWT(cfg)
 	if err != nil {
 		return err
 	}
