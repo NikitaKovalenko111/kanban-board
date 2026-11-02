@@ -1,0 +1,9 @@
+.git
+.env
+.env.*
+*.pem
+*.key
+*.test
+coverage*
+tmp
+bin
