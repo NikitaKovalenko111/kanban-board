@@ -7,6 +7,17 @@ import team, * as m from './teamSlice'
 import { task, user, project, scheduleEvent } from '../../test/fixtures'
 
 describe('состояние приложения', () => {
+  it('помнит независимый выбор проектов на вкладках', () => {
+    let state = projects(undefined, p.loadProjectsSuccess([project, { ...project, id: 'other' }]))
+    state = projects(state, p.setProjectForTab({ tab: 'board', projectId: project.id }))
+    state = projects(state, p.setProjectForTab({ tab: 'schedule', projectId: 'other' }))
+    state = projects(state, p.setProjectForTab({ tab: 'history', projectId: 'all' }))
+    expect(state.selections).toMatchObject({ board: project.id, schedule: 'other', history: 'all' })
+    expect(JSON.parse(localStorage.getItem('project-selections')!)).toEqual(state.selections)
+    state = projects(state, p.loadProjectsSuccess([project]))
+    expect(state.selections?.schedule).toBe('all')
+    expect(state.selections?.board).toBe(project.id)
+  })
   it('сохраняет сессию и аватар, очищает сессию при выходе', () => {
     localStorage.setItem(`mock-avatar-${user.login}`, 'data:image/png;base64,test')
     let state = auth(undefined, a.loginRequest({ login: user.login, password: 'secret' }))

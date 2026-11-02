@@ -1,8 +1,9 @@
 import { configureStore } from '@reduxjs/toolkit'
 import { Provider } from 'react-redux'
-import { render, screen } from '@testing-library/react'
+import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
+import { mockApi } from '../api/mockApi'
 import auth from '../store/slices/authSlice'
 import tasks, { createTaskRequest, updateTaskStatusRequest } from '../store/slices/tasksSlice'
 import projects from '../store/slices/projectsSlice'
@@ -28,6 +29,18 @@ function renderModal(currentTask: TaskType | null = null) {
 }
 
 describe('основные компоненты доски', () => {
+  it('ищет комментарии и восстанавливает весь список после очистки', async () => {
+    renderModal({ ...task, comments: [
+      { id: 'a', author: 'Коллега', text: 'Проверьте отступы', createdAt: '2026-11-02T10:00:00' },
+      { id: 'b', author: 'Коллега', text: 'Обновите цвета', createdAt: '2026-11-02T11:00:00' },
+    ] })
+    await userEvent.type(screen.getByRole('searchbox', { name: 'Поиск комментариев' }), 'цвета')
+    expect(screen.queryByText('Проверьте отступы')).not.toBeInTheDocument()
+    expect(screen.getByText('Обновите цвета')).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: 'Очистить поиск' }))
+    expect(screen.getByText('Проверьте отступы')).toBeInTheDocument()
+    expect(screen.getByRole('region', { name: 'Общий разбор' })).toHaveAttribute('tabindex', '0')
+  })
   it('показывает пустую колонку и открывает историю задач', async () => {
     const onHistory = vi.fn()
     render(<BoardElement name="Выполнено" accent="#123456" tasks={[]} onTaskClick={vi.fn()} onHistory={onHistory} />)
@@ -55,12 +68,13 @@ describe('основные компоненты доски', () => {
   })
 
   it('разрешает отправку на проверку после прикрепления результата', async () => {
+    vi.spyOn(mockApi, 'uploadAttachment').mockResolvedValue({ id: 'uploaded-result', name: 'result.txt', size: 6 })
     const dispatch = renderModal({ ...task, taskStatus: 'working' })
     const submit = screen.getByRole('button', { name: 'Отправить на проверку' })
     expect(submit).toBeDisabled()
     const actor = userEvent.setup()
     await actor.upload(screen.getByLabelText(/Прикрепить результат/), new File(['result'], 'result.txt', { type: 'text/plain' }))
-    expect(submit).toBeEnabled()
+    await waitFor(() => expect(submit).toBeEnabled())
     await actor.click(submit)
     expect(dispatch).toHaveBeenCalledWith(updateTaskStatusRequest({ taskId: task.taskId, status: 'checking', author: user.name, resultAttachments: [expect.objectContaining({ name: 'result.txt', size: 6 })] }))
   })

@@ -1,3 +1,4 @@
+import Icon from '../Icon/Icon'
 import type { JSX } from 'react'
 import type React from 'react'
 import { useAppSelector } from '../../store/hooks'
@@ -14,7 +15,7 @@ const Task: React.FC<PropsType> = ({ task, onClick, showProject }): JSX.Element 
             {showProject && <span className="task__project"><i style={{ background: project?.color ?? '#aab1be' }} />{project?.name ?? 'Неизвестный проект'}</span>}
             <h4 className="task__name">{task.taskName}</h4>
             <p className="task__desc">{task.taskDesc}</p>
-            {task.revisionComment && <span className="task__revision">↩ На доработке</span>}
+            {task.revisionComment && <span className="task__revision"><Icon name="arrow-left" /> На доработке</span>}
             <div className="task__footer">
               <span className="task__assignee" title={task.assignee}>{task.assignee.split(' ').map((part) => part[0]).join('')}</span>
               {task.taskDeadline && <span className={`task__deadline ${overdue ? 'is-overdue' : ''}`}>◷ {new Date(task.taskDeadline).toLocaleDateString('ru-RU', { day: '2-digit', month: 'short' })}</span>}

@@ -1,5 +1,5 @@
 .board-element {
-    min-width: 0; padding: 14px; background: #edf0f5; border-radius: 18px;
+    min-width: 0; padding: 14px; background: var(--color-surface-soft); border-radius: 18px;
     animation: soft-pop .38s both cubic-bezier(.2,.75,.3,1);
     &__top { display: flex; justify-content: space-between; align-items: center; padding: 2px 3px 13px; }
     &__header { display: flex; align-items: center; gap: 8px; font-size: 14px; font-weight: 750; i { width: 8px; height: 8px; border-radius: 50%; } span { color: var(--color-muted); font-size: 12px; font-weight: 500; } }

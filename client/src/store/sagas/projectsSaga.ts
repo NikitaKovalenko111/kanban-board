@@ -2,7 +2,7 @@ import { call, put, takeLatest } from 'redux-saga/effects'
 import { select } from 'redux-saga/effects'
 import { loginSuccess } from '../slices/authSlice'
 import { loadTeamRequest } from '../slices/teamSlice'
-import { updateProjectRequest, updateProjectSuccess } from '../slices/projectsSlice'
+import { updateProjectRequest, updateProjectSuccess, deleteProjectSourceRequest } from '../slices/projectsSlice'
 import type { TeamMember, User } from '../../types'
 import { mockApi } from '../../api/mockApi'
 import type { AddProjectSourcesPayload, NewProject, Project } from '../../types'
@@ -24,6 +24,12 @@ function* addProjectSourcesWorker(action: ReturnType<typeof addProjectSourcesReq
 }
 
 export function* projectsSaga() {
+  yield takeLatest(deleteProjectSourceRequest, function* (action: ReturnType<typeof deleteProjectSourceRequest>) {
+    try {
+      const project: Project = yield call(mockApi.deleteProjectSource, action.payload.projectId, action.payload.sourceId)
+      yield put(addProjectSourcesSuccess(project))
+    } catch (error) { yield put(projectsFailure(error instanceof Error ? error.message : 'Не удалось удалить источник')) }
+  })
   yield takeLatest(updateProjectRequest, function* (action: ReturnType<typeof updateProjectRequest>) {
     try {
       const result: { project: Project; members: TeamMember[] } = yield call(mockApi.updateProject, action.payload)

@@ -30,7 +30,7 @@
       border: 0;
       border-radius: 8px;
       color: var(--color-primary);
-      background: #f0f2ff;
+      background: var(--color-surface-accent);
       cursor: pointer;
 
       &.is-danger { color: var(--color-danger); background: #fff0f1; }

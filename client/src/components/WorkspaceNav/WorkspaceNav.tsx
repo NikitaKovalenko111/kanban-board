@@ -1,12 +1,21 @@
+import Icon from '../Icon/Icon'
 import { useEffect, useRef, useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, useLocation, useSearchParams } from 'react-router-dom'
 import { useAppDispatch, useAppSelector } from '../../store/hooks'
-import { loadProjectsRequest, setActiveProject } from '../../store/slices/projectsSlice'
+import { loadProjectsRequest, setProjectForTab } from '../../store/slices/projectsSlice'
+
+import SearchField from '../SearchField/SearchField'
+import { projectTab, useProjectSelection } from '../../store/useProjectSelection'
 
 const WorkspaceNav = () => {
   const dispatch = useAppDispatch()
-  const navigate = useNavigate()
-  const { items, activeProjectId, loading } = useAppSelector((state) => state.projects)
+  const { pathname } = useLocation()
+  const [params, setParams] = useSearchParams()
+  const tab = projectTab(pathname)
+  const activeProjectId = useProjectSelection(tab ?? '')
+  const showSwitcher = !!tab && (pathname !== '/projects' || params.get('tab') === 'sources')
+  const showSearch = pathname === '/' || pathname === '/history'
+  const { items, loading } = useAppSelector((state) => state.projects)
   const user = useAppSelector((state) => state.auth.user)!
   const activeProject = items.find((project) => project.id === activeProjectId)
   const allProjectsSelected = activeProjectId === 'all'
@@ -23,17 +32,18 @@ const WorkspaceNav = () => {
   }, [])
 
   const selectProject = (projectId: string) => {
-    dispatch(setActiveProject(projectId))
+    dispatch(setProjectForTab({ tab: tab!, projectId }))
     setProjectsOpen(false)
-    if (projectId === 'all') navigate('/')
+
   }
 
+  if (!showSwitcher && !showSearch) return null
   return <div className="workspace-nav">
     <div className="container workspace-nav__container">
-      <div className={`project-switcher ${projectsOpen ? 'is-open' : ''}`} ref={switcherRef}>
+      {showSwitcher && <div className={`project-switcher ${projectsOpen ? 'is-open' : ''}`} ref={switcherRef}>
         <button className="project-switcher__trigger" type="button" onClick={() => setProjectsOpen((value) => !value)} disabled={loading} aria-haspopup="listbox" aria-expanded={projectsOpen}>
           <span className={`project-switcher__dot ${allProjectsSelected ? 'project-switcher__dot--all' : ''}`} style={{ background: allProjectsSelected ? undefined : activeProject?.color ?? '#aab1be' }} />
-          <span className="project-switcher__copy"><small>{allProjectsSelected ? 'Общий обзор' : 'Проект команды'}</small><strong>{loading ? 'Загрузка…' : allProjectsSelected ? 'Все проекты' : activeProject?.name ?? 'Выберите проект'}</strong></span>
+          <span className="project-switcher__copy"><strong>{loading ? 'Загрузка…' : allProjectsSelected ? 'Все проекты' : activeProject?.name ?? 'Выберите проект'}</strong></span>
           <svg className="project-switcher__chevron" viewBox="0 0 20 20" aria-hidden="true"><path d="m6 8 4 4 4-4" /></svg>
         </button>
         {projectsOpen && <div className="project-menu" role="listbox" aria-label="Выбор проекта">
@@ -41,7 +51,7 @@ const WorkspaceNav = () => {
           <div className="project-menu__list">
             <button type="button" role="option" aria-selected={allProjectsSelected} className={`project-menu__all ${allProjectsSelected ? 'is-active' : ''}`} onClick={() => selectProject('all')}>
               <span className="project-menu__color project-menu__color--all" />
-              <span><strong>Все проекты</strong><small>Задачи со всех досок</small></span>
+              <span><strong>Все проекты</strong></span>
               {allProjectsSelected && <svg viewBox="0 0 20 20" aria-hidden="true"><path d="m5 10 3 3 7-7" /></svg>}
             </button>
             {items.map((project) => <button type="button" role="option" aria-selected={project.id === activeProjectId} className={project.id === activeProjectId ? 'is-active' : ''} key={project.id} onClick={() => selectProject(project.id)}>
@@ -50,10 +60,11 @@ const WorkspaceNav = () => {
               {project.id === activeProjectId && <svg viewBox="0 0 20 20" aria-hidden="true"><path d="m5 10 3 3 7-7" /></svg>}
             </button>)}
           </div>
-          <Link className="project-menu__manage" to="/projects" onClick={() => setProjectsOpen(false)}><span>{user.role === 'lead' ? '＋' : '→'}</span> {user.role === 'lead' ? 'Управление проектами' : 'Все проекты'}</Link>
+          <Link className="project-menu__manage" to="/projects" onClick={() => setProjectsOpen(false)}><Icon name={user.role === 'lead' ? 'plus' : 'arrow-right'} /> {user.role === 'lead' ? 'Управление проектами' : 'Все проекты'}</Link>
         </div>}
-      </div>
-      {user.role === 'lead' && activeProject && <Link className="project-nav-manage" to={`/projects/${activeProject.id}/manage`}>Управление проектом</Link>}
+      </div>}
+      {user.role === 'lead' && activeProject && pathname === '/' && <Link className="project-nav-manage" to={`/projects/${activeProject.id}/manage`}>Управление проектом</Link>}
+      {showSearch && <SearchField value={params.get('q') ?? ''} onChange={(value) => setParams((previous) => { const next = new URLSearchParams(previous); if (value) next.set('q', value); else next.delete('q'); return next }, { replace: true })} placeholder={pathname === '/' ? 'Поиск по задачам' : 'Поиск по истории'} />}
     </div>
   </div>
 }

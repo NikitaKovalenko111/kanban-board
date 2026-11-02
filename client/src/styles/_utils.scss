@@ -1,4 +1,5 @@
-@import './mixins';
+@use './mixins' as *;
+@use './media' as *;
 
 .container {
     max-width: calc(var(--container-max-width) + var(--container-padding-desktop-mobile) * 2);

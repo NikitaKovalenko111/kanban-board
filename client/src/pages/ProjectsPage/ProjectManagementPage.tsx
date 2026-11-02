@@ -1,3 +1,4 @@
+import Icon from '../../components/Icon/Icon'
 import { useEffect, useState, type FormEvent } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { mockApi } from '../../api/mockApi'
@@ -48,16 +49,16 @@ const ProjectManagementPage = () => {
     setSubmitted(true)
   }
   if (loading) return <div className="loader">Загружаем проект…</div>
-  if (!project) return <main className="projects-page"><div className="container"><Link className="back-link" to="/projects">← К проектам</Link><h1>Проект не найден</h1></div></main>
+  if (!project) return <main className="projects-page"><div className="container"><Link className="back-link" to="/projects"><Icon name="arrow-left" /> К проектам</Link><h1>Проект не найден</h1></div></main>
 
   const projectMembers = members.filter((member) => member.projectRoles[project.id])
   return <main className="projects-page"><div className="container">
-    <Link className="back-link" to="/projects"><span>←</span>К проектам</Link>
-    <div className="page-heading"><div><span className="eyebrow">Управление проектом</span><h1>{project.name}</h1><p>{project.description || 'Без описания'}</p></div>{canManage && <button className="button" onClick={() => open('details')}>Изменить проект</button>}</div>
+    <Link className="back-link" to="/projects"><Icon name="arrow-left" />К проектам</Link>
+    <div className="page-heading"><div><h1>{project.name}</h1><p>{project.description || 'Без описания'}</p></div>{canManage && <button className="button" onClick={() => open('details')}>Изменить проект</button>}</div>
     {error && <div className="error-banner">{error}</div>}
     {memberError && <div className="error-banner">{memberError}</div>}
     <section className="panel">
-      <div className="panel__heading"><div><h2>Участники проекта</h2><p>Состав и функциональные роли в этом проекте</p></div>{canManage && <button className="button" disabled={membersLoading || !!memberError} onClick={() => open('members')}>Настроить участников</button>}</div>
+      <div className="panel__heading"><div><h2>Участники проекта</h2></div>{canManage && <button className="button" disabled={membersLoading || !!memberError} onClick={() => open('members')}>Настроить участников</button>}</div>
       <div className="project-members">{membersLoading ? <div className="loader">Загружаем участников…</div> : projectMembers.map((member) => <article key={member.id}><UserAvatar user={member} /><div><Link to={`/users/${member.id}`}>{member.name}</Link><small>{member.projectRoles[project.id]}</small></div>{!member.active && <span className="status-badge">Заблокирован</span>}</article>)}{!membersLoading && !projectMembers.length && <div className="empty-state">Добавьте участников проекта</div>}</div>
     </section>
   </div>{dialog && canManage && <FormModal title={dialog === 'details' ? 'Настройки проекта' : 'Участники и роли'} onClose={() => { if (!saving) setDialog(null) }}>

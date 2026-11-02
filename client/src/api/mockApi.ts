@@ -1,4 +1,8 @@
 import axios, { type AxiosRequestConfig, type AxiosResponse } from 'axios'
+import { loadFile, saveFile } from './fileStorage'
+import { visibleSchedule } from '../utils/schedule'
+import { validateTaskTransition } from '../utils/taskPermissions'
+import type { EventPrivacy, TaskStatusUpdate } from '../types'
 import type { AddProjectSourcesPayload, AddTaskCommentPayload, Attachment, LoginCredentials, NewProject, NewScheduleEvent, NewTask, NewTeamMember, Project, ProjectSource, ScheduleEvent, Task, TaskComment, TaskHistoryEvent, TaskStatus, TeamMember, TeamSettings, User } from '../types'
 
 interface Account extends TeamMember { password: string }
@@ -59,10 +63,47 @@ let tasks: Task[] = taskSeeds.map((task) => {
   const withProject: Omit<Task, 'history' | 'comments'> = { ...task, projectId }
   const normalized = task.taskId === 104 ? { ...withProject, completedAt: '2026-10-12' } : withProject
   const comments: TaskComment[] = task.taskId === 103 ? [{ id: 'comment-103-1', author: 'Алексей Морозов', text: 'Проверьте также горизонтальную ориентацию планшета.', createdAt: '2026-10-12T14:20:00' }] : []
-  return { ...normalized, history: createInitialHistory(normalized), comments }
+  return { ...normalized, assigneeId: accounts.find((account) => account.name === normalized.assignee)?.id, history: createInitialHistory(normalized), comments }
 })
 
-const client = axios.create({ baseURL: '/mock-api' })
+accounts = accounts.map((account) => ({ ...account, eventPrivacy: (localStorage.getItem(`event-privacy-${account.id}`) as EventPrivacy | null) ?? 'busy' }))
+
+const client = axios.create({ baseURL: import.meta.env.VITE_API_URL || '/mock-api', withCredentials: true })
+client.interceptors.response.use((result) => result, (reason: unknown) => {
+  if (axios.isAxiosError(reason)) {
+    const body = reason.response?.data as { message?: string } | undefined
+    return Promise.reject(new Error(body?.message ?? (reason.response ? 'Не удалось выполнить запрос' : 'Не удалось связаться с сервером. Проверьте подключение')))
+  }
+  return Promise.reject(reason)
+})
+
+const currentActor = (): Account => {
+  let session: User | null = null
+  try { session = JSON.parse(localStorage.getItem('mock-session') ?? 'null') as User | null } catch { /* No valid session. */ }
+  const actor = accounts.find((account) => account.id === session?.id)
+  if (!actor?.active) throw new Error('Войдите в аккаунт с действующим доступом')
+  return actor
+}
+const requireLead = () => {
+  const actor = currentActor()
+  if (actor.role !== 'lead') throw new Error('Действие доступно только капитану')
+  return actor
+}
+// Demonstration documents have real, readable text contents; original external files were not supplied.
+const seedFiles = new Map<string, Blob>()
+const seedAttachment = (file: Attachment, text: string): Attachment => {
+  const blob = new Blob([text], { type: 'text/plain;charset=utf-8' })
+  seedFiles.set(file.id, blob)
+  return { ...file, name: file.name.replace(/\.[^.]+$/, '') + '.txt', size: blob.size }
+}
+projects = projects.map((project) => ({ ...project, sources: project.sources.map((source) => ({ ...source, uploadedById: accounts.find((account) => account.name === source.uploadedBy)?.id, ...seedAttachment(source, project.name + '\n' + project.description) })) }))
+tasks = tasks.map((task) => ({ ...task, attachments: task.attachments.map((file) => seedAttachment(file, task.taskName + '\n' + task.taskDesc)), resultAttachments: task.resultAttachments.map((file) => seedAttachment(file, 'Результат: ' + task.taskName)) }))
+const validateFiles = async (files: Attachment[]) => {
+  for (const file of files) {
+    const blob = seedFiles.get(file.id) ?? await loadFile(file.id)
+    if (blob.size !== file.size) throw new Error('Данные файла повреждены. Загрузите файл повторно')
+  }
+}
 
 function response<T>(config: AxiosRequestConfig, data: T, status = 200): AxiosResponse<T> {
   return { data, status, statusText: 'OK', headers: {}, config: config as AxiosResponse<T>['config'] }
@@ -79,8 +120,56 @@ const cloneTask = (task: Task): Task => ({
 const publicUser = ({ password: _password, active: _active, joinedAt: _joinedAt, ...user }: Account): User => user
 const publicMember = ({ password: _password, ...member }: Account): TeamMember => member
 
-client.defaults.adapter = async (config) => {
+if (!import.meta.env.VITE_API_URL) client.defaults.adapter = async (config) => {
   await new Promise((resolve) => setTimeout(resolve, 280))
+  if (config.url !== '/auth/login') currentActor()
+  if (config.url === '/users/me/password' && config.method === 'post') {
+    const actor = currentActor()
+    const { currentPassword, newPassword } = JSON.parse(config.data as string) as { currentPassword: string; newPassword: string }
+    if (typeof currentPassword !== 'string' || currentPassword !== actor.password) throw new Error('Текущий пароль указан неверно')
+    if (typeof newPassword !== 'string' || newPassword.length < 6) throw new Error('Новый пароль должен содержать не менее 6 символов')
+    if (newPassword === currentPassword) throw new Error('Новый пароль должен отличаться от текущего')
+    accounts = accounts.map((account) => account.id === actor.id ? { ...account, password: newPassword } : account)
+    return response(config, { success: true })
+  }
+  if (config.method === 'delete' && config.url?.match(/^\/projects\/[^/]+\/sources\/[^/]+$/)) {
+    const [, , projectId, , sourceId] = config.url.split('/')
+    const actor = currentActor()
+    const project = projects.find((item) => item.id === projectId)
+    if (!project) throw new Error('Проект не найден')
+    const source = project.sources.find((file) => file.id === sourceId)
+    if (!source) throw new Error('Источник не найден')
+    const isOwner = source.uploadedById !== undefined ? source.uploadedById === actor.id : source.uploadedBy === actor.name
+    if (actor.role !== 'lead' && !isOwner) throw new Error('Удалить источник может только капитан или его автор')
+    const updated = { ...project, sources: project.sources.filter((file) => file.id !== sourceId) }
+    projects = projects.map((item) => item.id === projectId ? updated : item)
+    return response(config, updated)
+  }
+  if (config.url === '/attachments' && config.method === 'post') {
+    const file = (config.data as FormData).get('file')
+    if (!(file instanceof Blob)) throw new Error('Выберите файл')
+    if (file.size > 25 * 1024 * 1024) throw new Error('Размер файла не должен превышать 25 МБ')
+    const id = crypto.randomUUID()
+    await saveFile(id, file)
+    return response(config, { id, name: (file as File).name || 'file', size: file.size }, 201)
+  }
+  if (config.url === '/users/me' && config.method === 'patch') {
+    const actor = currentActor()
+    const { eventPrivacy } = JSON.parse(config.data as string) as { eventPrivacy: EventPrivacy }
+    if (!['hidden', 'busy', 'title', 'details'].includes(eventPrivacy)) throw new Error('Неверная настройка приватности')
+    accounts = accounts.map((account) => account.id === actor.id ? { ...account, eventPrivacy } : account)
+    localStorage.setItem(`event-privacy-${actor.id}`, eventPrivacy)
+    return response(config, publicUser(accounts.find((account) => account.id === actor.id)!))
+  }
+  if (config.url?.match(/^\/team\/members\/\d+\/password$/) && config.method === 'post') {
+    const actor = requireLead()
+    const id = Number(config.url.split('/')[3])
+    if (id === actor.id) throw new Error('Нельзя сбросить собственный пароль в этом окне')
+    if (!accounts.some((account) => account.id === id)) throw new Error('Участник не найден')
+    const password = 'team-' + crypto.randomUUID().slice(0, 12)
+    accounts = accounts.map((account) => account.id === id ? { ...account, password } : account)
+    return response(config, { password })
+  }
   if (config.url === '/projects' && config.method === 'get') return response(config, projects.map((project) => ({ ...project })))
   if (config.method === 'patch' && config.url?.match(/^\/projects\/[^/]+$/)) {
     const session = JSON.parse(localStorage.getItem('mock-session') ?? 'null') as User | null
@@ -103,37 +192,43 @@ client.defaults.adapter = async (config) => {
     return response(config, { project, members: accounts.map(publicMember) })
   }
   if (config.url === '/projects' && config.method === 'post') {
+    const actor = requireLead()
     const payload = JSON.parse(config.data as string) as NewProject
+    await validateFiles(payload.sources ?? [])
     const baseId = payload.name.trim().toLowerCase().replace(/[^a-zа-яё0-9]+/gi, '-').replace(/^-|-$/g, '') || 'project'
     const id = projects.some((project) => project.id === baseId) ? `${baseId}-${Date.now()}` : baseId
-    const project: Project = { ...payload, name: payload.name.trim(), description: payload.description.trim(), id, sources: [] }
+    const project: Project = { ...payload, name: payload.name.trim(), description: payload.description.trim(), id, sources: (payload.sources ?? []).map((file) => ({ ...file, uploadedAt: new Date().toISOString(), uploadedBy: actor.name, uploadedById: actor.id })) }
+    accounts = accounts.map((account) => account.id === actor.id ? { ...account, projectRoles: { ...account.projectRoles, [id]: 'Капитан проекта' } } : account)
     projects = [...projects, project]
     return response(config, { ...project }, 201)
   }
   if (config.url?.match(/^\/projects\/[^/]+\/sources$/) && config.method === 'post') {
     const projectId = config.url.split('/')[2]
     const payload = JSON.parse(config.data as string) as AddProjectSourcesPayload
+    await validateFiles(payload.files)
     const projectIndex = projects.findIndex((project) => project.id === projectId)
     if (projectIndex < 0) throw new Error('Проект не найден')
     const uploadedAt = new Date().toISOString()
-    const sources: ProjectSource[] = payload.files.map((file) => ({ ...file, uploadedAt, uploadedBy: payload.author }))
+    const sources: ProjectSource[] = payload.files.map((file) => ({ ...file, uploadedAt, uploadedBy: currentActor().name, uploadedById: currentActor().id }))
     const updatedProject = { ...projects[projectIndex], sources: [...projects[projectIndex].sources, ...sources] }
     projects = projects.map((project, index) => index === projectIndex ? updatedProject : project)
     return response(config, { ...updatedProject, sources: updatedProject.sources.map((source) => ({ ...source })) })
   }
   if (config.url?.startsWith('/schedule/') && config.method === 'get') {
     const projectId = config.url.split('/').pop()
-    return response(config, scheduleEvents.filter((event) => projectId === 'all' || event.projectId === projectId).map((event) => ({ ...event })))
+    return response(config, visibleSchedule(scheduleEvents.filter((event) => projectId === 'all' || event.projectId === projectId), currentActor(), accounts))
   }
   if (config.url === '/schedule' && config.method === 'post') {
+    const actor = currentActor()
     const payload = JSON.parse(config.data as string) as NewScheduleEvent
-    const event: ScheduleEvent = { ...payload, id: Date.now() }
+    if (payload.category !== 'personal' && actor.role !== 'lead') throw new Error('Общие события создаёт капитан')
+    const event: ScheduleEvent = { ...payload, author: actor.name, ownerId: actor.id, id: Date.now() }
     scheduleEvents = [...scheduleEvents, event]
     return response(config, { ...event }, 201)
   }
   if (config.method === 'get' && config.url?.match(/^\/attachments\/[^/]+\/download$/)) {
     const attachmentId = config.url.split('/')[2]
-    return response(config, new Blob([`Mock file ${attachmentId}`], { type: 'application/octet-stream' }))
+    return response(config, seedFiles.get(attachmentId) ?? await loadFile(attachmentId))
   }
   if (config.url === '/auth/login' && config.method === 'post') {
     const credentials = JSON.parse(config.data as string) as LoginCredentials
@@ -144,18 +239,23 @@ client.defaults.adapter = async (config) => {
   }
   if (config.url === '/team' && config.method === 'get') return response(config, { settings: { ...teamSettings }, members: accounts.map(publicMember) })
   if (config.url === '/team' && config.method === 'patch') {
+    requireLead()
     teamSettings = { ...teamSettings, ...(JSON.parse(config.data as string) as TeamSettings) }
     return response(config, { ...teamSettings })
   }
   if (config.url === '/team/members' && config.method === 'post') {
+    requireLead()
     const payload = JSON.parse(config.data as string) as NewTeamMember
+    if (!payload.name.trim() || !/^[a-z0-9._-]+$/.test(payload.login.trim().toLowerCase()) || payload.password.length < 6 || !['lead', 'member'].includes(payload.role)) throw new Error('Проверьте имя, логин и пароль (от 6 символов)')
     if (accounts.some((item) => item.login === payload.login.trim().toLowerCase())) throw new Error('Такой логин уже занят')
     const account: Account = { ...payload, login: payload.login.trim().toLowerCase(), id: Date.now(), active: true, joinedAt: new Date().toISOString().slice(0, 10) }
     accounts = [...accounts, account]
     return response(config, publicMember(account), 201)
   }
   if (config.method === 'patch' && config.url?.startsWith('/team/members/')) {
+    const actor = requireLead()
     const id = Number(config.url.split('/').pop())
+    if (id === actor.id) throw new Error('Нельзя заблокировать свой аккаунт')
     const payload = JSON.parse(config.data as string) as { active: boolean }
     accounts = accounts.map((account) => account.id === id ? { ...account, active: payload.active } : account)
     const account = accounts.find((item) => item.id === id)
@@ -164,23 +264,28 @@ client.defaults.adapter = async (config) => {
   }
   if (config.url === '/tasks' && config.method === 'get') return response(config, tasks.map(cloneTask))
   if (config.url === '/tasks' && config.method === 'post') {
+    requireLead()
     const payload = JSON.parse(config.data as string) as NewTask
+    await validateFiles(payload.attachments)
     const task: Task = { ...payload, resultAttachments: [], history: [], comments: [], taskId: Date.now(), taskStatus: 'waiting', assignee: 'Не назначен', createdAt: new Date().toISOString().slice(0, 10) }
     tasks = [task, ...tasks]
     return response(config, cloneTask(task), 201)
   }
   if (config.method === 'patch' && config.url?.startsWith('/tasks/')) {
     const id = Number(config.url.split('/').pop())
-    const payload = JSON.parse(config.data as string) as { status: TaskStatus; revisionComment?: string; resultAttachments?: Attachment[]; author: string; assignee?: string }
+    const payload = JSON.parse(config.data as string) as TaskStatusUpdate
     const taskIndex = tasks.findIndex((item) => item.taskId === id)
     if (taskIndex < 0) throw new Error('Задача не найдена')
     const previousTask = tasks[taskIndex]
+    const actor = currentActor()
+    validateTaskTransition(previousTask, payload, actor)
+    if (payload.status === 'checking') await validateFiles(payload.resultAttachments ?? [])
     const historyEvent: TaskHistoryEvent = {
       id: `event-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
       type: payload.revisionComment ? 'revision' : 'status',
       fromStatus: previousTask.taskStatus,
       toStatus: payload.status,
-      author: payload.author,
+      author: actor.name,
       createdAt: new Date().toISOString(),
       comment: payload.revisionComment,
     }
@@ -190,7 +295,8 @@ client.defaults.adapter = async (config) => {
       completedAt: payload.status === 'done' ? new Date().toISOString() : undefined,
       revisionComment: payload.revisionComment,
       resultAttachments: payload.resultAttachments ?? previousTask.resultAttachments,
-      assignee: payload.assignee ?? previousTask.assignee,
+      assignee: previousTask.taskStatus === 'waiting' && payload.status === 'working' ? actor.name : previousTask.assignee,
+      assigneeId: previousTask.taskStatus === 'waiting' && payload.status === 'working' ? actor.id : previousTask.assigneeId,
       history: [...previousTask.history, historyEvent],
     }
     tasks = tasks.map((task, index) => index === taskIndex ? updatedTask : task)
@@ -199,7 +305,8 @@ client.defaults.adapter = async (config) => {
   if (config.method === 'post' && config.url?.match(/^\/tasks\/\d+\/comments$/)) {
     const taskId = Number(config.url.split('/')[2])
     const payload = JSON.parse(config.data as string) as AddTaskCommentPayload
-    const comment: TaskComment = { id: `comment-${Date.now()}`, author: payload.author, text: payload.text.trim(), createdAt: new Date().toISOString() }
+    if (!payload.text.trim()) throw new Error('Введите комментарий')
+    const comment: TaskComment = { id: crypto.randomUUID(), author: currentActor().name, text: payload.text.trim(), createdAt: new Date().toISOString() }
     const taskIndex = tasks.findIndex((task) => task.taskId === taskId)
     if (taskIndex < 0) throw new Error('Задача не найдена')
     const updatedTask = { ...tasks[taskIndex], comments: [...tasks[taskIndex].comments, comment] }
@@ -210,10 +317,19 @@ client.defaults.adapter = async (config) => {
 }
 
 export const mockApi = {
+  uploadAttachment: async (file: File) => {
+    const form = new FormData()
+    form.append('file', file)
+    return (await client.post<Attachment>('/attachments', form)).data
+  },
+  resetPassword: async (id: number) => (await client.post<{ password: string }>(`/team/members/${id}/password`)).data,
+  changePassword: async (payload: { currentPassword: string; newPassword: string }) => (await client.post<{ success: boolean }>('/users/me/password', payload)).data,
+  updatePrivacy: async (eventPrivacy: EventPrivacy) => (await client.patch<User>('/users/me', { eventPrivacy })).data,
   getProjects: async () => (await client.get<Project[]>('/projects')).data,
   createProject: async (project: NewProject) => (await client.post<Project>('/projects', project)).data,
   updateProject: async (project: ProjectUpdate) => (await client.patch<{ project: Project; members: TeamMember[] }>(`/projects/${project.id}`, project)).data,
   addProjectSources: async (payload: AddProjectSourcesPayload) => (await client.post<Project>(`/projects/${payload.projectId}/sources`, payload)).data,
+  deleteProjectSource: async (projectId: string, sourceId: string) => (await client.delete<Project>(`/projects/${projectId}/sources/${sourceId}`)).data,
   getSchedule: async (projectId: string) => (await client.get<ScheduleEvent[]>(`/schedule/${projectId}`)).data,
   createScheduleEvent: async (event: NewScheduleEvent) => (await client.post<ScheduleEvent>('/schedule', event)).data,
   downloadAttachment: async (attachmentId: string) => (await client.get<Blob>(`/attachments/${attachmentId}/download`, { responseType: 'blob' })).data,

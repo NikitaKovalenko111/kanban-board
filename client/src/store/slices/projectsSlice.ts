@@ -1,13 +1,21 @@
 import { createSlice, type PayloadAction } from '@reduxjs/toolkit'
 import type { AddProjectSourcesPayload, NewProject, Project, UpdateProjectPayload } from '../../types'
 
-interface ProjectsState { items: Project[]; activeProjectId: string; loading: boolean; saving: boolean; error: string | null }
-const initialState: ProjectsState = { items: [], activeProjectId: localStorage.getItem('active-project') ?? 'ai-hackathon', loading: false, saving: false, error: null }
+interface ProjectsState { items: Project[]; activeProjectId: string; selections?: Record<string, string>; loading: boolean; saving: boolean; error: string | null }
+const savedSelections = (): Record<string, string> => {
+  try { return JSON.parse(localStorage.getItem('project-selections') ?? '{}') as Record<string, string> } catch { return {} }
+}
+const initialState: ProjectsState = { items: [], activeProjectId: localStorage.getItem('active-project') ?? 'ai-hackathon', selections: savedSelections(), loading: false, saving: false, error: null }
 
 const projectsSlice = createSlice({
   name: 'projects', initialState,
   reducers: {
     loadProjectsRequest(state) { state.loading = true; state.error = null },
+    setProjectForTab(state, action: PayloadAction<{ tab: string; projectId: string }>) {
+      state.selections = { ...state.selections, [action.payload.tab]: action.payload.projectId }
+      if (action.payload.tab === 'board') state.activeProjectId = action.payload.projectId
+      localStorage.setItem('project-selections', JSON.stringify(state.selections))
+    },
     updateProjectRequest(state, _action: PayloadAction<UpdateProjectPayload>) { state.saving = true; state.error = null },
     updateProjectSuccess(state, action: PayloadAction<Project>) {
       state.items = state.items.map((item) => item.id === action.payload.id ? action.payload : item)
@@ -15,6 +23,9 @@ const projectsSlice = createSlice({
     },
     loadProjectsSuccess(state, action: PayloadAction<Project[]>) {
       state.items = action.payload
+      for (const [tab, id] of Object.entries(state.selections ?? {})) {
+        if (id !== 'all' && !action.payload.some((project) => project.id === id)) state.selections![tab] = 'all'
+      }
       if (state.activeProjectId !== 'all' && !action.payload.some((project) => project.id === state.activeProjectId)) state.activeProjectId = action.payload[0]?.id ?? ''
       state.loading = false
     },
@@ -26,6 +37,7 @@ const projectsSlice = createSlice({
       localStorage.setItem('active-project', action.payload.id)
     },
     addProjectSourcesRequest(state, _action: PayloadAction<AddProjectSourcesPayload>) { state.saving = true; state.error = null },
+    deleteProjectSourceRequest(state, _action: PayloadAction<{ projectId: string; sourceId: string }>) { state.saving = true; state.error = null },
     addProjectSourcesSuccess(state, action: PayloadAction<Project>) {
       state.items = state.items.map((project) => project.id === action.payload.id ? action.payload : project)
       state.saving = false
@@ -35,5 +47,5 @@ const projectsSlice = createSlice({
   },
 })
 
-export const { loadProjectsRequest, loadProjectsSuccess, createProjectRequest, createProjectSuccess, addProjectSourcesRequest, addProjectSourcesSuccess, setActiveProject, projectsFailure, updateProjectRequest, updateProjectSuccess } = projectsSlice.actions
+export const { loadProjectsRequest, loadProjectsSuccess, createProjectRequest, createProjectSuccess, addProjectSourcesRequest, addProjectSourcesSuccess, deleteProjectSourceRequest, setActiveProject, setProjectForTab, projectsFailure, updateProjectRequest, updateProjectSuccess } = projectsSlice.actions
 export default projectsSlice.reducer

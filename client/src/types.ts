@@ -3,6 +3,8 @@ export type UserRole = 'lead' | 'member'
 export type ScheduleEventType = string
 export type StudyGroup = '203' | '204' | 'both'
 export type ReminderScenario = 'none' | 'at-start' | '15-min' | '1-hour' | '1-day'
+export type EventPrivacy = 'hidden' | 'busy' | 'title' | 'details'
+export type EventCategory = 'class' | 'team' | 'group' | 'personal' | 'deadline'
 
 export interface Project {
   id: string
@@ -10,14 +12,16 @@ export interface Project {
   description: string
   color: string
   sources: ProjectSource[]
+  teamName?: string
 }
 
 export interface ProjectSource extends Attachment {
   uploadedAt: string
   uploadedBy: string
+  uploadedById?: number
 }
 
-export type NewProject = Omit<Project, 'id' | 'sources'>
+export type NewProject = Omit<Project, 'id' | 'sources'> & { sources?: Attachment[] }
 
 export interface UpdateProjectPayload extends NewProject {
   id: string
@@ -44,6 +48,8 @@ export interface ScheduleEvent {
   reminder: ReminderScenario
   location?: string
   author: string
+  ownerId?: number
+  category?: EventCategory
 }
 
 export type NewScheduleEvent = Omit<ScheduleEvent, 'id'>
@@ -81,6 +87,7 @@ export interface Task {
   attachments: Attachment[]
   resultAttachments: Attachment[]
   assignee: string
+  assigneeId?: number
   createdAt: string
   completedAt?: string
   revisionComment?: string
@@ -96,6 +103,7 @@ export interface User {
   position: string
   projectRoles: Record<string, string>
   avatarUrl?: string
+  eventPrivacy?: EventPrivacy
 }
 
 export interface LoginCredentials {

@@ -1,3 +1,4 @@
+import Icon from '../Icon/Icon'
 import type { JSX } from 'react'
 import type React from 'react'
 import type { Task } from '../../types'
@@ -17,7 +18,7 @@ const BoardElement: React.FC<PropsType> = ({ name, accent, tasks, onTaskClick, s
         <div className="board-element">
             <div className="board-element__top">
                 <h3 className="board-element__header"><i style={{ background: accent }} />{name}<span>{tasks.length}</span></h3>
-                {onHistory && <button className="board-element__history" onClick={onHistory}>Вся история →</button>}
+                {onHistory && <button className="board-element__history" onClick={onHistory}>Вся история <Icon name="arrow-right" /></button>}
             </div>
             <div className="board-element__tasks">
                 {tasks.map((task) => <TaskComponent key={task.taskId} task={task} onClick={() => onTaskClick(task)} showProject={showProject} />)}

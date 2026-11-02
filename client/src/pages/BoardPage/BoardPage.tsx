@@ -1,3 +1,4 @@
+import Icon from '../../components/Icon/Icon'
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type JSX, type TouchEvent } from 'react'
 import type React from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
@@ -5,6 +6,7 @@ import AddTaskModal from '../../components/AddTaskModal/AddTaskModal'
 import BoardElement from '../../components/BoardElement/BoardElement'
 import { useAppDispatch, useAppSelector } from '../../store/hooks'
 import { loadTasksRequest } from '../../store/slices/tasksSlice'
+import { useProjectSelection } from '../../store/useProjectSelection'
 import type { Task, TaskStatus } from '../../types'
 
 type PropsType = {}
@@ -15,11 +17,10 @@ const BoardPage: React.FC<PropsType> = (): JSX.Element => {
     const [searchParams, setSearchParams] = useSearchParams()
     const { items, loading, error } = useAppSelector((state) => state.tasks)
     const user = useAppSelector((state) => state.auth.user)!
-    const activeProjectId = useAppSelector((state) => state.projects.activeProjectId)
-    const activeProject = useAppSelector((state) => state.projects.items.find((project) => project.id === state.projects.activeProjectId))
+    const activeProjectId = useProjectSelection('board')
     const [drawerOpen, setDrawerOpen] = useState(false)
     const [selectedTask, setSelectedTask] = useState<Task | null>(null)
-    const [query, setQuery] = useState('')
+    const query = searchParams.get('q') ?? ''
     const [activeColumn, setActiveColumn] = useState(0)
     const touchStart = useRef<number | null>(null)
 
@@ -50,10 +51,9 @@ const BoardPage: React.FC<PropsType> = (): JSX.Element => {
         <main className="board-page">
             <div className="container board-page__container">
                 <div className="board-page__heading">
-                  <div><span className="eyebrow">{allProjectsSelected ? 'Все проекты команды' : activeProject?.name ?? 'Проект'}</span><h1>Доска задач</h1></div>
-                  {user.role === 'lead' && !allProjectsSelected && <button className="button" onClick={openCreate}>＋ Новая задача</button>}
+                  <h1>Kanban-доска</h1>
+                  {user.role === 'lead' && !allProjectsSelected && <button className="button" onClick={openCreate}><Icon name="plus" /> Новая задача</button>}
                 </div>
-                <div className="board-page__toolbar"><label className="search">⌕<input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Поиск по задачам" /></label></div>
                 {error && <div className="error-banner">{error}</div>}
                 <div className="board-slider" onTouchStart={handleTouchStart} onTouchEnd={handleTouchEnd}>
                   <div className="board-page__tables">
@@ -65,7 +65,7 @@ const BoardPage: React.FC<PropsType> = (): JSX.Element => {
                     })}
                     </div>
                   </div>
-                  {!loading && <div className="board-slider__controls"><button onClick={() => showColumn(activeColumn - 1)} disabled={activeColumn === 0} aria-label="Предыдущая колонка">←</button><div>{columns.map((column, index) => <button key={column.status} className={index === activeColumn ? 'is-active' : ''} onClick={() => showColumn(index)} aria-label={`Открыть колонку ${column.name}`} />)}</div><button onClick={() => showColumn(activeColumn + 1)} disabled={activeColumn === columns.length - 1} aria-label="Следующая колонка">→</button></div>}
+                  {!loading && <div className="board-slider__controls"><button onClick={() => showColumn(activeColumn - 1)} disabled={activeColumn === 0} aria-label="Предыдущая колонка"><Icon name="arrow-left" /></button><div>{columns.map((column, index) => <button key={column.status} className={index === activeColumn ? 'is-active' : ''} onClick={() => showColumn(index)} aria-label={`Открыть колонку ${column.name}`} />)}</div><button onClick={() => showColumn(activeColumn + 1)} disabled={activeColumn === columns.length - 1} aria-label="Следующая колонка"><Icon name="arrow-right" /></button></div>}
                 </div>
             </div>
             {(drawerOpen || notificationTask) && <AddTaskModal task={notificationTask ?? selectedTask} onClose={() => { setDrawerOpen(false); if (notificationTaskId) setSearchParams({}, { replace: true }) }} />}
