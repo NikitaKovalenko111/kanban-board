@@ -23,5 +23,9 @@ func (s *Service) ListStudentGroups(ctx context.Context) ([]models.StudentGroup,
 }
 
 func (s *Service) ListLessons(ctx context.Context, group string, from, to time.Time) ([]models.Lesson, error) {
+	if err := validateLessonQuery(group, from, to); err != nil {
+		return nil, err
+	}
+
 	return s.repo.ListLessons(ctx, group, from, to)
 }

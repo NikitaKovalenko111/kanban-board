@@ -34,7 +34,7 @@ func (s *Service) GetBoard(ctx context.Context, uid, pid string) (*Board, error)
 }
 
 func (s *Service) CreateColumn(ctx context.Context, uid, pid, code, name string, position int) (string, error) {
-	if err := VallidateBoard(name, position, code, uid, pid); err != nil {
+	if err := ValidateColumn(name, position, code, uid, pid); err != nil {
 		return "", err
 	}
 
@@ -47,7 +47,7 @@ func (s *Service) CreateColumn(ctx context.Context, uid, pid, code, name string,
 }
 
 func (s *Service) UpdateColumn(ctx context.Context, uid, cid, code, name string, position int) error {
-	if err := VallidateBoard(name, position, code, uid, cid); err != nil {
+	if err := ValidateColumn(name, position, code, uid, cid); err != nil {
 		return err
 	}
 

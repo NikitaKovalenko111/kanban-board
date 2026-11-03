@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"kanban-board/internal/models"
+	servicecommon "kanban-board/internal/services/common"
 	project_repo "kanban-board/internal/storage/repositories/project"
 )
 
@@ -20,41 +21,93 @@ func Init(repo *project_repo.Repository) *Service {
 }
 
 func (s *Service) ListProjects(ctx context.Context, id string) ([]Project, error) {
+	if err := servicecommon.ValidateUUID(id); err != nil {
+		return nil, err
+	}
+
 	return s.repo.ListProjects(ctx, id)
 }
 
 func (s *Service) GetProject(ctx context.Context, uid, pid string) (*Project, error) {
+	if err := servicecommon.ValidateUUID(uid, pid); err != nil {
+		return nil, err
+	}
+
 	return s.repo.GetProject(ctx, uid, pid)
 }
 
 func (s *Service) CreateProject(ctx context.Context, uid, name, description, policy string) (string, error) {
+	if err := servicecommon.ValidateUUID(uid); err != nil {
+		return "", err
+	}
+	if err := validateProject(name, policy); err != nil {
+		return "", err
+	}
+
 	return s.repo.CreateProject(ctx, uid, name, description, policy)
 }
 
 func (s *Service) UpdateProject(ctx context.Context, uid, pid, name, description, policy string, archived bool) error {
+	if err := servicecommon.ValidateUUID(uid, pid); err != nil {
+		return err
+	}
+	if err := validateProject(name, policy); err != nil {
+		return err
+	}
+
 	return s.repo.UpdateProject(ctx, uid, pid, name, description, policy, archived)
 }
 
 func (s *Service) DeleteProject(ctx context.Context, uid, pid string) error {
+	if err := servicecommon.ValidateUUID(uid, pid); err != nil {
+		return err
+	}
+
 	return s.repo.DeleteProject(ctx, uid, pid)
 }
 
 func (s *Service) ListProjectMembers(ctx context.Context, uid, pid string) ([]ProjectMember, error) {
+	if err := servicecommon.ValidateUUID(uid, pid); err != nil {
+		return nil, err
+	}
+
 	return s.repo.ListProjectMembers(ctx, uid, pid)
 }
 
 func (s *Service) AddProjectMember(ctx context.Context, actor, pid, uid, role string) error {
+	if err := servicecommon.ValidateUUID(actor, pid, uid); err != nil {
+		return err
+	}
+	if err := validateMember(role, "", false); err != nil {
+		return err
+	}
+
 	return s.repo.AddProjectMember(ctx, actor, pid, uid, role)
 }
 
 func (s *Service) UpdateProjectMember(ctx context.Context, actor, pid, uid, role, status string) error {
+	if err := servicecommon.ValidateUUID(actor, pid, uid); err != nil {
+		return err
+	}
+	if err := validateMember(role, status, true); err != nil {
+		return err
+	}
+
 	return s.repo.UpdateProjectMember(ctx, actor, pid, uid, role, status)
 }
 
 func (s *Service) RemoveProjectMember(ctx context.Context, actor, pid, uid string) error {
+	if err := servicecommon.ValidateUUID(actor, pid, uid); err != nil {
+		return err
+	}
+
 	return s.repo.RemoveProjectMember(ctx, actor, pid, uid)
 }
 
 func (s *Service) JoinProject(ctx context.Context, uid, pid string) error {
+	if err := servicecommon.ValidateUUID(uid, pid); err != nil {
+		return err
+	}
+
 	return s.repo.JoinProject(ctx, uid, pid)
 }

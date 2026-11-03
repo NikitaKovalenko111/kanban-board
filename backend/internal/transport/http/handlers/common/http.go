@@ -43,6 +43,8 @@ func DateRange(w http.ResponseWriter, r *http.Request) (time.Time, time.Time, bo
 func WriteError(w http.ResponseWriter, r *http.Request, err error) {
 	middleware.QueueErrorLog(r.Context(), "workspace request failed", err)
 	switch {
+	case errors.Is(err, servicecommon.ErrInvalidInput):
+		pkg.WriteError(w, http.StatusBadRequest, "invalid_request", err.Error())
 	case errors.Is(err, servicecommon.ErrNotFound):
 		pkg.WriteError(w, http.StatusNotFound, "not_found", "Resource not found")
 	case errors.Is(err, servicecommon.ErrForbidden):
