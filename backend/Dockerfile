@@ -6,7 +6,8 @@ COPY . .
 RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/kanban-board ./cmd/kanban-board
 
 FROM alpine:3.22
-RUN apk add --no-cache ca-certificates && addgroup -S app && adduser -S -G app app
+COPY --from=build /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/ca-certificates.crt
+RUN addgroup -S app && adduser -S -G app app
 WORKDIR /app
 COPY --from=build /out/kanban-board /app/kanban-board
 USER app
