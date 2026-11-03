@@ -1,90 +1,95 @@
 package com.kanbanboard.mobile
 
+import android.graphics.Color
 import android.os.Bundle
-import android.os.Build
-import android.view.RoundedCorner
 import androidx.activity.ComponentActivity
+import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
-import androidx.activity.viewModels
-import androidx.lifecycle.ViewModel
-import androidx.lifecycle.ViewModelProvider
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
-import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
-import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.platform.LocalConfiguration
-import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.platform.LocalView
-import androidx.compose.ui.unit.dp
-import com.kanbanboard.mobile.data.ReminderScheduler
-import com.kanbanboard.mobile.data.SharedPreferencesAppStorage
-import com.kanbanboard.mobile.data.BackendClient
-import com.kanbanboard.mobile.data.RemoteWorkspaceGateway
-import com.kanbanboard.mobile.ui.AppViewModel
-import com.kanbanboard.mobile.ui.KanbanApp
-import com.kanbanboard.mobile.ui.LocalDeviceCornerShape
-import com.kanbanboard.mobile.model.AppTheme
-import com.kanbanboard.mobile.ui.theme.KanbanTheme
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.viewModelScope
+import androidx.lifecycle.viewmodel.compose.viewModel
+import com.kanbanboard.mobile.core.data.SessionRepository
+import com.kanbanboard.mobile.core.data.settings.SettingsRepository
+import com.kanbanboard.mobile.core.data.settings.ThemeMode
+import com.kanbanboard.mobile.core.designsystem.KanbanTheme
+import com.kanbanboard.mobile.core.designsystem.isDark
+import com.kanbanboard.mobile.core.designsystem.rememberLocalImage
+import androidx.compose.foundation.Image
+import androidx.compose.ui.layout.ContentScale
+import com.kanbanboard.mobile.di.LocalAppContainer
+import com.kanbanboard.mobile.navigation.AppNavHost
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.stateIn
+
+data class RootState(
+    val ready: Boolean = false,
+    val loggedIn: Boolean = false,
+    val theme: ThemeMode = ThemeMode.SYSTEM,
+    /** Своя картинка-обои (путь к файлу на устройстве) или null. */
+    val wallpaper: String? = null,
+)
+
+class RootViewModel(sessions: SessionRepository, settings: SettingsRepository) : ViewModel() {
+    val state: StateFlow<RootState> = combine(sessions.session, settings.settings) { session, prefs ->
+        RootState(ready = true, loggedIn = session != null, theme = prefs.theme, wallpaper = prefs.wallpaper)
+    }.stateIn(viewModelScope, SharingStarted.Eagerly, RootState())
+}
 
 class MainActivity : ComponentActivity() {
-    private val appViewModel by viewModels<AppViewModel> {
-        object : ViewModelProvider.Factory {
-            @Suppress("UNCHECKED_CAST")
-            override fun <T : ViewModel> create(modelClass: Class<T>): T =
-                AppViewModel(storage = SharedPreferencesAppStorage(applicationContext),
-                    remote = BuildConfig.API_BASE_URL.takeIf { it.isNotBlank() }
-                        ?.let { RemoteWorkspaceGateway(BackendClient.create(it)) }) as T
-        }
-    }
-
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
-        ReminderScheduler.ensureChannel(this)
-        SharedPreferencesAppStorage(this).events().forEach { ReminderScheduler.schedule(this, it) }
+        val container = (application as KanbanApplication).container
         setContent {
-            KanbanTheme(theme = appViewModel.uiState.theme) {
-                DeviceRoundedSurface { KanbanApp(appViewModel) }
-            }
-        }
-    }
-}
+            CompositionLocalProvider(LocalAppContainer provides container) {
+                val root: RootViewModel = viewModel {
+                    RootViewModel(container.sessionRepository, container.settingsRepository)
+                }
+                val state by root.state.collectAsStateWithLifecycle()
+                val dark = state.theme.isDark()
 
-@Composable
-private fun DeviceRoundedSurface(content: @Composable () -> Unit) {
-    val view = LocalView.current
-    val orientation = LocalConfiguration.current.orientation
-    val density = LocalDensity.current
-    var corners by remember(orientation) { mutableStateOf(RoundedCornerShape(20.dp)) }
-    LaunchedEffect(view, orientation) {
-        withFrameNanos { }
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            view.rootWindowInsets?.let { insets ->
-                with(density) {
-                    val fallbackRadius = 20.dp.roundToPx()
-                    corners = RoundedCornerShape(
-                        topStart = (insets.getRoundedCorner(RoundedCorner.POSITION_TOP_LEFT)?.radius ?: fallbackRadius).toDp(),
-                        topEnd = (insets.getRoundedCorner(RoundedCorner.POSITION_TOP_RIGHT)?.radius ?: fallbackRadius).toDp(),
-                        bottomEnd = (insets.getRoundedCorner(RoundedCorner.POSITION_BOTTOM_RIGHT)?.radius ?: fallbackRadius).toDp(),
-                        bottomStart = (insets.getRoundedCorner(RoundedCorner.POSITION_BOTTOM_LEFT)?.radius ?: fallbackRadius).toDp(),
+                // Иконки статус-бара следуют теме приложения, а не системной.
+                DisposableEffect(dark) {
+                    enableEdgeToEdge(
+                        statusBarStyle = SystemBarStyle.auto(Color.TRANSPARENT, Color.TRANSPARENT) { dark },
+                        navigationBarStyle = SystemBarStyle.auto(Color.TRANSPARENT, Color.TRANSPARENT) { dark },
                     )
+                    onDispose { }
+                }
+
+                KanbanTheme(state.theme) {
+                    val background = MaterialTheme.colorScheme.background
+                    val wallpaper = state.wallpaper?.let { rememberLocalImage(it) }
+                    Box(Modifier.fillMaxSize().background(background)) {
+                        if (wallpaper != null) {
+                            // Обои под интерфейсом + полупрозрачная подложка цвета фона для читаемости текста.
+                            Image(
+                                bitmap = wallpaper,
+                                contentDescription = null,
+                                contentScale = ContentScale.Crop,
+                                modifier = Modifier.fillMaxSize(),
+                            )
+                            Box(Modifier.fillMaxSize().background(background.copy(alpha = 0.78f)))
+                        }
+                        // С обоями фон экранов прозрачный, иначе Scaffold закроет картинку.
+                        KanbanTheme(state.theme, transparentBackground = wallpaper != null) {
+                            if (state.ready) AppNavHost(loggedIn = state.loggedIn)
+                        }
+                    }
                 }
             }
         }
-    }
-    CompositionLocalProvider(LocalDeviceCornerShape provides corners) {
-        Box(Modifier.fillMaxSize().clip(corners).background(MaterialTheme.colorScheme.background)) { content() }
     }
 }
