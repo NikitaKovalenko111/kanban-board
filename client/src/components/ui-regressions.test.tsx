@@ -65,6 +65,8 @@ describe('регрессии навигации и ролей', () => {
   it('блокирует взятие чужой задачи участником', () => {
     render(<Provider store={makeStore(true)}><AddTaskModal task={{ ...task, taskId: 999, assignee: 'Другой участник' }} onClose={vi.fn()} /></Provider>)
     expect(screen.getByRole('button', { name: 'Назначена другому участнику' })).toBeDisabled()
+    expect(screen.queryByLabelText('Исполнитель')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Сохранить исполнителя' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Отправить на проверку' })).not.toBeInTheDocument()
   })
 

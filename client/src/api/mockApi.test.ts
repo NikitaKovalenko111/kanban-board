@@ -34,6 +34,51 @@ const readText = (blob: Blob) => new Promise<string>((resolve, reject) => {
 })
 
 describe('mockApi', () => {
+  it('капитан назначает задачу участнику при создании и только исполнитель берёт её в работу', async () => {
+    const created = await request(api.createTask({ projectId: 'ai-hackathon', taskName: 'Назначенная задача', taskDesc: 'ТЗ', attachments: [], assigneeId: 2 }))
+    expect(created).toMatchObject({ assigneeId: 2, assignee: 'Мария Волкова', taskStatus: 'waiting' })
+    await signIn('ilya')
+    await expect(request(api.updateTaskStatus(created.taskId, 'working', 'Илья'))).rejects.toThrow()
+    await signIn('maria')
+    expect(await request(api.updateTaskStatus(created.taskId, 'working', 'Мария'))).toMatchObject({ assigneeId: 2, taskStatus: 'working' })
+  })
+
+  it('переназначение сохраняет ТЗ, исходники и статус, записывается в историю', async () => {
+    const file = await request(api.uploadAttachment(new File(['ТЗ'], 'brief.txt')))
+    const created = await request(api.createTask({ projectId: 'ai-hackathon', taskName: 'Задача', taskDesc: 'ТЗ', attachments: [file], assigneeId: 1 }))
+    await request(api.updateTaskStatus(created.taskId, 'working', 'Капитан'))
+    const updated = await request(api.assignTask(created.taskId, 2))
+    expect(updated).toMatchObject({ assigneeId: 2, assignee: 'Мария Волкова', taskDesc: 'ТЗ', attachments: [file], taskStatus: 'working' })
+    expect(updated.history.at(-1)).toMatchObject({ type: 'assignment', author: 'Алексей Морозов', comment: 'Алексей Морозов → Мария Волкова' })
+    const files = [await request(api.uploadAttachment(new File(['Результат'], 'result.txt')))]
+    await expect(request(api.updateTaskStatus(created.taskId, 'checking', 'Капитан', undefined, files))).rejects.toThrow()
+    await signIn('maria')
+    expect(await request(api.updateTaskStatus(created.taskId, 'checking', 'Мария', undefined, files))).toMatchObject({ taskStatus: 'checking', assigneeId: 2 })
+  })
+
+  it('обычный участник не может назначить задачу даже через mock API', async () => {
+    const created = await request(api.createTask({ projectId: 'ai-hackathon', taskName: 'Задача', taskDesc: 'ТЗ', attachments: [] }))
+    await signIn('maria')
+    await expect(request(api.assignTask(created.taskId, 2))).rejects.toThrow('Действие доступно только капитану')
+    expect((await request(api.getTasks())).find((task) => task.taskId === created.taskId)?.assignee).toBe('Не назначен')
+  })
+
+  it.each([5, 999])('не назначает заблокированного или отсутствующего участника %s', async (assigneeId) => {
+    const payload = { projectId: 'ai-hackathon', taskName: 'Задача', taskDesc: 'ТЗ', attachments: [] }
+    await expect(request(api.createTask({ ...payload, assigneeId }))).rejects.toThrow('Выберите активного участника')
+    const created = await request(api.createTask(payload))
+    await expect(request(api.assignTask(created.taskId, assigneeId))).rejects.toThrow('Выберите активного участника')
+  })
+
+  it('позволяет снять назначение только в ожидании, не меняет исполнителя сданной задачи', async () => {
+    const created = await request(api.createTask({ projectId: 'ai-hackathon', taskName: 'Задача', taskDesc: 'ТЗ', attachments: [], assigneeId: 2 }))
+    expect(await request(api.assignTask(created.taskId, null))).toMatchObject({ assignee: 'Не назначен', assigneeId: undefined })
+    await request(api.updateTaskStatus(created.taskId, 'working', 'Капитан'))
+    await expect(request(api.assignTask(created.taskId, null))).rejects.toThrow('У задачи в работе должен быть исполнитель')
+    const files = [await request(api.uploadAttachment(new File(['ok'], 'result.txt')))]
+    await request(api.updateTaskStatus(created.taskId, 'checking', 'Капитан', undefined, files))
+    await expect(request(api.assignTask(created.taskId, 2))).rejects.toThrow('Исполнителя можно менять только в ожидании или в работе')
+  })
   it.each([
     ['alexey', 'lead123'],
     ['maria', 'member123'],

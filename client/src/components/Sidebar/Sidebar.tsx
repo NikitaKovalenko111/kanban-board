@@ -33,7 +33,7 @@ const Sidebar = ({ open, onClose }: Props) => {
   const notifications: NotificationItem[] = [
     ...tasks.filter((task) => user.role === 'lead' || task.assignee === user.name).flatMap((task) => [
       ...task.comments.filter((comment) => comment.author !== user.name).map((comment) => ({ id: comment.id, title: `Комментарий к задаче #${task.taskId}`, text: `${comment.author}: ${comment.text}`, createdAt: comment.createdAt, href: `/?task=${task.taskId}` })),
-      ...task.history.filter((event) => event.author !== user.name).map((event) => ({ id: event.id, title: event.type === 'revision' ? 'Задача возвращена на доработку' : 'Изменён статус задачи', text: `${task.taskName}${event.comment ? ': ' + event.comment : ''}`, createdAt: event.createdAt, href: `/?task=${task.taskId}` })),
+      ...task.history.filter((event) => event.author !== user.name).map((event) => ({ id: event.id, title: event.type === 'assignment' ? 'Изменён исполнитель задачи' : event.type === 'revision' ? 'Задача возвращена на доработку' : 'Изменён статус задачи', text: `${task.taskName}${event.comment ? ': ' + event.comment : ''}`, createdAt: event.createdAt, href: `/?task=${task.taskId}` })),
     ]),
     ...events.filter((event) => new Date(event.startsAt) >= new Date() && (eventCategory(event) !== 'personal' || event.ownerId === user.id)).map((event) => ({ id: `schedule-${event.id}`, title: 'Предстоящее событие', text: event.title, createdAt: event.startsAt, href: `/schedule?date=${event.startsAt.slice(0, 10)}` })),
   ].sort((a, b) => b.createdAt.localeCompare(a.createdAt))

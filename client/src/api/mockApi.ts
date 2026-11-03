@@ -266,10 +266,30 @@ if (!import.meta.env.VITE_API_URL) client.defaults.adapter = async (config) => {
   if (config.url === '/tasks' && config.method === 'post') {
     requireLead()
     const payload = JSON.parse(config.data as string) as NewTask
+    const assignee = payload.assigneeId === undefined ? undefined : accounts.find((account) => account.id === payload.assigneeId && account.active)
+    if (payload.assigneeId !== undefined && !assignee) throw new Error('Выберите активного участника')
     await validateFiles(payload.attachments)
-    const task: Task = { ...payload, resultAttachments: [], history: [], comments: [], taskId: Date.now(), taskStatus: 'waiting', assignee: 'Не назначен', createdAt: new Date().toISOString().slice(0, 10) }
+    const task: Task = { ...payload, resultAttachments: [], history: [], comments: [], taskId: Date.now(), taskStatus: 'waiting', assignee: assignee?.name ?? 'Не назначен', assigneeId: assignee?.id, createdAt: new Date().toISOString().slice(0, 10) }
     tasks = [task, ...tasks]
     return response(config, cloneTask(task), 201)
+  }
+  if (config.method === 'patch' && config.url?.match(/^\/tasks\/\d+\/assignee$/)) {
+    const actor = requireLead()
+    const id = Number(config.url.split('/')[2])
+    const previous = tasks.find((task) => task.taskId === id)
+    if (!previous) throw new Error('Задача не найдена')
+    if (previous.taskStatus !== 'waiting' && previous.taskStatus !== 'working') throw new Error('Исполнителя можно менять только в ожидании или в работе')
+    const { assigneeId } = JSON.parse(config.data as string) as { assigneeId: number | null }
+    const assignee = assigneeId === null ? undefined : accounts.find((account) => account.id === assigneeId && account.active)
+    if (assigneeId !== null && !assignee) throw new Error('Выберите активного участника')
+    if (!assignee && previous.taskStatus === 'working') throw new Error('У задачи в работе должен быть исполнитель')
+    if (previous.assigneeId === assignee?.id && previous.assignee === (assignee?.name ?? 'Не назначен')) return response(config, cloneTask(previous))
+    const updated: Task = {
+      ...previous, assignee: assignee?.name ?? 'Не назначен', assigneeId: assignee?.id,
+      history: [...previous.history, { id: crypto.randomUUID(), type: 'assignment', fromStatus: previous.taskStatus, toStatus: previous.taskStatus, author: actor.name, createdAt: new Date().toISOString(), comment: `${previous.assignee} → ${assignee?.name ?? 'Не назначен'}` }],
+    }
+    tasks = tasks.map((task) => task.taskId === id ? updated : task)
+    return response(config, cloneTask(updated))
   }
   if (config.method === 'patch' && config.url?.startsWith('/tasks/')) {
     const id = Number(config.url.split('/').pop())
@@ -340,6 +360,7 @@ export const mockApi = {
   toggleMember: async (id: number, active: boolean) => (await client.patch<TeamMember>(`/team/members/${id}`, { active })).data,
   getTasks: async () => (await client.get<Task[]>('/tasks')).data,
   createTask: async (task: NewTask) => (await client.post<Task>('/tasks', task)).data,
+  assignTask: async (taskId: number, assigneeId: number | null) => (await client.patch<Task>(`/tasks/${taskId}/assignee`, { assigneeId })).data,
   updateTaskStatus: async (taskId: number, status: TaskStatus, author: string, revisionComment?: string, resultAttachments?: Attachment[], assignee?: string) => (await client.patch<Task>(`/tasks/${taskId}`, { status, author, revisionComment, resultAttachments, assignee })).data,
   addTaskComment: async (payload: AddTaskCommentPayload) => (await client.post<Task>(`/tasks/${payload.taskId}/comments`, payload)).data,
 }

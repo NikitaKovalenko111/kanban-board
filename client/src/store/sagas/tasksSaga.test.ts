@@ -3,7 +3,7 @@ import createSagaMiddleware from 'redux-saga'
 import { describe, expect, it, vi } from 'vitest'
 import { mockApi } from '../../api/mockApi'
 import { task } from '../../test/fixtures'
-import reducer, { loadTasksRequest, createTaskRequest, updateTaskStatusRequest } from '../slices/tasksSlice'
+import reducer, { assignTaskRequest, loadTasksRequest, createTaskRequest, updateTaskStatusRequest } from '../slices/tasksSlice'
 import { tasksSaga } from './tasksSaga'
 
 function setup() {
@@ -14,6 +14,22 @@ function setup() {
 }
 
 describe('tasksSaga', () => {
+  it('обновляет исполнителя в store после ответа API и сохраняет его при ошибке', async () => {
+    vi.spyOn(mockApi, 'getTasks').mockResolvedValue([task])
+    const updated = { ...task, assigneeId: 2, assignee: 'Коллега' }
+    const assign = vi.spyOn(mockApi, 'assignTask').mockResolvedValueOnce(updated).mockRejectedValueOnce(new Error('Нет доступа'))
+    const { store, saga } = setup()
+    try {
+      store.dispatch(loadTasksRequest())
+      await vi.waitFor(() => expect(store.getState().items).toEqual([task]))
+      store.dispatch(assignTaskRequest({ taskId: task.taskId, assigneeId: 2 }))
+      await vi.waitFor(() => expect(store.getState().items).toEqual([updated]))
+      expect(assign).toHaveBeenCalledWith(task.taskId, 2)
+      store.dispatch(assignTaskRequest({ taskId: task.taskId, assigneeId: null }))
+      await vi.waitFor(() => expect(store.getState().error).toBe('Нет доступа'))
+      expect(store.getState()).toMatchObject({ items: [updated], saving: false })
+    } finally { saga.cancel() }
+  })
   it('передаёт ответы API в состояние при загрузке, создании и смене статуса', async () => {
     vi.spyOn(mockApi, 'getTasks').mockResolvedValue([task])
     const create = vi.spyOn(mockApi, 'createTask').mockResolvedValue({ ...task, taskId: 2 })

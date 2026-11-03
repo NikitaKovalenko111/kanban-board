@@ -1,12 +1,15 @@
 import { configureStore } from '@reduxjs/toolkit'
 import { Provider } from 'react-redux'
 import { render, screen, waitFor } from '@testing-library/react'
+import { act } from 'react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 import { mockApi } from '../api/mockApi'
 import auth from '../store/slices/authSlice'
-import tasks, { createTaskRequest, updateTaskStatusRequest } from '../store/slices/tasksSlice'
+import tasks, { assignTaskRequest, createTaskRequest, updateTaskStatusRequest } from '../store/slices/tasksSlice'
 import projects from '../store/slices/projectsSlice'
+import team from '../store/slices/teamSlice'
+import { loadTeamSuccess } from '../store/slices/teamSlice'
 import { project, task, user } from '../test/fixtures'
 import type { Task as TaskType } from '../types'
 import BoardElement from './BoardElement/BoardElement'
@@ -14,9 +17,10 @@ import AddTaskModal from './AddTaskModal/AddTaskModal'
 
 function setupStore() {
   return configureStore({
-    reducer: { auth, tasks, projects },
+    reducer: { auth, tasks, projects, team },
     preloadedState: {
       auth: { user, loading: false, error: null },
+      team: { settings: { name: '', description: '' }, members: [{ ...user, active: true, joinedAt: '2026-01-01' }, { ...user, id: 2, name: 'Коллега', login: 'colleague', active: true, joinedAt: '2026-01-01' }], loading: false, saving: false, error: null },
       projects: { items: [project], activeProjectId: project.id, loading: false, saving: false, error: null },
     },
   })
@@ -25,10 +29,27 @@ function renderModal(currentTask: TaskType | null = null) {
   const store = setupStore()
   const dispatch = vi.spyOn(store, 'dispatch')
   render(<Provider store={store}><AddTaskModal task={currentTask} onClose={vi.fn()} /></Provider>)
+  act(() => { store.dispatch(loadTeamSuccess({ settings: store.getState().team.settings, members: store.getState().team.members })) })
   return dispatch
 }
 
 describe('основные компоненты доски', () => {
+  it('передаёт выбранного исполнителя при создании задачи', async () => {
+    const dispatch = renderModal()
+    await userEvent.type(screen.getByLabelText('Название задачи'), 'Задача')
+    await userEvent.type(screen.getByLabelText('Описание / ТЗ'), 'ТЗ')
+    await userEvent.selectOptions(screen.getByLabelText('Исполнитель'), '2')
+    await userEvent.click(screen.getByRole('button', { name: 'Создать задачу' }))
+    expect(dispatch).toHaveBeenCalledWith(createTaskRequest(expect.objectContaining({ assigneeId: 2 })))
+  })
+
+  it('капитан меняет исполнителя существующей задачи', async () => {
+    const dispatch = renderModal({ ...task, assigneeId: user.id })
+    expect(screen.getByRole('button', { name: 'Сохранить исполнителя' })).toBeDisabled()
+    await userEvent.selectOptions(screen.getByLabelText('Исполнитель'), '2')
+    await userEvent.click(screen.getByRole('button', { name: 'Сохранить исполнителя' }))
+    expect(dispatch).toHaveBeenCalledWith(assignTaskRequest({ taskId: task.taskId, assigneeId: 2 }))
+  })
   it('ищет комментарии и восстанавливает весь список после очистки', async () => {
     renderModal({ ...task, comments: [
       { id: 'a', author: 'Коллега', text: 'Проверьте отступы', createdAt: '2026-11-02T10:00:00' },

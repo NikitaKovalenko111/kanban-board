@@ -69,7 +69,7 @@ export interface TaskComment {
 
 export interface TaskHistoryEvent {
   id: string
-  type: 'status' | 'revision'
+  type: 'status' | 'revision' | 'assignment'
   fromStatus: TaskStatus
   toStatus: TaskStatus
   author: string
@@ -130,7 +130,12 @@ export interface NewTeamMember {
   projectRoles: Record<string, string>
 }
 
-export type NewTask = Pick<Task, 'projectId' | 'taskName' | 'taskDesc' | 'taskDeadline' | 'attachments'>
+export type NewTask = Pick<Task, 'projectId' | 'taskName' | 'taskDesc' | 'taskDeadline' | 'attachments'> & { assigneeId?: number }
+
+export interface TaskAssignment {
+  taskId: number
+  assigneeId: number | null
+}
 
 export interface TaskStatusUpdate {
   taskId: number
