@@ -1,0 +1,1167 @@
+openapi: 3.0.3
+info:
+  title: Kanban Board Backend API
+  version: 1.0.0
+  description: |
+    REST API для мобильного приложения Kanban Board.
+    Самостоятельная регистрация отключена: пользователей создаёт капитан.
+servers:
+  - url: http://localhost:3005
+    description: Локальный сервер
+tags:
+  - name: Auth
+  - name: Profile
+  - name: Users
+  - name: Projects
+  - name: Columns
+  - name: Tasks
+  - name: Comments
+  - name: Attachments
+  - name: Schedule
+  - name: Events
+  - name: Event types
+  - name: Reminders
+  - name: Notifications
+  - name: System
+security:
+  - bearerAuth: []
+paths:
+  /api/v1/auth/login:
+    post:
+      tags: [Auth]
+      summary: Войти по логину или email
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/LoginRequest'}
+      responses:
+        '200':
+          description: Пара токенов и профиль
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/LoginResponse'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+  /api/v1/auth/refresh:
+    post:
+      tags: [Auth]
+      summary: Ротировать refresh-токен и получить новую пару
+      description: После успеха переданный refresh-токен становится недействительным.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/RefreshRequest'}
+      responses:
+        '200':
+          description: Новая пара токенов
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/TokenResponse'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+  /api/v1/auth/logout:
+    post:
+      tags: [Auth]
+      summary: Завершить сессию
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/RefreshRequest'}
+      responses:
+        '204': {$ref: '#/components/responses/NoContent'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+  /api/v1/auth/change-password:
+    post:
+      tags: [Auth]
+      summary: Изменить пароль
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [currentPassword, newPassword]
+              properties:
+                currentPassword: {type: string, format: password}
+                newPassword: {type: string, format: password, minLength: 8, maxLength: 72}
+      responses:
+        '204': {$ref: '#/components/responses/NoContent'}
+        '400': {$ref: '#/components/responses/Validation'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+  /api/v1/me:
+    get:
+      tags: [Profile]
+      summary: Получить свой профиль
+      responses:
+        '200': {$ref: '#/components/responses/User'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+    patch:
+      tags: [Profile]
+      summary: Частично изменить профиль
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/UpdateProfileRequest'}
+      responses:
+        '200': {$ref: '#/components/responses/User'}
+        '400': {$ref: '#/components/responses/Validation'}
+  /api/v1/me/photo:
+    put:
+      tags: [Profile]
+      summary: Загрузить фото профиля
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file: {type: string, format: binary, description: JPG, PNG или WEBP, максимум 5 МБ}
+      responses:
+        '200': {$ref: '#/components/responses/User'}
+        '400': {$ref: '#/components/responses/Validation'}
+        '413': {$ref: '#/components/responses/FileTooLarge'}
+    delete:
+      tags: [Profile]
+      summary: Удалить фото профиля
+      responses:
+        '200': {$ref: '#/components/responses/User'}
+  /api/v1/team:
+    get:
+      tags: [Users]
+      summary: Получить описание команды
+      responses:
+        '200':
+          description: Команда
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [name, description]
+                properties:
+                  name: {type: string}
+                  description: {type: string}
+  /api/v1/users:
+    get:
+      tags: [Users]
+      summary: Найти пользователей
+      parameters:
+        - in: query
+          name: search
+          schema: {type: string}
+      responses:
+        '200':
+          description: Пользователи
+          content:
+            application/json:
+              schema: {type: array, items: {$ref: '#/components/schemas/User'}}
+    post:
+      tags: [Users]
+      summary: Создать пользователя
+      description: Доступно только капитану. Поля `login` и `studyGroup` также принимаются как совместимые названия.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/CreateUserRequest'}
+      responses:
+        '201': {$ref: '#/components/responses/User'}
+        '400': {$ref: '#/components/responses/Validation'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '409': {$ref: '#/components/responses/Conflict'}
+  /api/v1/users/{userId}:
+    parameters:
+      - $ref: '#/components/parameters/UserId'
+    get:
+      tags: [Users]
+      summary: Получить пользователя
+      responses:
+        '200': {$ref: '#/components/responses/User'}
+        '404': {$ref: '#/components/responses/NotFound'}
+    delete:
+      tags: [Users]
+      summary: Удалить и обезличить пользователя
+      description: Нельзя удалить себя или пользователя с незакрытыми задачами.
+      responses:
+        '204': {$ref: '#/components/responses/NoContent'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '409': {$ref: '#/components/responses/Conflict'}
+  /api/v1/users/{userId}/status:
+    patch:
+      tags: [Users]
+      summary: Заблокировать или разблокировать пользователя
+      parameters: [{$ref: '#/components/parameters/UserId'}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [status]
+              properties:
+                status: {type: string, enum: [ACTIVE, BLOCKED]}
+      responses:
+        '200': {$ref: '#/components/responses/User'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+  /api/v1/users/{userId}/photo:
+    get:
+      tags: [Users]
+      summary: Получить фото пользователя
+      parameters: [{$ref: '#/components/parameters/UserId'}]
+      responses:
+        '200':
+          description: Изображение профиля
+          content:
+            image/jpeg: {schema: {type: string, format: binary}}
+            image/png: {schema: {type: string, format: binary}}
+            image/webp: {schema: {type: string, format: binary}}
+        '404': {$ref: '#/components/responses/NotFound'}
+  /api/v1/users/{userId}/reset-password:
+    post:
+      tags: [Users]
+      summary: Сбросить пароль
+      parameters: [{$ref: '#/components/parameters/UserId'}]
+      responses:
+        '200':
+          description: Новый пароль показывается один раз
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [temporaryPassword]
+                properties:
+                  temporaryPassword: {type: string}
+        '403': {$ref: '#/components/responses/Forbidden'}
+  /api/v1/users/{userId}/role:
+    patch:
+      tags: [Users]
+      summary: Изменить системную роль
+      parameters: [{$ref: '#/components/parameters/UserId'}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [role]
+              properties:
+                role: {type: string, enum: [CAPTAIN, MEMBER]}
+      responses:
+        '200': {$ref: '#/components/responses/User'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+  /api/v1/projects:
+    get:
+      tags: [Projects]
+      summary: Получить проекты
+      responses:
+        '200':
+          description: Проекты
+          content:
+            application/json:
+              schema: {type: array, items: {$ref: '#/components/schemas/Project'}}
+    post:
+      tags: [Projects]
+      summary: Создать проект и стандартную доску
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/ProjectRequest'}
+      responses:
+        '201':
+          description: Проект
+          content: {application/json: {schema: {$ref: '#/components/schemas/Project'}}}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '409': {$ref: '#/components/responses/Conflict'}
+  /api/v1/projects/{projectId}:
+    parameters: [{$ref: '#/components/parameters/ProjectId'}]
+    get:
+      tags: [Projects]
+      summary: Получить проект
+      responses:
+        '200':
+          description: Проект
+          content: {application/json: {schema: {$ref: '#/components/schemas/Project'}}}
+        '404': {$ref: '#/components/responses/NotFound'}
+    patch:
+      tags: [Projects]
+      summary: Частично изменить проект
+      description: Если `members` передан, он заменяет весь состав проекта.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/ProjectPatchRequest'}
+      responses:
+        '200':
+          description: Проект
+          content: {application/json: {schema: {$ref: '#/components/schemas/Project'}}}
+        '409': {$ref: '#/components/responses/Conflict'}
+    delete:
+      tags: [Projects]
+      summary: Удалить проект, доску, задачи и файлы
+      responses:
+        '204': {$ref: '#/components/responses/NoContent'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+  /api/v1/projects/{projectId}/sources/links:
+    post:
+      tags: [Projects]
+      summary: Добавить ссылку-источник
+      parameters: [{$ref: '#/components/parameters/ProjectId'}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [title, url]
+              properties:
+                title: {type: string}
+                url: {type: string, format: uri, maxLength: 2000}
+      responses:
+        '201':
+          description: Источник
+          content: {application/json: {schema: {$ref: '#/components/schemas/ProjectSource'}}}
+  /api/v1/projects/{projectId}/sources/files:
+    post:
+      tags: [Projects]
+      summary: Добавить файл-источник
+      parameters: [{$ref: '#/components/parameters/ProjectId'}]
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file: {type: string, format: binary}
+      responses:
+        '201':
+          description: Источник
+          content: {application/json: {schema: {$ref: '#/components/schemas/ProjectSource'}}}
+        '413': {$ref: '#/components/responses/FileTooLarge'}
+  /api/v1/projects/{projectId}/sources/{sourceId}:
+    delete:
+      tags: [Projects]
+      summary: Удалить источник
+      parameters:
+        - $ref: '#/components/parameters/ProjectId'
+        - $ref: '#/components/parameters/SourceId'
+      responses:
+        '204': {$ref: '#/components/responses/NoContent'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+  /api/v1/projects/{projectId}/columns:
+    parameters: [{$ref: '#/components/parameters/ProjectId'}]
+    get:
+      tags: [Columns]
+      summary: Получить колонки
+      responses:
+        '200':
+          description: Колонки по position
+          content:
+            application/json:
+              schema: {type: array, items: {$ref: '#/components/schemas/BoardColumn'}}
+    put:
+      tags: [Columns]
+      summary: Заменить все колонки
+      description: Минимум четыре. Сервер вычисляет position и kind.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: array
+              minItems: 4
+              items: {$ref: '#/components/schemas/ColumnInput'}
+      responses:
+        '200':
+          description: Обновлённые колонки
+          content:
+            application/json:
+              schema: {type: array, items: {$ref: '#/components/schemas/BoardColumn'}}
+        '409': {$ref: '#/components/responses/Conflict'}
+  /api/v1/projects/{projectId}/tasks:
+    parameters: [{$ref: '#/components/parameters/ProjectId'}]
+    get:
+      tags: [Tasks]
+      summary: Получить задачи проекта
+      responses:
+        '200':
+          description: Задачи
+          content:
+            application/json:
+              schema: {type: array, items: {$ref: '#/components/schemas/Task'}}
+    post:
+      tags: [Tasks]
+      summary: Создать задачу
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/CreateTaskRequest'}
+      responses:
+        '201':
+          description: Задача
+          content: {application/json: {schema: {$ref: '#/components/schemas/Task'}}}
+        '403': {$ref: '#/components/responses/Forbidden'}
+  /api/v1/tasks/{taskId}:
+    parameters: [{$ref: '#/components/parameters/TaskId'}]
+    get:
+      tags: [Tasks]
+      summary: Получить полную задачу
+      responses:
+        '200':
+          description: Задача с историей, комментариями и вложениями
+          content: {application/json: {schema: {$ref: '#/components/schemas/Task'}}}
+        '404': {$ref: '#/components/responses/NotFound'}
+    patch:
+      tags: [Tasks]
+      summary: Частично изменить задачу
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/UpdateTaskRequest'}
+      responses:
+        '200':
+          description: Задача
+          content: {application/json: {schema: {$ref: '#/components/schemas/Task'}}}
+        '403': {$ref: '#/components/responses/Forbidden'}
+    delete:
+      tags: [Tasks]
+      summary: Удалить задачу и её файлы
+      responses:
+        '204': {$ref: '#/components/responses/NoContent'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+  /api/v1/tasks/{taskId}/take:
+    post:
+      tags: [Tasks]
+      summary: Взять свободную задачу из BACKLOG
+      parameters: [{$ref: '#/components/parameters/TaskId'}]
+      responses:
+        '200':
+          description: Задача
+          content: {application/json: {schema: {$ref: '#/components/schemas/Task'}}}
+        '409': {$ref: '#/components/responses/Conflict'}
+  /api/v1/tasks/{taskId}/move:
+    post:
+      tags: [Tasks]
+      summary: Переместить задачу
+      parameters: [{$ref: '#/components/parameters/TaskId'}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [columnId]
+              properties:
+                columnId: {type: string, format: uuid}
+                comment: {type: string}
+      responses:
+        '200':
+          description: Задача
+          content: {application/json: {schema: {$ref: '#/components/schemas/Task'}}}
+        '400': {$ref: '#/components/responses/Validation'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+  /api/v1/tasks/{taskId}/assign-to-me:
+    post:
+      tags: [Tasks]
+      summary: Капитану переназначить задачу на себя
+      parameters: [{$ref: '#/components/parameters/TaskId'}]
+      responses:
+        '200':
+          description: Задача
+          content: {application/json: {schema: {$ref: '#/components/schemas/Task'}}}
+        '403': {$ref: '#/components/responses/Forbidden'}
+  /api/v1/tasks/completed:
+    get:
+      tags: [Tasks]
+      summary: Получить выполненные задачи
+      parameters:
+        - {in: query, name: from, schema: {type: string, format: date}}
+        - {in: query, name: to, schema: {type: string, format: date}}
+        - {in: query, name: projectId, schema: {type: string, format: uuid}}
+        - {in: query, name: assigneeId, schema: {type: string, format: uuid}}
+        - {in: query, name: search, schema: {type: string}}
+      responses:
+        '200':
+          description: Выполненные задачи
+          content:
+            application/json:
+              schema: {type: array, items: {$ref: '#/components/schemas/Task'}}
+  /api/v1/tasks/assigned:
+    get:
+      tags: [Tasks]
+      summary: Получить незакрытые задачи пользователя
+      parameters:
+        - {in: query, name: userId, schema: {type: string, format: uuid}}
+      responses:
+        '200':
+          description: Назначенные задачи
+          content:
+            application/json:
+              schema: {type: array, items: {$ref: '#/components/schemas/Task'}}
+  /api/v1/tasks/{taskId}/comments:
+    parameters: [{$ref: '#/components/parameters/TaskId'}]
+    get:
+      tags: [Comments]
+      summary: Получить комментарии
+      responses:
+        '200':
+          description: Комментарии
+          content:
+            application/json:
+              schema: {type: array, items: {$ref: '#/components/schemas/Comment'}}
+    post:
+      tags: [Comments]
+      summary: Добавить комментарий
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [text]
+              properties:
+                text: {type: string, minLength: 1, maxLength: 2000}
+      responses:
+        '201':
+          description: Комментарий
+          content: {application/json: {schema: {$ref: '#/components/schemas/Comment'}}}
+  /api/v1/comments/{commentId}:
+    parameters: [{$ref: '#/components/parameters/CommentId'}]
+    patch:
+      tags: [Comments]
+      summary: Изменить свой комментарий
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [text]
+              properties:
+                text: {type: string, minLength: 1, maxLength: 2000}
+      responses:
+        '204': {$ref: '#/components/responses/NoContent'}
+    delete:
+      tags: [Comments]
+      summary: Удалить свой комментарий
+      responses:
+        '204': {$ref: '#/components/responses/NoContent'}
+  /api/v1/tasks/{taskId}/attachments:
+    post:
+      tags: [Attachments]
+      summary: Загрузить вложение
+      parameters: [{$ref: '#/components/parameters/TaskId'}]
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file, kind]
+              properties:
+                file: {type: string, format: binary}
+                kind: {type: string, enum: [SOURCE, RESULT]}
+      responses:
+        '201':
+          description: Вложение
+          content: {application/json: {schema: {$ref: '#/components/schemas/Attachment'}}}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '413': {$ref: '#/components/responses/FileTooLarge'}
+  /api/v1/tasks/{taskId}/attachments/{attachmentId}:
+    delete:
+      tags: [Attachments]
+      summary: Удалить вложение
+      parameters:
+        - $ref: '#/components/parameters/TaskId'
+        - $ref: '#/components/parameters/AttachmentId'
+      responses:
+        '204': {$ref: '#/components/responses/NoContent'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+  /api/v1/files/{fileId}:
+    get:
+      tags: [Attachments]
+      summary: Скачать вложение или файл-источник
+      parameters:
+        - in: path
+          name: fileId
+          required: true
+          schema: {type: string, format: uuid}
+      responses:
+        '200':
+          description: Файл
+          headers:
+            Content-Disposition: {schema: {type: string}}
+          content:
+            application/octet-stream:
+              schema: {type: string, format: binary}
+        '404': {$ref: '#/components/responses/NotFound'}
+  /api/v1/student-groups:
+    get:
+      tags: [Schedule]
+      summary: Получить учебные группы
+      responses:
+        '200':
+          description: Учебные группы
+          content:
+            application/json:
+              schema: {type: array, items: {$ref: '#/components/schemas/StudentGroup'}}
+  /api/v1/schedule/lessons:
+    get:
+      tags: [Schedule]
+      summary: Получить пары
+      parameters:
+        - {in: query, name: group, required: true, schema: {type: string}}
+        - {$ref: '#/components/parameters/FromDate'}
+        - {$ref: '#/components/parameters/ToDate'}
+      responses:
+        '200':
+          description: Расписание
+          content: {application/json: {schema: {$ref: '#/components/schemas/Schedule'}}}
+        '400': {$ref: '#/components/responses/Validation'}
+  /api/v1/events:
+    get:
+      tags: [Events]
+      summary: Получить события расписания
+      parameters:
+        - {in: query, name: personId, schema: {type: string, format: uuid}}
+        - {in: query, name: groups, schema: {type: string}, description: Группы через запятую}
+        - {$ref: '#/components/parameters/FromDate'}
+        - {$ref: '#/components/parameters/ToDate'}
+      responses:
+        '200':
+          description: События с учётом приватности
+          content:
+            application/json:
+              schema: {type: array, items: {$ref: '#/components/schemas/Event'}}
+    post:
+      tags: [Events]
+      summary: Создать событие
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/CreateEventRequest'}
+      responses:
+        '201':
+          description: Событие
+          content: {application/json: {schema: {$ref: '#/components/schemas/Event'}}}
+        '400': {$ref: '#/components/responses/Validation'}
+  /api/v1/events/{eventId}:
+    parameters: [{$ref: '#/components/parameters/EventId'}]
+    get:
+      tags: [Events]
+      summary: Получить событие
+      responses:
+        '200':
+          description: Событие с учётом приватности
+          content: {application/json: {schema: {$ref: '#/components/schemas/Event'}}}
+        '404': {$ref: '#/components/responses/NotFound'}
+    patch:
+      tags: [Events]
+      summary: Частично изменить событие
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/UpdateEventRequest'}
+      responses:
+        '200':
+          description: Событие
+          content: {application/json: {schema: {$ref: '#/components/schemas/Event'}}}
+        '403': {$ref: '#/components/responses/Forbidden'}
+    delete:
+      tags: [Events]
+      summary: Удалить событие и напоминания
+      responses:
+        '204': {$ref: '#/components/responses/NoContent'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+  /api/v1/event-types:
+    get:
+      tags: [Event types]
+      summary: Получить базовые и личные типы событий
+      responses:
+        '200':
+          description: Типы событий
+          content:
+            application/json:
+              schema: {type: array, items: {$ref: '#/components/schemas/EventType'}}
+    post:
+      tags: [Event types]
+      summary: Создать личный тип события
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/EventTypeRequest'}
+      responses:
+        '201':
+          description: Тип события
+          content: {application/json: {schema: {$ref: '#/components/schemas/EventType'}}}
+  /api/v1/event-types/{eventTypeId}:
+    parameters: [{$ref: '#/components/parameters/EventTypeId'}]
+    patch:
+      tags: [Event types]
+      summary: Частично изменить личный тип
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/EventTypePatchRequest'}
+      responses:
+        '200':
+          description: Тип события
+          content: {application/json: {schema: {$ref: '#/components/schemas/EventType'}}}
+        '403': {$ref: '#/components/responses/Forbidden'}
+    delete:
+      tags: [Event types]
+      summary: Удалить личный тип
+      responses:
+        '204': {$ref: '#/components/responses/NoContent'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+  /api/v1/me/reminders:
+    get:
+      tags: [Reminders]
+      summary: Получить свои напоминания
+      responses:
+        '200':
+          description: Карта itemKey — минуты
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties:
+                  type: array
+                  items: {type: integer, minimum: 1, maximum: 40320}
+  /api/v1/me/reminders/{itemKey}:
+    put:
+      tags: [Reminders]
+      summary: Заменить напоминания элемента
+      description: itemKey начинается с `event:` или `lesson:`. Пустой массив удаляет настройку.
+      parameters:
+        - in: path
+          name: itemKey
+          required: true
+          schema: {type: string}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [minutes]
+              properties:
+                minutes:
+                  type: array
+                  uniqueItems: true
+                  items: {type: integer, minimum: 1, maximum: 40320}
+      responses:
+        '204': {$ref: '#/components/responses/NoContent'}
+  /api/v1/notifications:
+    get:
+      tags: [Notifications]
+      summary: Получить уведомления
+      parameters:
+        - in: query
+          name: limit
+          schema: {type: integer, minimum: 1, maximum: 100, default: 100}
+      responses:
+        '200':
+          description: Новые уведомления сверху
+          content:
+            application/json:
+              schema: {type: array, items: {$ref: '#/components/schemas/Notification'}}
+  /api/v1/notifications/read-all:
+    post:
+      tags: [Notifications]
+      summary: Отметить все уведомления прочитанными
+      responses:
+        '204': {$ref: '#/components/responses/NoContent'}
+  /api/v1/me/push-tokens:
+    post:
+      tags: [Notifications]
+      summary: Зарегистрировать push-токен
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [token, platform]
+              properties:
+                token: {type: string}
+                platform: {type: string, enum: [android]}
+      responses:
+        '204': {$ref: '#/components/responses/NoContent'}
+  /api/v1/me/push-tokens/{token}:
+    delete:
+      tags: [Notifications]
+      summary: Удалить push-токен
+      parameters:
+        - in: path
+          name: token
+          required: true
+          schema: {type: string}
+      responses:
+        '204': {$ref: '#/components/responses/NoContent'}
+  /api/v1/system/health:
+    get:
+      tags: [System]
+      summary: Проверить состояние сервера
+      security: []
+      responses:
+        '200': {description: Сервер работает}
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  parameters:
+    UserId: {in: path, name: userId, required: true, schema: {type: string, format: uuid}}
+    ProjectId: {in: path, name: projectId, required: true, schema: {type: string, format: uuid}}
+    SourceId: {in: path, name: sourceId, required: true, schema: {type: string, format: uuid}}
+    TaskId: {in: path, name: taskId, required: true, schema: {type: string, format: uuid}}
+    CommentId: {in: path, name: commentId, required: true, schema: {type: string, format: uuid}}
+    AttachmentId: {in: path, name: attachmentId, required: true, schema: {type: string, format: uuid}}
+    EventId: {in: path, name: eventId, required: true, schema: {type: string, format: uuid}}
+    EventTypeId: {in: path, name: eventTypeId, required: true, schema: {type: string, format: uuid}}
+    FromDate: {in: query, name: from, required: true, schema: {type: string, format: date}}
+    ToDate: {in: query, name: to, required: true, schema: {type: string, format: date}}
+  responses:
+    NoContent: {description: Успешно, тело отсутствует}
+    User:
+      description: Пользователь
+      content: {application/json: {schema: {$ref: '#/components/schemas/User'}}}
+    Validation:
+      description: Ошибка валидации
+      content: {application/json: {schema: {$ref: '#/components/schemas/ErrorResponse'}}}
+    Unauthorized:
+      description: Требуется действительный токен или неверны учётные данные
+      content: {application/json: {schema: {$ref: '#/components/schemas/ErrorResponse'}}}
+    Forbidden:
+      description: Недостаточно прав или аккаунт заблокирован
+      content: {application/json: {schema: {$ref: '#/components/schemas/ErrorResponse'}}}
+    NotFound:
+      description: Объект не найден
+      content: {application/json: {schema: {$ref: '#/components/schemas/ErrorResponse'}}}
+    Conflict:
+      description: Конфликт с текущим состоянием
+      content: {application/json: {schema: {$ref: '#/components/schemas/ErrorResponse'}}}
+    FileTooLarge:
+      description: Файл превышает допустимый размер
+      content: {application/json: {schema: {$ref: '#/components/schemas/ErrorResponse'}}}
+  schemas:
+    ErrorResponse:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code: {type: string, example: VALIDATION}
+            message: {type: string, example: Некорректное тело запроса}
+            fields:
+              type: object
+              additionalProperties: {type: string}
+    LoginRequest:
+      type: object
+      required: [login, password]
+      properties:
+        login: {type: string, example: ivan.ivanov}
+        password: {type: string, format: password}
+    RefreshRequest:
+      type: object
+      required: [refreshToken]
+      properties:
+        refreshToken: {type: string}
+    TokenResponse:
+      type: object
+      required: [accessToken, refreshToken, expiresIn]
+      properties:
+        accessToken: {type: string}
+        refreshToken: {type: string}
+        expiresIn: {type: integer, format: int64, description: Секунды}
+    LoginResponse:
+      allOf:
+        - $ref: '#/components/schemas/TokenResponse'
+        - type: object
+          required: [user]
+          properties:
+            user: {$ref: '#/components/schemas/User'}
+    User:
+      type: object
+      required: [id, fullName, username, studentGroup, role, schedulePrivacy, joinedAt, active]
+      properties:
+        id: {type: string, format: uuid}
+        fullName: {type: string}
+        username: {type: string}
+        studentGroup: {type: string}
+        imageUrl: {type: string, nullable: true}
+        role: {type: string, enum: [CAPTAIN, MEMBER]}
+        schedulePrivacy: {type: string, enum: [NOTHING, BUSY, TITLE, TITLE_AND_DESCRIPTION]}
+        joinedAt: {type: string, format: date-time}
+        active: {type: boolean}
+        contact: {type: string, nullable: true}
+    UpdateProfileRequest:
+      type: object
+      properties:
+        fullName: {type: string}
+        studentGroup: {type: string}
+        studyGroup: {type: string, deprecated: true}
+        schedulePrivacy: {type: string, enum: [NOTHING, BUSY, TITLE, TITLE_AND_DESCRIPTION]}
+    CreateUserRequest:
+      type: object
+      required: [fullName, temporaryPassword, role]
+      properties:
+        fullName: {type: string}
+        username: {type: string, pattern: '^[A-Za-z0-9._-]{3,32}$'}
+        login: {type: string, pattern: '^[A-Za-z0-9._-]{3,32}$', deprecated: true}
+        temporaryPassword: {type: string, minLength: 8}
+        studentGroup: {type: string}
+        studyGroup: {type: string, deprecated: true}
+        role: {type: string, enum: [CAPTAIN, MEMBER]}
+    ProjectMember:
+      type: object
+      required: [userId, role]
+      properties:
+        userId: {type: string, format: uuid}
+        role: {type: string, maxLength: 60}
+    ProjectRequest:
+      type: object
+      required: [name, description, members]
+      properties:
+        name: {type: string, minLength: 1, maxLength: 80}
+        description: {type: string}
+        members: {type: array, items: {$ref: '#/components/schemas/ProjectMember'}}
+    ProjectPatchRequest:
+      type: object
+      properties:
+        name: {type: string, minLength: 1, maxLength: 80}
+        description: {type: string}
+        members: {type: array, items: {$ref: '#/components/schemas/ProjectMember'}}
+    Project:
+      type: object
+      required: [id, name, description, members, sources]
+      properties:
+        id: {type: string, format: uuid}
+        name: {type: string}
+        description: {type: string}
+        members: {type: array, items: {$ref: '#/components/schemas/ProjectMember'}}
+        sources: {type: array, items: {$ref: '#/components/schemas/ProjectSource'}}
+    FileInfo:
+      type: object
+      required: [id, name, sizeBytes, mimeType, downloadUrl]
+      properties:
+        id: {type: string, format: uuid}
+        name: {type: string}
+        sizeBytes: {type: integer, format: int64}
+        mimeType: {type: string}
+        downloadUrl: {type: string}
+    ProjectSource:
+      type: object
+      required: [id, kind, title, addedAt]
+      properties:
+        id: {type: string, format: uuid}
+        kind: {type: string, enum: [LINK, FILE]}
+        title: {type: string}
+        url: {type: string, nullable: true}
+        file: {allOf: [{$ref: '#/components/schemas/FileInfo'}], nullable: true}
+        addedBy: {type: string, format: uuid, nullable: true}
+        addedAt: {type: string, format: date-time}
+    ColumnInput:
+      type: object
+      required: [title, color]
+      properties:
+        id: {type: string, format: uuid, nullable: true}
+        title: {type: string, minLength: 1}
+        color: {type: string, pattern: '^#[0-9A-Fa-f]{6}$'}
+    BoardColumn:
+      type: object
+      required: [id, projectId, title, position, kind, color]
+      properties:
+        id: {type: string, format: uuid}
+        projectId: {type: string, format: uuid}
+        title: {type: string}
+        position: {type: integer, minimum: 0}
+        kind: {type: string, enum: [BACKLOG, IN_PROGRESS, REVIEW, DONE]}
+        color: {type: string}
+    CreateTaskRequest:
+      type: object
+      required: [title, description, priority]
+      properties:
+        title: {type: string, minLength: 1}
+        description: {type: string}
+        priority: {type: string, enum: [LOW, NORMAL, HIGH]}
+        assigneeId: {type: string, format: uuid, nullable: true}
+        dueAt: {type: string, format: date-time, nullable: true}
+        columnId: {type: string, format: uuid, nullable: true}
+    UpdateTaskRequest:
+      type: object
+      properties:
+        title: {type: string, minLength: 1}
+        description: {type: string}
+        priority: {type: string, enum: [LOW, NORMAL, HIGH]}
+        assigneeId: {type: string, format: uuid, nullable: true}
+        dueAt: {type: string, format: date-time, nullable: true}
+    Task:
+      type: object
+      required: [id, projectId, columnId, position, title, description, priority, createdBy, createdAt]
+      properties:
+        id: {type: string, format: uuid}
+        projectId: {type: string, format: uuid}
+        columnId: {type: string, format: uuid}
+        position: {type: integer}
+        title: {type: string}
+        description: {type: string}
+        priority: {type: string, enum: [LOW, NORMAL, HIGH]}
+        assigneeId: {type: string, format: uuid, nullable: true}
+        createdBy: {type: string, format: uuid}
+        createdAt: {type: string, format: date-time}
+        dueAt: {type: string, format: date-time, nullable: true}
+        completedAt: {type: string, format: date-time, nullable: true}
+        attachments: {type: array, items: {$ref: '#/components/schemas/Attachment'}}
+        comments: {type: array, items: {$ref: '#/components/schemas/Comment'}}
+        history: {type: array, items: {$ref: '#/components/schemas/TaskHistoryEntry'}}
+    TaskHistoryEntry:
+      type: object
+      required: [id, action, at]
+      properties:
+        id: {type: string, format: uuid}
+        action: {type: string}
+        actorId: {type: string, format: uuid, nullable: true}
+        at: {type: string, format: date-time}
+        fromColumn: {type: string}
+        toColumn: {type: string}
+        comment: {type: string}
+    Comment:
+      type: object
+      required: [id, authorId, text, createdAt]
+      properties:
+        id: {type: string, format: uuid}
+        authorId: {type: string, format: uuid}
+        text: {type: string}
+        createdAt: {type: string, format: date-time}
+    Attachment:
+      type: object
+      required: [id, kind, uploadedBy, uploadedAt, file]
+      properties:
+        id: {type: string, format: uuid}
+        kind: {type: string, enum: [SOURCE, RESULT]}
+        uploadedBy: {type: string, format: uuid}
+        uploadedAt: {type: string, format: date-time}
+        file: {$ref: '#/components/schemas/FileInfo'}
+    StudentGroup:
+      type: object
+      required: [id, groupCode, name]
+      properties:
+        id: {type: string, format: uuid}
+        groupCode: {type: string}
+        name: {type: string}
+        createdAt: {type: string, format: date-time}
+        updatedAt: {type: string, format: date-time}
+    Lesson:
+      type: object
+      required: [id, group, date, start, end, title, room, teacher, kind]
+      properties:
+        id: {type: string}
+        group: {type: string}
+        date: {type: string, format: date}
+        start: {type: string, example: '08:00'}
+        end: {type: string, example: '09:35'}
+        title: {type: string}
+        room: {type: string}
+        teacher: {type: string}
+        kind: {type: string, enum: [LECTURE, PRACTICE, LAB]}
+    Schedule:
+      type: object
+      required: [lessons, source]
+      properties:
+        lessons: {type: array, items: {$ref: '#/components/schemas/Lesson'}}
+        updatedAt: {type: string, format: date-time, nullable: true}
+        source: {type: string, enum: [ACTUAL, CACHED, UNAVAILABLE]}
+    CreateEventRequest:
+      type: object
+      required: [title, description, location, startsAt, visibility, typeId, myReminders]
+      properties:
+        title: {type: string, minLength: 1, maxLength: 200}
+        description: {type: string}
+        location: {type: string, maxLength: 300}
+        startsAt: {type: string, format: date-time}
+        endsAt: {type: string, format: date-time, nullable: true}
+        visibility: {type: string, enum: [TEAM, GROUP, PERSONAL]}
+        group: {type: string, nullable: true}
+        typeId: {type: string, format: uuid, nullable: true}
+        myReminders: {type: array, uniqueItems: true, items: {type: integer, minimum: 1, maximum: 40320}}
+    UpdateEventRequest:
+      type: object
+      properties:
+        title: {type: string, minLength: 1, maxLength: 200}
+        description: {type: string}
+        location: {type: string, maxLength: 300}
+        startsAt: {type: string, format: date-time}
+        endsAt: {type: string, format: date-time, nullable: true}
+        visibility: {type: string, enum: [TEAM, GROUP, PERSONAL]}
+        group: {type: string, nullable: true}
+        typeId: {type: string, format: uuid, nullable: true}
+    Event:
+      type: object
+      required: [id, ownerId, title, startsAt, visibility, masked, partial]
+      properties:
+        id: {type: string, format: uuid}
+        ownerId: {type: string, format: uuid}
+        title: {type: string}
+        description: {type: string}
+        location: {type: string}
+        startsAt: {type: string, format: date-time}
+        endsAt: {type: string, format: date-time, nullable: true}
+        visibility: {type: string, enum: [TEAM, GROUP, PERSONAL]}
+        group: {type: string, nullable: true}
+        typeId: {type: string, format: uuid, nullable: true}
+        masked: {type: boolean}
+        partial: {type: boolean}
+    EventTypeRequest:
+      type: object
+      required: [title, color, defaultReminders]
+      properties:
+        title: {type: string, minLength: 1}
+        color: {type: string, pattern: '^#[0-9A-Fa-f]{6}$'}
+        defaultReminders: {type: array, uniqueItems: true, items: {type: integer, minimum: 1, maximum: 40320}}
+    EventTypePatchRequest:
+      type: object
+      properties:
+        title: {type: string, minLength: 1}
+        color: {type: string, pattern: '^#[0-9A-Fa-f]{6}$'}
+        defaultReminders: {type: array, uniqueItems: true, items: {type: integer, minimum: 1, maximum: 40320}}
+    EventType:
+      type: object
+      required: [id, title, color, defaultReminders]
+      properties:
+        id: {type: string, format: uuid}
+        title: {type: string}
+        color: {type: string}
+        ownerId: {type: string, format: uuid, nullable: true}
+        defaultReminders: {type: array, items: {type: integer}}
+    Notification:
+      type: object
+      required: [id, kind, title, text, at, read]
+      properties:
+        id: {type: string, format: uuid}
+        kind: {type: string, enum: [COMMENT, RETURNED, STATUS, EVENT]}
+        title: {type: string}
+        text: {type: string}
+        at: {type: string, format: date-time}
+        read: {type: boolean}
+        taskId: {type: string, format: uuid, nullable: true}
+        eventId: {type: string, format: uuid, nullable: true}

@@ -4,6 +4,7 @@ import (
 	"log/slog"
 	"net/http"
 
+	"kanban-board/docs"
 	"kanban-board/internal/middleware"
 	"kanban-board/internal/transport/http/handlers"
 )
@@ -29,9 +30,11 @@ func Init(handlers *handlers.Handlers, accessSecret string, logger *slog.Logger,
 }
 
 func (h *HTTP) Start(mux *http.ServeMux) {
+	docs.Start(mux)
+
 	systemRouter := http.NewServeMux()
 	h.handlers.System.Start(systemRouter)
-	mux.Handle("/system/", http.StripPrefix("/system", systemRouter))
+	mux.Handle("/api/v1/system/", http.StripPrefix("/api/v1/system", systemRouter))
 
 	authRouter := http.NewServeMux()
 	h.handlers.Auth.StartPublic(authRouter)

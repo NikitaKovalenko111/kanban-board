@@ -259,19 +259,18 @@ const SCHEMA_MIGRATION = `
 			)
 			SELECT
 				gen_random_uuid(),
-				group_name,
-				group_name
-			FROM users
-			WHERE group_name IS NOT NULL
-				AND group_name <> ''
+				to_jsonb(u) ->> 'group_name',
+				to_jsonb(u) ->> 'group_name'
+			FROM users u
+			WHERE COALESCE(to_jsonb(u) ->> 'group_name', '') <> ''
 			ON CONFLICT (group_code) DO NOTHING;
 
 			UPDATE users u
 			SET student_group_id = sg.student_group_id
 			FROM student_groups sg
-			WHERE sg.group_code = u.group_name
+			WHERE sg.group_code = to_jsonb(u) ->> 'group_name'
 				AND u.student_group_id IS NULL;
-			ALTER TABLE users DROP COLUMN group_name;
+			ALTER TABLE users DROP COLUMN IF EXISTS group_name;
 		END IF;
 	END $$;
 	UPDATE users
