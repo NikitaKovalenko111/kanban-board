@@ -2,7 +2,7 @@ package task_repo
 
 import "testing"
 
-func TestAllowedTransition(t *testing.T) {
+func TestAllowedMove(t *testing.T) {
 	tests := []struct {
 		name              string
 		role              string
@@ -10,17 +10,17 @@ func TestAllowedTransition(t *testing.T) {
 		from, to, comment string
 		want              bool
 	}{
-		{"assignee starts", "MEMBER", true, "WAITING", "WORKING", "", true},
-		{"assignee submits", "MEMBER", true, "WORKING", "CHECKING", "", true},
-		{"lead accepts", "LEAD", false, "CHECKING", "DONE", "", true},
-		{"lead returns with comment", "LEAD", false, "CHECKING", "WORKING", "fix it", true},
-		{"lead cannot return without comment", "LEAD", false, "CHECKING", "WORKING", "", false},
-		{"unassigned member cannot move", "MEMBER", false, "WAITING", "WORKING", "", false},
+		{"assignee starts", "MEMBER", true, "BACKLOG", "IN_PROGRESS", "", true},
+		{"assignee submits", "MEMBER", true, "IN_PROGRESS", "REVIEW", "", true},
+		{"captain accepts", "CAPTAIN", false, "REVIEW", "DONE", "", true},
+		{"captain returns with comment", "CAPTAIN", false, "REVIEW", "IN_PROGRESS", "исправить", true},
+		{"captain cannot return without comment", "CAPTAIN", false, "REVIEW", "IN_PROGRESS", "", false},
+		{"unassigned member cannot move", "MEMBER", false, "BACKLOG", "IN_PROGRESS", "", false},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			if got := allowedTransition(test.role, test.assigned, test.from, test.to, test.comment); got != test.want {
-				t.Fatalf("allowedTransition() = %v, want %v", got, test.want)
+			if got := allowedMove(test.role, test.assigned, test.from, test.to, test.comment); got != test.want {
+				t.Fatalf("allowedMove() = %v, want %v", got, test.want)
 			}
 		})
 	}

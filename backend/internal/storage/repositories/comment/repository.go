@@ -3,6 +3,7 @@ package comment_repo
 import (
 	"context"
 	"database/sql"
+
 	"kanban-board/internal/models"
 	repositorycommon "kanban-board/internal/storage/repositories/common"
 )
@@ -50,12 +51,18 @@ func (r *Repository) ListComments(ctx context.Context, userID, taskID string) ([
 	return items, rows.Err()
 }
 
-func (r *Repository) AddComment(ctx context.Context, userID, taskID, text string) (string, error) {
+func (r *Repository) AddComment(ctx context.Context, userID, taskID, text string) (*models.Comment, error) {
 	if _, err := repositorycommon.RequireTaskMember(ctx, r.db, userID, taskID); err != nil {
-		return "", err
+		return nil, err
 	}
-	var id string
-	err := r.db.QueryRowContext(ctx, `
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return nil, err
+	}
+	defer tx.Rollback()
+
+	var comment models.Comment
+	err = tx.QueryRowContext(ctx, `
 		INSERT INTO comments (
 		    comment_id,
 		    task_id,
@@ -64,9 +71,34 @@ func (r *Repository) AddComment(ctx context.Context, userID, taskID, text string
 		)
 		VALUES
 		    (gen_random_uuid(),$1,$2,$3)
-		RETURNING comment_id
-	`, taskID, userID, text).Scan(&id)
-	return id, err
+		RETURNING comment_id, task_id, author_user_id, content, created_at
+	`, taskID, userID, text).Scan(&comment.ID, &comment.TaskID, &comment.AuthorID, &comment.Text, &comment.CreatedAt)
+	if err != nil {
+		return nil, err
+	}
+	if _, err := tx.ExecContext(ctx, `
+		INSERT INTO notifications (notification_id, user_id, kind, title, text, task_id)
+		SELECT
+			gen_random_uuid(),
+			recipient.user_id,
+			'COMMENT',
+			'Новый комментарий',
+			LEFT($3, 500),
+			$1
+		FROM (
+			SELECT created_by_user_id AS user_id FROM tasks WHERE task_id = $1
+			UNION
+			SELECT user_id FROM task_assignees WHERE task_id = $1
+		) recipient
+		WHERE recipient.user_id <> $2
+	`, taskID, userID, text); err != nil {
+		return nil, err
+	}
+	if err := tx.Commit(); err != nil {
+		return nil, err
+	}
+
+	return &comment, nil
 }
 
 func (r *Repository) UpdateComment(ctx context.Context, userID, commentID, text string) error {

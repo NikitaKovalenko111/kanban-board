@@ -1,7 +1,9 @@
 package task_handler
 
 import (
+	"context"
 	"net/http"
+	"os"
 	"time"
 
 	task_service "kanban-board/internal/services/task"
@@ -14,197 +16,215 @@ type Handler struct {
 }
 
 func Init(service *task_service.Service) *Handler {
-	return &Handler{
-		service: service,
-	}
+	return &Handler{service: service}
 }
 
 func (h *Handler) Start(mux *http.ServeMux) {
 	mux.HandleFunc("GET /projects/{projectId}/tasks", h.listTasks)
 	mux.HandleFunc("POST /projects/{projectId}/tasks", h.createTask)
+	mux.HandleFunc("GET /tasks/completed", h.listCompleted)
+	mux.HandleFunc("GET /tasks/assigned", h.listAssigned)
 	mux.HandleFunc("GET /tasks/{taskId}", h.getTask)
 	mux.HandleFunc("PATCH /tasks/{taskId}", h.updateTask)
 	mux.HandleFunc("DELETE /tasks/{taskId}", h.deleteTask)
 	mux.HandleFunc("POST /tasks/{taskId}/take", h.takeTask)
-	mux.HandleFunc("PATCH /tasks/{taskId}/status", h.moveTask)
-	mux.HandleFunc("POST /tasks/{taskId}/assignees", h.addTaskAssignee)
-	mux.HandleFunc("GET /tasks/{taskId}/assignees", h.listTaskAssignees)
-	mux.HandleFunc("DELETE /tasks/{taskId}/assignees/{assigneeId}", h.removeTaskAssignee)
-	mux.HandleFunc("GET /tasks/{taskId}/history", h.taskHistory)
+	mux.HandleFunc("POST /tasks/{taskId}/move", h.moveTask)
+	mux.HandleFunc("POST /tasks/{taskId}/assign-to-me", h.assignToMe)
 }
 
-type taskRequest struct {
+type createTaskRequest struct {
 	Title       string     `json:"title"`
 	Description string     `json:"description"`
 	Priority    string     `json:"priority"`
-	DueDate     *time.Time `json:"dueDate"`
-	AssigneeIDs []string   `json:"assigneeIds"`
+	AssigneeID  *string    `json:"assigneeId"`
+	DueAt       *time.Time `json:"dueAt"`
+	ColumnID    *string    `json:"columnId"`
 }
 
-type statusRequest struct {
-	Status  string `json:"status"`
-	Comment string `json:"comment"`
+type updateTaskRequest struct {
+	Title       *string                           `json:"title"`
+	Description *string                           `json:"description"`
+	Priority    *string                           `json:"priority"`
+	AssigneeID  handlercommon.Optional[string]    `json:"assigneeId"`
+	DueAt       handlercommon.Optional[time.Time] `json:"dueAt"`
 }
 
-type memberRequest struct {
-	UserID string `json:"userId"`
+type moveRequest struct {
+	ColumnID string `json:"columnId"`
+	Comment  string `json:"comment"`
 }
 
 func (h *Handler) listTasks(w http.ResponseWriter, r *http.Request) {
-	id, ok := handlercommon.UserID(r)
+	userID, ok := handlercommon.UserID(r)
 	if !ok {
 		return
 	}
-	items, err := h.service.ListTasks(r.Context(), id, r.PathValue("projectId"))
+	tasks, err := h.service.ListTasks(r.Context(), userID, r.PathValue("projectId"))
 	if err != nil {
 		handlercommon.WriteError(w, r, err)
 		return
 	}
-	pkg.WriteJSON(w, 200, items)
+	pkg.WriteJSON(w, http.StatusOK, tasks)
 }
 
 func (h *Handler) getTask(w http.ResponseWriter, r *http.Request) {
-	id, ok := handlercommon.UserID(r)
+	userID, ok := handlercommon.UserID(r)
 	if !ok {
 		return
 	}
-	item, err := h.service.GetTask(r.Context(), id, r.PathValue("taskId"))
+	task, err := h.service.GetTask(r.Context(), userID, r.PathValue("taskId"))
 	if err != nil {
 		handlercommon.WriteError(w, r, err)
 		return
 	}
-	pkg.WriteJSON(w, 200, item)
+	pkg.WriteJSON(w, http.StatusOK, task)
 }
 
 func (h *Handler) createTask(w http.ResponseWriter, r *http.Request) {
-	id, ok := handlercommon.UserID(r)
+	userID, ok := handlercommon.UserID(r)
 	if !ok {
 		return
 	}
-	var req taskRequest
-	if !handlercommon.Decode(w, r, &req) {
+	var request createTaskRequest
+	if !handlercommon.Decode(w, r, &request) {
 		return
 	}
-	if req.Priority == "" {
-		req.Priority = "MEDIUM"
+	if request.Priority == "" {
+		request.Priority = "NORMAL"
 	}
-	taskID, err := h.service.CreateTask(r.Context(), id, r.PathValue("projectId"), req.Title, req.Description, req.Priority, req.DueDate, req.AssigneeIDs)
+	task, err := h.service.CreateTask(
+		r.Context(), userID, r.PathValue("projectId"), request.Title,
+		request.Description, request.Priority, request.AssigneeID, request.DueAt, request.ColumnID,
+	)
 	if err != nil {
 		handlercommon.WriteError(w, r, err)
 		return
 	}
-	pkg.WriteJSON(w, 201, map[string]string{"id": taskID})
+	pkg.WriteJSON(w, http.StatusCreated, task)
 }
 
 func (h *Handler) updateTask(w http.ResponseWriter, r *http.Request) {
-	id, ok := handlercommon.UserID(r)
+	userID, ok := handlercommon.UserID(r)
 	if !ok {
 		return
 	}
-	var req taskRequest
-	if !handlercommon.Decode(w, r, &req) {
+	var request updateTaskRequest
+	if !handlercommon.Decode(w, r, &request) {
 		return
 	}
-	if req.Priority == "" {
-		req.Priority = "MEDIUM"
-	}
-	if err := h.service.UpdateTask(r.Context(), id, r.PathValue("taskId"), req.Title, req.Description, req.Priority, req.DueDate); err != nil {
+	task, err := h.service.UpdateTask(
+		r.Context(), userID, r.PathValue("taskId"), request.Title,
+		request.Description, request.Priority, request.DueAt.Value, request.DueAt.Set,
+		request.AssigneeID.Value, request.AssigneeID.Set,
+	)
+	if err != nil {
 		handlercommon.WriteError(w, r, err)
 		return
 	}
-	h.getTask(w, r)
+	pkg.WriteJSON(w, http.StatusOK, task)
 }
 
 func (h *Handler) deleteTask(w http.ResponseWriter, r *http.Request) {
-	id, ok := handlercommon.UserID(r)
+	userID, ok := handlercommon.UserID(r)
 	if !ok {
 		return
 	}
-	if err := h.service.DeleteTask(r.Context(), id, r.PathValue("taskId")); err != nil {
+	storageKeys, err := h.service.DeleteTask(r.Context(), userID, r.PathValue("taskId"))
+	if err != nil {
 		handlercommon.WriteError(w, r, err)
 		return
 	}
-	pkg.WriteEmpty(w, 204)
+	for _, storageKey := range storageKeys {
+		_ = os.Remove(storageKey)
+	}
+	pkg.WriteEmpty(w, http.StatusNoContent)
 }
 
 func (h *Handler) takeTask(w http.ResponseWriter, r *http.Request) {
-	id, ok := handlercommon.UserID(r)
+	h.writeTaskAction(w, r, h.service.TakeTask)
+}
+
+func (h *Handler) assignToMe(w http.ResponseWriter, r *http.Request) {
+	h.writeTaskAction(w, r, h.service.AssignToMe)
+}
+
+func (h *Handler) writeTaskAction(w http.ResponseWriter, r *http.Request, action func(context.Context, string, string) (*task_service.Task, error)) {
+	userID, ok := handlercommon.UserID(r)
 	if !ok {
 		return
 	}
-	if err := h.service.TakeTask(r.Context(), id, r.PathValue("taskId")); err != nil {
+	task, err := action(r.Context(), userID, r.PathValue("taskId"))
+	if err != nil {
 		handlercommon.WriteError(w, r, err)
 		return
 	}
-	h.getTask(w, r)
+	pkg.WriteJSON(w, http.StatusOK, task)
 }
 
 func (h *Handler) moveTask(w http.ResponseWriter, r *http.Request) {
-	id, ok := handlercommon.UserID(r)
+	userID, ok := handlercommon.UserID(r)
 	if !ok {
 		return
 	}
-	var req statusRequest
-	if !handlercommon.Decode(w, r, &req) {
+	var request moveRequest
+	if !handlercommon.Decode(w, r, &request) {
 		return
 	}
-	if err := h.service.MoveTask(r.Context(), id, r.PathValue("taskId"), req.Status, req.Comment); err != nil {
-		handlercommon.WriteError(w, r, err)
-		return
-	}
-	h.getTask(w, r)
-}
-
-func (h *Handler) addTaskAssignee(w http.ResponseWriter, r *http.Request) {
-	id, ok := handlercommon.UserID(r)
-	if !ok {
-		return
-	}
-	var req memberRequest
-	if !handlercommon.Decode(w, r, &req) {
-		return
-	}
-	if err := h.service.AddTaskAssignee(r.Context(), id, r.PathValue("taskId"), req.UserID); err != nil {
-		handlercommon.WriteError(w, r, err)
-		return
-	}
-	pkg.WriteEmpty(w, 204)
-}
-
-func (h *Handler) listTaskAssignees(w http.ResponseWriter, r *http.Request) {
-	id, ok := handlercommon.UserID(r)
-	if !ok {
-		return
-	}
-	task, err := h.service.GetTask(r.Context(), id, r.PathValue("taskId"))
+	task, err := h.service.MoveTask(r.Context(), userID, r.PathValue("taskId"), request.ColumnID, request.Comment)
 	if err != nil {
 		handlercommon.WriteError(w, r, err)
 		return
 	}
-	pkg.WriteJSON(w, http.StatusOK, task.AssigneeIDs)
+	pkg.WriteJSON(w, http.StatusOK, task)
 }
 
-func (h *Handler) removeTaskAssignee(w http.ResponseWriter, r *http.Request) {
-	id, ok := handlercommon.UserID(r)
+func (h *Handler) listCompleted(w http.ResponseWriter, r *http.Request) {
+	userID, ok := handlercommon.UserID(r)
 	if !ok {
 		return
 	}
-	if err := h.service.RemoveTaskAssignee(r.Context(), id, r.PathValue("taskId"), r.PathValue("assigneeId")); err != nil {
-		handlercommon.WriteError(w, r, err)
+	from, err := optionalDate(r.URL.Query().Get("from"))
+	if err != nil {
+		pkg.WriteError(w, http.StatusBadRequest, "VALIDATION", "Некорректная дата from")
 		return
 	}
-	pkg.WriteEmpty(w, 204)
-}
-
-func (h *Handler) taskHistory(w http.ResponseWriter, r *http.Request) {
-	id, ok := handlercommon.UserID(r)
-	if !ok {
+	to, err := optionalDate(r.URL.Query().Get("to"))
+	if err != nil {
+		pkg.WriteError(w, http.StatusBadRequest, "VALIDATION", "Некорректная дата to")
 		return
 	}
-	items, err := h.service.TaskHistory(r.Context(), id, r.PathValue("taskId"))
+	if to != nil {
+		value := to.AddDate(0, 0, 1)
+		to = &value
+	}
+	tasks, err := h.service.ListCompleted(
+		r.Context(), userID, from, to,
+		r.URL.Query().Get("projectId"), r.URL.Query().Get("assigneeId"), r.URL.Query().Get("search"),
+	)
 	if err != nil {
 		handlercommon.WriteError(w, r, err)
 		return
 	}
-	pkg.WriteJSON(w, 200, items)
+	pkg.WriteJSON(w, http.StatusOK, tasks)
+}
+
+func (h *Handler) listAssigned(w http.ResponseWriter, r *http.Request) {
+	userID, ok := handlercommon.UserID(r)
+	if !ok {
+		return
+	}
+	tasks, err := h.service.ListAssigned(r.Context(), userID, r.URL.Query().Get("userId"))
+	if err != nil {
+		handlercommon.WriteError(w, r, err)
+		return
+	}
+	pkg.WriteJSON(w, http.StatusOK, tasks)
+}
+
+func optionalDate(value string) (*time.Time, error) {
+	if value == "" {
+		return nil, nil
+	}
+	parsed, err := time.Parse("2006-01-02", value)
+	return &parsed, err
 }

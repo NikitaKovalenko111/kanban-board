@@ -1,5 +1,7 @@
 package auth_handler
 
+import "kanban-board/internal/models"
+
 type RegisterRequest struct {
 	Username        string `json:"username"`
 	Email           string `json:"email"`
@@ -19,10 +21,10 @@ type LoginRequest struct {
 }
 
 type TokenResponse struct {
-	UserID       string `json:"userId"`
-	AccessToken  string `json:"accessToken"`
-	RefreshToken string `json:"refreshToken"`
-	TokenType    string `json:"tokenType"`
+	AccessToken  string          `json:"accessToken"`
+	RefreshToken string          `json:"refreshToken"`
+	ExpiresIn    int64           `json:"expiresIn"`
+	User         *models.Profile `json:"user,omitempty"`
 }
 
 type RefreshRequest struct {
@@ -33,4 +35,9 @@ type RefreshRequest struct {
 type LogoutRequest struct {
 	RefreshToken       string `json:"refreshToken"`
 	LegacyRefreshToken string `json:"refresh_token"`
+}
+
+type ChangePasswordRequest struct {
+	CurrentPassword string `json:"currentPassword"`
+	NewPassword     string `json:"newPassword"`
 }

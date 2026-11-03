@@ -204,12 +204,12 @@ func TestLoginUserSuccessWithUsernameOrEmail(t *testing.T) {
 				SELECT
 					user_id,
 					username,
-					email,
+					COALESCE(email, ''),
 					password_hash,
 					is_active
 				FROM users
-				WHERE email = $1
-					OR username = $1
+				WHERE LOWER(COALESCE(email, '')) = LOWER($1)
+					OR LOWER(username) = LOWER($1)
 				LIMIT 1
 			`)).
 				WithArgs(login).
@@ -283,12 +283,12 @@ func TestLoginUserRejectsWrongPassword(t *testing.T) {
 		SELECT
 			user_id,
 			username,
-			email,
+			COALESCE(email, ''),
 			password_hash,
 			is_active
 		FROM users
-		WHERE email = $1
-			OR username = $1
+		WHERE LOWER(COALESCE(email, '')) = LOWER($1)
+			OR LOWER(username) = LOWER($1)
 		LIMIT 1
 	`)).
 		WithArgs(testUsername).

@@ -18,6 +18,7 @@ import (
 
 var (
 	ErrInvalidCredentials  = errors.New("invalid login or password")
+	ErrAccountBlocked      = errors.New("account is blocked")
 	ErrUsernameTaken       = errors.New("username is already in use")
 	ErrEmailTaken          = errors.New("email is already in use")
 	ErrInvalidRefreshToken = errors.New("invalid refresh token")
@@ -91,7 +92,10 @@ func (s *AuthService) LoginUser(ctx context.Context, login, password string) (st
 		return "", "", "", fmt.Errorf("failed to get user credentials: %w", err)
 	}
 
-	if !credentials.IsActive || !VerifyPassword(password, credentials.PasswordHash) {
+	if !credentials.IsActive {
+		return "", "", "", ErrAccountBlocked
+	}
+	if !VerifyPassword(password, credentials.PasswordHash) {
 		return "", "", "", ErrInvalidCredentials
 	}
 
@@ -106,6 +110,41 @@ func (s *AuthService) LoginUser(ctx context.Context, login, password string) (st
 	}
 
 	return credentials.UserID, accessToken, refreshToken, nil
+}
+
+func (s *AuthService) ChangePassword(ctx context.Context, userID, currentPassword, newPassword string) error {
+	if len(newPassword) < minPasswordLength || len(newPassword) > maxPasswordLength {
+		return errors.New("new password must contain from 8 to 72 characters")
+	}
+	if currentPassword == newPassword {
+		return errors.New("new password must differ from current password")
+	}
+	passwordHash, err := s.userRepo.GetPasswordHash(ctx, userID)
+	if err != nil || !VerifyPassword(currentPassword, passwordHash) {
+		return ErrInvalidCredentials
+	}
+	newPasswordHash, err := HashPassword(newPassword)
+	if err != nil {
+		return err
+	}
+	if err := s.userRepo.ChangePassword(ctx, userID, newPasswordHash); err != nil {
+		return fmt.Errorf("change password: %w", err)
+	}
+
+	return nil
+}
+
+func (s *AuthService) AccessTokenExpiresIn() int64 {
+	ttl, err := time.ParseDuration(s.jwtConfig.AccessTokenTTL)
+	if err != nil {
+		return 0
+	}
+
+	return int64(ttl.Seconds())
+}
+
+func (s *AuthService) IsUserActive(ctx context.Context, userID string) (bool, error) {
+	return s.userRepo.IsUserActive(ctx, userID)
 }
 
 func (s *AuthService) RefreshTokens(ctx context.Context, currentRefreshToken string) (string, string, string, error) {

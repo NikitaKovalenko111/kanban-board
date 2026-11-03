@@ -64,13 +64,13 @@ func TestRegisterReturnsConflictForExistingUsernameOrEmail(t *testing.T) {
 		{
 			name:            "username already exists",
 			constraintName:  "users_username_idx",
-			expectedCode:    "username_taken",
+			expectedCode:    "USERNAME_TAKEN",
 			expectedMessage: "Username is already in use",
 		},
 		{
 			name:            "email already exists",
 			constraintName:  "users_email_idx",
-			expectedCode:    "email_taken",
+			expectedCode:    "EMAIL_TAKEN",
 			expectedMessage: "Email is already in use",
 		},
 	}
@@ -123,11 +123,11 @@ func TestRegisterReturnsConflictForExistingUsernameOrEmail(t *testing.T) {
 			if err := json.NewDecoder(recorder.Body).Decode(&response); err != nil {
 				t.Fatalf("decode response: %v", err)
 			}
-			if response.Error != test.expectedCode {
-				t.Fatalf("response error = %q, want %q", response.Error, test.expectedCode)
+			if response.Error.Code != test.expectedCode {
+				t.Fatalf("response error = %q, want %q", response.Error.Code, test.expectedCode)
 			}
-			if response.Message != test.expectedMessage {
-				t.Fatalf("response message = %q, want %q", response.Message, test.expectedMessage)
+			if response.Error.Message != test.expectedMessage {
+				t.Fatalf("response message = %q, want %q", response.Error.Message, test.expectedMessage)
 			}
 
 			logs := logOutput.String()

@@ -13,13 +13,17 @@ const (
 		CREATE TABLE IF NOT EXISTS users (
 			user_id UUID PRIMARY KEY,
 			username VARCHAR NOT NULL,
-			email VARCHAR NOT NULL,
+			email VARCHAR,
 			display_name VARCHAR NOT NULL,
 			position VARCHAR,
 			student_group_id UUID REFERENCES student_groups (student_group_id) ON DELETE SET NULL,
 			image_url VARCHAR,
+			contact VARCHAR,
+			system_role VARCHAR NOT NULL DEFAULT 'MEMBER' CHECK (system_role IN ('CAPTAIN', 'MEMBER')),
+			schedule_privacy VARCHAR NOT NULL DEFAULT 'BUSY' CHECK (schedule_privacy IN ('NOTHING', 'BUSY', 'TITLE', 'TITLE_AND_DESCRIPTION')),
 			password_hash VARCHAR NOT NULL,
 			is_active BOOLEAN NOT NULL DEFAULT TRUE,
+			joined_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
 			created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
 			updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 		);`
@@ -47,7 +51,7 @@ const (
 		CREATE TABLE IF NOT EXISTS project_members (
 			project_id UUID NOT NULL REFERENCES projects (project_id) ON DELETE CASCADE,
 			user_id UUID NOT NULL REFERENCES users (user_id) ON DELETE CASCADE,
-			role VARCHAR NOT NULL DEFAULT 'MEMBER' CHECK (role IN ('LEAD', 'MEMBER')),
+			role VARCHAR NOT NULL DEFAULT 'Участник',
 			status VARCHAR NOT NULL DEFAULT 'ACTIVE' CHECK (status IN ('ACTIVE', 'BLOCKED', 'LEFT')),
 			joined_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
 			updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -65,6 +69,8 @@ const (
 			board_id UUID NOT NULL REFERENCES boards (board_id) ON DELETE CASCADE,
 			code VARCHAR NOT NULL,
 			name VARCHAR NOT NULL,
+			kind VARCHAR NOT NULL DEFAULT 'IN_PROGRESS' CHECK (kind IN ('BACKLOG', 'IN_PROGRESS', 'REVIEW', 'DONE')),
+			color VARCHAR NOT NULL DEFAULT '#6576DF',
 			position INTEGER NOT NULL CHECK (position >= 0),
 			UNIQUE (board_id, code),
 			UNIQUE (board_id, position)
@@ -72,11 +78,11 @@ const (
 	TASKS_TABLE = `
 		CREATE TABLE IF NOT EXISTS tasks (
 			task_id UUID PRIMARY KEY,
-			column_id UUID NOT NULL REFERENCES board_columns (column_id),
+			column_id UUID NOT NULL REFERENCES board_columns (column_id) ON DELETE CASCADE,
 			created_by_user_id UUID NOT NULL REFERENCES users (user_id),
 			title VARCHAR NOT NULL,
 			description TEXT,
-			priority VARCHAR NOT NULL DEFAULT 'MEDIUM' CHECK (priority IN ('LOW', 'MEDIUM', 'HIGH', 'CRITICAL')),
+			priority VARCHAR NOT NULL DEFAULT 'NORMAL' CHECK (priority IN ('LOW', 'NORMAL', 'HIGH')),
 			position INTEGER NOT NULL DEFAULT 0 CHECK (position >= 0),
 			due_date TIMESTAMPTZ,
 			completed_at TIMESTAMPTZ,
@@ -159,28 +165,70 @@ const (
 		CREATE TABLE IF NOT EXISTS events (
 			event_id UUID PRIMARY KEY,
 			owner_user_id UUID NOT NULL REFERENCES users (user_id) ON DELETE CASCADE,
-			event_type_id UUID NOT NULL REFERENCES event_types (event_type_id),
+			event_type_id UUID REFERENCES event_types (event_type_id) ON DELETE SET NULL,
 			project_id UUID REFERENCES projects (project_id) ON DELETE CASCADE,
 			student_group_id UUID REFERENCES student_groups (student_group_id) ON DELETE CASCADE,
 			title VARCHAR NOT NULL,
 			description TEXT,
 			location VARCHAR,
-			visibility VARCHAR NOT NULL CHECK (visibility IN ('PERSONAL', 'PROJECT', 'GROUP')),
+			visibility VARCHAR NOT NULL CHECK (visibility IN ('PERSONAL', 'TEAM', 'GROUP')),
 			starts_at TIMESTAMPTZ NOT NULL,
-			ends_at TIMESTAMPTZ NOT NULL CHECK (ends_at > starts_at),
+			ends_at TIMESTAMPTZ CHECK (ends_at IS NULL OR ends_at > starts_at),
 			created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
 			updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
 			CHECK (
 				(visibility = 'PERSONAL' AND project_id IS NULL AND student_group_id IS NULL) OR
-				(visibility = 'PROJECT' AND project_id IS NOT NULL AND student_group_id IS NULL) OR
+				(visibility = 'TEAM' AND student_group_id IS NULL) OR
 				(visibility = 'GROUP' AND project_id IS NULL AND student_group_id IS NOT NULL)
 			)
 		);`
 	EVENT_REMINDERS_TABLE = `
 		CREATE TABLE IF NOT EXISTS event_reminders (
+			user_id UUID NOT NULL REFERENCES users (user_id) ON DELETE CASCADE,
 			event_id UUID NOT NULL REFERENCES events (event_id) ON DELETE CASCADE,
 			minutes_before INTEGER NOT NULL CHECK (minutes_before >= 0),
-			PRIMARY KEY (event_id, minutes_before)
+			PRIMARY KEY (user_id, event_id, minutes_before)
+		);`
+	USER_REMINDERS_TABLE = `
+		CREATE TABLE IF NOT EXISTS user_reminders (
+			user_id UUID NOT NULL REFERENCES users (user_id) ON DELETE CASCADE,
+			item_key VARCHAR NOT NULL,
+			minutes_before INTEGER NOT NULL CHECK (minutes_before BETWEEN 1 AND 40320),
+			PRIMARY KEY (user_id, item_key, minutes_before)
+		);`
+	PROJECT_SOURCES_TABLE = `
+		CREATE TABLE IF NOT EXISTS project_sources (
+			project_source_id UUID PRIMARY KEY,
+			project_id UUID NOT NULL REFERENCES projects (project_id) ON DELETE CASCADE,
+			kind VARCHAR NOT NULL CHECK (kind IN ('LINK', 'FILE')),
+			title VARCHAR NOT NULL,
+			url VARCHAR,
+			storage_key VARCHAR,
+			file_name VARCHAR,
+			mime_type VARCHAR,
+			file_size BIGINT CHECK (file_size IS NULL OR file_size >= 0),
+			added_by_user_id UUID REFERENCES users (user_id) ON DELETE SET NULL,
+			added_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+		);`
+	NOTIFICATIONS_TABLE = `
+		CREATE TABLE IF NOT EXISTS notifications (
+			notification_id UUID PRIMARY KEY,
+			user_id UUID NOT NULL REFERENCES users (user_id) ON DELETE CASCADE,
+			kind VARCHAR NOT NULL CHECK (kind IN ('COMMENT', 'RETURNED', 'STATUS', 'EVENT')),
+			title VARCHAR NOT NULL,
+			text VARCHAR NOT NULL,
+			task_id UUID REFERENCES tasks (task_id) ON DELETE CASCADE,
+			event_id UUID REFERENCES events (event_id) ON DELETE CASCADE,
+			created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+			read_at TIMESTAMPTZ
+		);`
+	PUSH_TOKENS_TABLE = `
+		CREATE TABLE IF NOT EXISTS push_tokens (
+			user_id UUID NOT NULL REFERENCES users (user_id) ON DELETE CASCADE,
+			token VARCHAR NOT NULL,
+			platform VARCHAR NOT NULL CHECK (platform IN ('android')),
+			created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+			PRIMARY KEY (user_id, token)
 		);`
 )
 
@@ -190,6 +238,12 @@ const SCHEMA_MIGRATION = `
 	ALTER TABLE users ADD COLUMN IF NOT EXISTS student_group_id UUID REFERENCES student_groups (student_group_id) ON DELETE SET NULL;
 	ALTER TABLE users ADD COLUMN IF NOT EXISTS is_active BOOLEAN NOT NULL DEFAULT TRUE;
 	ALTER TABLE users ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP;
+	ALTER TABLE users ALTER COLUMN email DROP NOT NULL;
+	ALTER TABLE users ADD COLUMN IF NOT EXISTS contact VARCHAR;
+	ALTER TABLE users ADD COLUMN IF NOT EXISTS system_role VARCHAR NOT NULL DEFAULT 'MEMBER';
+	ALTER TABLE users ADD COLUMN IF NOT EXISTS schedule_privacy VARCHAR NOT NULL DEFAULT 'BUSY';
+	ALTER TABLE users ADD COLUMN IF NOT EXISTS joined_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP;
+	ALTER TABLE project_members DROP CONSTRAINT IF EXISTS project_members_role_check;
 	DO $$
 	BEGIN
 		IF EXISTS (
@@ -291,15 +345,46 @@ const SCHEMA_MIGRATION = `
 	WHERE code IS NULL
 		OR code = '';
 	ALTER TABLE board_columns ALTER COLUMN code SET NOT NULL;
+	ALTER TABLE board_columns ADD COLUMN IF NOT EXISTS kind VARCHAR NOT NULL DEFAULT 'IN_PROGRESS';
+	ALTER TABLE board_columns ADD COLUMN IF NOT EXISTS color VARCHAR NOT NULL DEFAULT '#6576DF';
+	UPDATE board_columns SET kind = CASE code
+		WHEN 'WAITING' THEN 'BACKLOG'
+		WHEN 'CHECKING' THEN 'REVIEW'
+		WHEN 'DONE' THEN 'DONE'
+		ELSE 'IN_PROGRESS'
+	END;
 	ALTER TABLE tasks ADD COLUMN IF NOT EXISTS completed_at TIMESTAMPTZ;
+	ALTER TABLE tasks DROP CONSTRAINT IF EXISTS tasks_column_id_fkey;
+	ALTER TABLE tasks ADD CONSTRAINT tasks_column_id_fkey
+		FOREIGN KEY (column_id) REFERENCES board_columns (column_id) ON DELETE CASCADE;
+	ALTER TABLE tasks DROP CONSTRAINT IF EXISTS tasks_priority_check;
+	UPDATE tasks SET priority = 'NORMAL' WHERE priority IN ('MEDIUM', 'CRITICAL');
+	ALTER TABLE tasks ALTER COLUMN priority SET DEFAULT 'NORMAL';
+	ALTER TABLE tasks ADD CONSTRAINT tasks_priority_check CHECK (priority IN ('LOW', 'NORMAL', 'HIGH'));
 	ALTER TABLE comments ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ;
 	ALTER TABLE attachments ADD COLUMN IF NOT EXISTS attachment_type VARCHAR NOT NULL DEFAULT 'SOURCE';
+	ALTER TABLE events DROP CONSTRAINT IF EXISTS events_visibility_check;
+	ALTER TABLE events DROP CONSTRAINT IF EXISTS events_check;
+	ALTER TABLE events DROP CONSTRAINT IF EXISTS events_ends_at_check;
+	ALTER TABLE events DROP CONSTRAINT IF EXISTS events_event_type_id_fkey;
+	ALTER TABLE events ALTER COLUMN event_type_id DROP NOT NULL;
+	ALTER TABLE events ALTER COLUMN ends_at DROP NOT NULL;
+	UPDATE events SET visibility = 'TEAM' WHERE visibility = 'PROJECT';
+	ALTER TABLE events ADD CONSTRAINT events_visibility_check CHECK (visibility IN ('PERSONAL', 'TEAM', 'GROUP'));
+	ALTER TABLE events ADD CONSTRAINT events_ends_at_check CHECK (ends_at IS NULL OR ends_at > starts_at);
+	ALTER TABLE events ADD CONSTRAINT events_event_type_id_fkey FOREIGN KEY (event_type_id) REFERENCES event_types (event_type_id) ON DELETE SET NULL;
+	ALTER TABLE event_reminders ADD COLUMN IF NOT EXISTS user_id UUID REFERENCES users (user_id) ON DELETE CASCADE;
+	UPDATE event_reminders er SET user_id = e.owner_user_id FROM events e WHERE e.event_id = er.event_id AND er.user_id IS NULL;
+	ALTER TABLE event_reminders ALTER COLUMN user_id SET NOT NULL;
+	ALTER TABLE event_reminders DROP CONSTRAINT IF EXISTS event_reminders_pkey;
+	ALTER TABLE event_reminders ADD PRIMARY KEY (user_id, event_id, minutes_before);
+	DROP INDEX IF EXISTS users_username_idx;
 	DROP TABLE IF EXISTS team_members CASCADE;
 	DROP TABLE IF EXISTS teams CASCADE;
 `
 
 const (
-	USERS_USERNAME_INDEX                      = `CREATE UNIQUE INDEX IF NOT EXISTS users_username_idx ON users (username);`
+	USERS_USERNAME_INDEX                      = `CREATE UNIQUE INDEX IF NOT EXISTS users_username_idx ON users (LOWER(username));`
 	USERS_EMAIL_INDEX                         = `CREATE UNIQUE INDEX IF NOT EXISTS users_email_idx ON users (email);`
 	USERS_STUDENT_GROUP_INDEX                 = `CREATE INDEX IF NOT EXISTS users_student_group_id_idx ON users (student_group_id);`
 	SESSIONS_REFRESH_TOKEN_HASH_INDEX         = `CREATE UNIQUE INDEX IF NOT EXISTS sessions_refresh_token_hash_idx ON sessions (refresh_token_hash);`
@@ -307,6 +392,7 @@ const (
 	SESSIONS_EXPIRES_AT_INDEX                 = `CREATE INDEX IF NOT EXISTS sessions_expires_at_idx ON sessions (expires_at);`
 	SESSIONS_REVOKED_AT_INDEX                 = `CREATE INDEX IF NOT EXISTS sessions_revoked_at_idx ON sessions (revoked_at) WHERE revoked_at IS NOT NULL;`
 	PROJECTS_CREATED_BY_INDEX                 = `CREATE INDEX IF NOT EXISTS projects_created_by_user_id_idx ON projects (created_by_user_id);`
+	PROJECTS_NAME_UNIQUE_INDEX                = `CREATE UNIQUE INDEX IF NOT EXISTS projects_name_lower_uidx ON projects (LOWER(name)) WHERE is_archived = FALSE;`
 	PROJECT_MEMBERS_USER_INDEX                = `CREATE INDEX IF NOT EXISTS project_members_user_id_idx ON project_members (user_id, status);`
 	BOARDS_PROJECT_ID_INDEX                   = `CREATE UNIQUE INDEX IF NOT EXISTS boards_project_id_idx ON boards (project_id);`
 	BOARD_COLUMNS_BOARD_POSITION_INDEX        = `CREATE INDEX IF NOT EXISTS board_columns_board_position_idx ON board_columns (board_id, position);`
@@ -328,4 +414,9 @@ const (
 	EVENTS_OWNER_START_INDEX                  = `CREATE INDEX IF NOT EXISTS events_owner_starts_at_idx ON events (owner_user_id, starts_at);`
 	EVENTS_PROJECT_START_INDEX                = `CREATE INDEX IF NOT EXISTS events_project_starts_at_idx ON events (project_id, starts_at);`
 	EVENTS_GROUP_START_INDEX                  = `CREATE INDEX IF NOT EXISTS events_group_starts_at_idx ON events (student_group_id, starts_at);`
+	PROJECT_SOURCES_PROJECT_INDEX             = `CREATE INDEX IF NOT EXISTS project_sources_project_id_idx ON project_sources (project_id, added_at);`
+	NOTIFICATIONS_USER_INDEX                  = `CREATE INDEX IF NOT EXISTS notifications_user_created_at_idx ON notifications (user_id, created_at DESC);`
+	NOTIFICATIONS_UNREAD_INDEX                = `CREATE INDEX IF NOT EXISTS notifications_user_unread_idx ON notifications (user_id) WHERE read_at IS NULL;`
+	NOTIFICATIONS_EVENT_UNIQUE_INDEX          = `CREATE UNIQUE INDEX IF NOT EXISTS notifications_user_event_uidx ON notifications (user_id, event_id) WHERE event_id IS NOT NULL AND kind = 'EVENT';`
+	USER_REMINDERS_USER_INDEX                 = `CREATE INDEX IF NOT EXISTS user_reminders_user_id_idx ON user_reminders (user_id);`
 )

@@ -2,6 +2,7 @@ package middleware
 
 import (
 	"context"
+	"database/sql"
 	"log/slog"
 	"net/http"
 	"strings"
@@ -13,7 +14,9 @@ type authContextKey uint8
 
 const accessTokenClaimsContextKey authContextKey = iota
 
-func Authorization(accessSecret string, logger *slog.Logger) func(http.Handler) http.Handler {
+type UserActiveChecker func(ctx context.Context, userID string) (bool, error)
+
+func Authorization(accessSecret string, logger *slog.Logger, activeCheckers ...UserActiveChecker) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			tokenString, ok := bearerToken(r.Header.Get("Authorization"))
@@ -28,6 +31,23 @@ func Authorization(accessSecret string, logger *slog.Logger) func(http.Handler) 
 				logger.Warn("authorization failed", slog.Any("error", err))
 				pkg.WriteError(w, http.StatusUnauthorized, "invalid_access_token", "Valid access token is required")
 				return
+			}
+
+			if len(activeCheckers) > 0 && activeCheckers[0] != nil {
+				active, checkErr := activeCheckers[0](r.Context(), claims.Subject)
+				if checkErr != nil {
+					if checkErr == sql.ErrNoRows {
+						pkg.WriteError(w, http.StatusUnauthorized, "INVALID_ACCESS_TOKEN", "Токен недействителен")
+						return
+					}
+					logger.Error("authorization user check failed", slog.Any("error", checkErr))
+					pkg.WriteError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Внутренняя ошибка сервера")
+					return
+				}
+				if !active {
+					pkg.WriteError(w, http.StatusForbidden, "ACCOUNT_BLOCKED", "Пользователь заблокирован")
+					return
+				}
 			}
 
 			ctx := context.WithValue(r.Context(), accessTokenClaimsContextKey, claims)

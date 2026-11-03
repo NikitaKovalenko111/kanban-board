@@ -2,6 +2,7 @@ package task_service
 
 import (
 	"context"
+	"strings"
 	"time"
 
 	"kanban-board/internal/models"
@@ -10,102 +11,162 @@ import (
 )
 
 type Task = models.Task
-type History = models.TaskHistory
+
 type Service struct {
 	repo *task_repo.Repository
 }
 
 func Init(repo *task_repo.Repository) *Service {
-	return &Service{
-		repo: repo,
-	}
+	return &Service{repo: repo}
 }
 
-func (s *Service) ListTasks(ctx context.Context, uid, pid string) ([]Task, error) {
-	if err := servicecommon.ValidateUUID(uid, pid); err != nil {
+func (s *Service) ListTasks(ctx context.Context, userID, projectID string) ([]Task, error) {
+	if err := servicecommon.ValidateUUID(userID, projectID); err != nil {
 		return nil, err
 	}
-
-	return s.repo.ListTasks(ctx, uid, pid)
+	return s.repo.ListTasks(ctx, userID, projectID)
 }
 
-func (s *Service) GetTask(ctx context.Context, uid, tid string) (*Task, error) {
-	if err := servicecommon.ValidateUUID(uid, tid); err != nil {
+func (s *Service) GetTask(ctx context.Context, userID, taskID string) (*Task, error) {
+	if err := servicecommon.ValidateUUID(userID, taskID); err != nil {
 		return nil, err
 	}
-
-	return s.repo.GetTask(ctx, uid, tid)
+	return s.repo.GetTask(ctx, userID, taskID)
 }
 
-func (s *Service) CreateTask(ctx context.Context, uid, pid, title, description, priority string, due *time.Time, assignees []string) (string, error) {
-	if err := servicecommon.ValidateUUID(uid, pid); err != nil {
-		return "", err
-	}
-	if err := validateTask(title, priority, assignees); err != nil {
-		return "", err
-	}
-
-	return s.repo.CreateTask(ctx, uid, pid, title, description, priority, due, assignees)
-}
-
-func (s *Service) UpdateTask(ctx context.Context, uid, tid, title, description, priority string, due *time.Time) error {
-	if err := servicecommon.ValidateUUID(uid, tid); err != nil {
-		return err
-	}
-	if err := validateTask(title, priority, nil); err != nil {
-		return err
-	}
-
-	return s.repo.UpdateTask(ctx, uid, tid, title, description, priority, due)
-}
-
-func (s *Service) DeleteTask(ctx context.Context, uid, tid string) error {
-	if err := servicecommon.ValidateUUID(uid, tid); err != nil {
-		return err
-	}
-
-	return s.repo.DeleteTask(ctx, uid, tid)
-}
-
-func (s *Service) TakeTask(ctx context.Context, uid, tid string) error {
-	if err := servicecommon.ValidateUUID(uid, tid); err != nil {
-		return err
-	}
-
-	return s.repo.TakeTask(ctx, uid, tid)
-}
-
-func (s *Service) MoveTask(ctx context.Context, uid, tid, status, comment string) error {
-	if err := servicecommon.ValidateUUID(uid, tid); err != nil {
-		return err
-	}
-	if err := validateTaskStatus(status); err != nil {
-		return err
-	}
-
-	return s.repo.MoveTask(ctx, uid, tid, status, comment)
-}
-
-func (s *Service) AddTaskAssignee(ctx context.Context, actor, tid, uid string) error {
-	if err := servicecommon.ValidateUUID(actor, tid, uid); err != nil {
-		return err
-	}
-
-	return s.repo.AddTaskAssignee(ctx, actor, tid, uid)
-}
-
-func (s *Service) RemoveTaskAssignee(ctx context.Context, actor, tid, uid string) error {
-	if err := servicecommon.ValidateUUID(actor, tid, uid); err != nil {
-		return err
-	}
-
-	return s.repo.RemoveTaskAssignee(ctx, actor, tid, uid)
-}
-
-func (s *Service) TaskHistory(ctx context.Context, uid, tid string) ([]History, error) {
-	if err := servicecommon.ValidateUUID(uid, tid); err != nil {
+func (s *Service) CreateTask(
+	ctx context.Context,
+	userID, projectID, title, description, priority string,
+	assigneeID *string,
+	dueAt *time.Time,
+	columnID *string,
+) (*Task, error) {
+	if err := servicecommon.ValidateUUID(userID, projectID); err != nil {
 		return nil, err
 	}
+	if assigneeID != nil {
+		if err := servicecommon.ValidateUUID(*assigneeID); err != nil {
+			return nil, err
+		}
+	}
+	if columnID != nil {
+		if err := servicecommon.ValidateUUID(*columnID); err != nil {
+			return nil, err
+		}
+	}
+	if err := validateTaskData(title, priority); err != nil {
+		return nil, err
+	}
+	taskID, err := s.repo.CreateTask(ctx, userID, projectID, title, description, priority, assigneeID, dueAt, columnID)
+	if err != nil {
+		return nil, err
+	}
+	return s.repo.GetTask(ctx, userID, taskID)
+}
 
-	return s.repo.TaskHistory(ctx, uid, tid)
+func (s *Service) UpdateTask(
+	ctx context.Context,
+	userID, taskID string,
+	title, description, priority *string,
+	dueAt *time.Time,
+	dueAtProvided bool,
+	assigneeID *string,
+	assigneeProvided bool,
+) (*Task, error) {
+	if err := servicecommon.ValidateUUID(userID, taskID); err != nil {
+		return nil, err
+	}
+	if title != nil && strings.TrimSpace(*title) == "" {
+		return nil, servicecommon.InvalidInput("title is required")
+	}
+	if priority != nil && !validPriority(*priority) {
+		return nil, servicecommon.InvalidInput("priority must be LOW, NORMAL, or HIGH")
+	}
+	if assigneeID != nil {
+		if err := servicecommon.ValidateUUID(*assigneeID); err != nil {
+			return nil, err
+		}
+	}
+	if err := s.repo.UpdateTask(ctx, userID, taskID, title, description, priority, dueAt, dueAtProvided, assigneeID, assigneeProvided); err != nil {
+		return nil, err
+	}
+	return s.repo.GetTask(ctx, userID, taskID)
+}
+
+func (s *Service) DeleteTask(ctx context.Context, userID, taskID string) ([]string, error) {
+	if err := servicecommon.ValidateUUID(userID, taskID); err != nil {
+		return nil, err
+	}
+	return s.repo.DeleteTask(ctx, userID, taskID)
+}
+
+func (s *Service) TakeTask(ctx context.Context, userID, taskID string) (*Task, error) {
+	if err := servicecommon.ValidateUUID(userID, taskID); err != nil {
+		return nil, err
+	}
+	if err := s.repo.TakeTask(ctx, userID, taskID); err != nil {
+		return nil, err
+	}
+	return s.repo.GetTask(ctx, userID, taskID)
+}
+
+func (s *Service) AssignToMe(ctx context.Context, userID, taskID string) (*Task, error) {
+	if err := servicecommon.ValidateUUID(userID, taskID); err != nil {
+		return nil, err
+	}
+	if err := s.repo.AssignToMe(ctx, userID, taskID); err != nil {
+		return nil, err
+	}
+	return s.repo.GetTask(ctx, userID, taskID)
+}
+
+func (s *Service) MoveTask(ctx context.Context, userID, taskID, columnID, comment string) (*Task, error) {
+	if err := servicecommon.ValidateUUID(userID, taskID, columnID); err != nil {
+		return nil, err
+	}
+	if err := s.repo.MoveTask(ctx, userID, taskID, columnID, strings.TrimSpace(comment)); err != nil {
+		return nil, err
+	}
+	return s.repo.GetTask(ctx, userID, taskID)
+}
+
+func (s *Service) ListCompleted(ctx context.Context, userID string, from, to *time.Time, projectID, assigneeID, search string) ([]Task, error) {
+	if err := servicecommon.ValidateUUID(userID); err != nil {
+		return nil, err
+	}
+	if projectID != "" {
+		if err := servicecommon.ValidateUUID(projectID); err != nil {
+			return nil, err
+		}
+	}
+	if assigneeID != "" {
+		if err := servicecommon.ValidateUUID(assigneeID); err != nil {
+			return nil, err
+		}
+	}
+	return s.repo.ListCompleted(ctx, userID, from, to, projectID, assigneeID, strings.TrimSpace(search))
+}
+
+func (s *Service) ListAssigned(ctx context.Context, userID, requestedUserID string) ([]Task, error) {
+	if requestedUserID == "" {
+		requestedUserID = userID
+	}
+	if err := servicecommon.ValidateUUID(userID, requestedUserID); err != nil {
+		return nil, err
+	}
+	return s.repo.ListAssigned(ctx, userID, requestedUserID)
+}
+
+func validateTaskData(title, priority string) error {
+	if strings.TrimSpace(title) == "" {
+		return servicecommon.InvalidInput("title is required")
+	}
+	if !validPriority(priority) {
+		return servicecommon.InvalidInput("priority must be LOW, NORMAL, or HIGH")
+	}
+	return nil
+}
+
+func validPriority(priority string) bool {
+	return priority == "LOW" || priority == "NORMAL" || priority == "HIGH"
 }

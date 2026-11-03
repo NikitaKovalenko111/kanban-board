@@ -27,12 +27,12 @@ func (s *Service) ListComments(ctx context.Context, uid, tid string) ([]Comment,
 	return s.repo.ListComments(ctx, uid, tid)
 }
 
-func (s *Service) AddComment(ctx context.Context, uid, tid, text string) (string, error) {
+func (s *Service) AddComment(ctx context.Context, uid, tid, text string) (*Comment, error) {
 	if err := servicecommon.ValidateUUID(uid, tid); err != nil {
-		return "", err
+		return nil, err
 	}
 	if err := validateComment(text); err != nil {
-		return "", err
+		return nil, err
 	}
 
 	return s.repo.AddComment(ctx, uid, tid, text)

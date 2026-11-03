@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"time"
 
 	"kanban-board/internal/config"
 	"kanban-board/internal/middleware"
@@ -37,11 +38,17 @@ func Run(cfg *config.Config) {
 		cfg.TIMEOUT,
 		logger,
 	)
+	go services.RunNotificationScheduler(
+		cleanupContext,
+		15*time.Minute,
+		cfg.TIMEOUT,
+		logger,
+	)
 
 	handlers := handlers.Init(services)
 
 	mux := http.NewServeMux()
-	transport := transport.Init(handlers, cfg.JWT.AccessSecret, logger)
+	transport := transport.Init(handlers, cfg.JWT.AccessSecret, logger, services.Auth.IsUserActive)
 	transport.Start(mux)
 
 	requestHandler := middleware.Logger(logger)(middleware.Timeout(cfg.TIMEOUT)(mux))

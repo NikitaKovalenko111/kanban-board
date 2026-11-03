@@ -43,22 +43,19 @@ func (r *Repository) ListStudentGroups(ctx context.Context) ([]models.StudentGro
 	return items, rows.Err()
 }
 
-func (r *Repository) ListLessons(ctx context.Context, groupCode string, from, to time.Time) ([]models.Lesson, error) {
+func (r *Repository) ListLessons(ctx context.Context, groupCode string, from, to time.Time) (*models.Schedule, error) {
 	rows, err := r.db.QueryContext(ctx, `
 		SELECT
-		    l.lesson_id,
-		    l.student_group_id,
-		    COALESCE(l.external_id,''),
+			COALESCE(l.external_id, l.lesson_id::text),
+			sg.group_code,
 		    l.title,
 		    COALESCE(l.room,''),
 		    COALESCE(l.teacher,''),
-		    l.lesson_kind,
 		    l.starts_at,
 		    l.ends_at,
+			l.lesson_kind,
 		    l.source_status,
-		    l.source_updated_at,
-		    l.created_at,
-		    l.updated_at
+			COALESCE(l.source_updated_at, l.updated_at)
 		FROM lessons l
 		JOIN student_groups sg ON sg.student_group_id=l.student_group_id
 		WHERE sg.group_code=$1 AND l.starts_at >= $2 AND l.starts_at < $3
@@ -68,13 +65,24 @@ func (r *Repository) ListLessons(ctx context.Context, groupCode string, from, to
 		return nil, err
 	}
 	defer rows.Close()
-	items := make([]models.Lesson, 0)
+	schedule := &models.Schedule{Lessons: make([]models.Lesson, 0), Source: "ACTUAL"}
 	for rows.Next() {
 		var l models.Lesson
-		if err := rows.Scan(&l.LessonID, &l.StudentGroupID, &l.ExternalID, &l.Title, &l.Room, &l.Teacher, &l.LessonKind, &l.StartsAt, &l.EndsAt, &l.SourceStatus, &l.SourceUpdatedAt, &l.CreatedAt, &l.UpdatedAt); err != nil {
+		var startsAt, endsAt, updatedAt time.Time
+		var source string
+		if err := rows.Scan(&l.ID, &l.Group, &l.Title, &l.Room, &l.Teacher, &startsAt, &endsAt, &l.Kind, &source, &updatedAt); err != nil {
 			return nil, err
 		}
-		items = append(items, l)
+		l.Date = startsAt.Format("2006-01-02")
+		l.Start = startsAt.Format("15:04")
+		l.End = endsAt.Format("15:04")
+		if source == "UNAVAILABLE" || (source == "CACHED" && schedule.Source == "ACTUAL") {
+			schedule.Source = source
+		}
+		if schedule.UpdatedAt == nil || updatedAt.After(*schedule.UpdatedAt) {
+			schedule.UpdatedAt = &updatedAt
+		}
+		schedule.Lessons = append(schedule.Lessons, l)
 	}
-	return items, rows.Err()
+	return schedule, rows.Err()
 }

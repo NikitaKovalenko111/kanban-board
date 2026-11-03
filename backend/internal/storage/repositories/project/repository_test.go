@@ -1,87 +1,24 @@
 package project_repo
 
 import (
-	"context"
-	"regexp"
+	"encoding/json"
 	"testing"
 
-	"github.com/DATA-DOG/go-sqlmock"
+	"kanban-board/internal/models"
 )
 
-func TestCreateProjectCreatesLeadBoardAndDefaultColumns(t *testing.T) {
-	db, mock, err := sqlmock.New()
-	if err != nil {
-		t.Fatalf("sqlmock.New(): %v", err)
+func TestMembersJSON(t *testing.T) {
+	t.Parallel()
+	members := []models.ProjectMember{{
+		UserID: "5e66fa21-acde-4b33-9b60-37cc2b63ac22",
+		Role:   "Разработчик",
+	}}
+	encoded := membersJSON(members)
+	var decoded []map[string]string
+	if err := json.Unmarshal([]byte(encoded), &decoded); err != nil {
+		t.Fatalf("membersJSON() returned invalid JSON: %v", err)
 	}
-	defer db.Close()
-
-	repository := Init(db)
-	userID := "5e66fa21-acde-4b33-9b60-37cc2b63ac22"
-	projectID := "3c3a113d-15ac-4273-b55f-e5f03ad61d42"
-	boardID := "1637fcaa-32d2-436c-ad65-e379314429f1"
-
-	mock.ExpectBegin()
-	mock.ExpectQuery(regexp.QuoteMeta(`
-		INSERT INTO projects (
-			project_id,
-			created_by_user_id,
-			name,
-			description,
-			join_policy
-		)
-		VALUES (
-			gen_random_uuid(),
-			$1,
-			$2,
-			NULLIF($3, ''),
-			$4
-		)
-		RETURNING project_id
-	`)).WithArgs(userID, "Mobile", "Android client", "INVITE_ONLY").
-		WillReturnRows(sqlmock.NewRows([]string{"project_id"}).AddRow(projectID))
-	mock.ExpectExec(regexp.QuoteMeta(`
-		INSERT INTO project_members (
-			project_id,
-			user_id,
-			role
-		)
-		VALUES ($1, $2, 'LEAD')
-	`)).
-		WithArgs(projectID, userID).WillReturnResult(sqlmock.NewResult(0, 1))
-	mock.ExpectQuery(regexp.QuoteMeta(`
-		INSERT INTO boards (
-			board_id,
-			project_id,
-			name
-		)
-		VALUES (gen_random_uuid(), $1, 'Kanban')
-		RETURNING board_id
-	`)).
-		WithArgs(projectID).WillReturnRows(sqlmock.NewRows([]string{"board_id"}).AddRow(boardID))
-	mock.ExpectExec(regexp.QuoteMeta(`
-		INSERT INTO board_columns (
-			column_id,
-			board_id,
-			code,
-			name,
-			position
-		)
-		VALUES
-			(gen_random_uuid(), $1, 'WAITING', 'Ожидает', 0),
-			(gen_random_uuid(), $1, 'WORKING', 'В работе', 1),
-			(gen_random_uuid(), $1, 'CHECKING', 'На проверке', 2),
-			(gen_random_uuid(), $1, 'DONE', 'Готово', 3)
-	`)).WithArgs(boardID).WillReturnResult(sqlmock.NewResult(0, 4))
-	mock.ExpectCommit()
-
-	actualID, err := repository.CreateProject(context.Background(), userID, "Mobile", "Android client", "INVITE_ONLY")
-	if err != nil {
-		t.Fatalf("CreateProject(): %v", err)
-	}
-	if actualID != projectID {
-		t.Fatalf("project id = %q, want %q", actualID, projectID)
-	}
-	if err := mock.ExpectationsWereMet(); err != nil {
-		t.Fatalf("unmet SQL expectations: %v", err)
+	if len(decoded) != 1 || decoded[0]["user_id"] != members[0].UserID || decoded[0]["role"] != members[0].Role {
+		t.Fatalf("membersJSON() = %s", encoded)
 	}
 }

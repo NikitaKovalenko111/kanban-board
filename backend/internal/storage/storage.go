@@ -65,6 +65,10 @@ func (s *Storage) CreateTables() error {
 		{name: "event_type_reminders", query: models.EVENT_TYPE_REMINDERS_TABLE},
 		{name: "events", query: models.EVENTS_TABLE},
 		{name: "event_reminders", query: models.EVENT_REMINDERS_TABLE},
+		{name: "user_reminders", query: models.USER_REMINDERS_TABLE},
+		{name: "project_sources", query: models.PROJECT_SOURCES_TABLE},
+		{name: "notifications", query: models.NOTIFICATIONS_TABLE},
+		{name: "push_tokens", query: models.PUSH_TOKENS_TABLE},
 	}
 	return s.runStatements("create", tables)
 }
@@ -86,6 +90,7 @@ func (s *Storage) CreateIndexes() error {
 		{name: "sessions_expires_at_idx", query: models.SESSIONS_EXPIRES_AT_INDEX},
 		{name: "sessions_revoked_at_idx", query: models.SESSIONS_REVOKED_AT_INDEX},
 		{name: "projects_created_by_user_id_idx", query: models.PROJECTS_CREATED_BY_INDEX},
+		{name: "projects_name_lower_uidx", query: models.PROJECTS_NAME_UNIQUE_INDEX},
 		{name: "project_members_user_id_idx", query: models.PROJECT_MEMBERS_USER_INDEX},
 		{name: "boards_project_id_idx", query: models.BOARDS_PROJECT_ID_INDEX},
 		{name: "board_columns_board_position_idx", query: models.BOARD_COLUMNS_BOARD_POSITION_INDEX},
@@ -107,6 +112,11 @@ func (s *Storage) CreateIndexes() error {
 		{name: "events_owner_starts_at_idx", query: models.EVENTS_OWNER_START_INDEX},
 		{name: "events_project_starts_at_idx", query: models.EVENTS_PROJECT_START_INDEX},
 		{name: "events_group_starts_at_idx", query: models.EVENTS_GROUP_START_INDEX},
+		{name: "project_sources_project_id_idx", query: models.PROJECT_SOURCES_PROJECT_INDEX},
+		{name: "notifications_user_created_at_idx", query: models.NOTIFICATIONS_USER_INDEX},
+		{name: "notifications_user_unread_idx", query: models.NOTIFICATIONS_UNREAD_INDEX},
+		{name: "notifications_user_event_uidx", query: models.NOTIFICATIONS_EVENT_UNIQUE_INDEX},
+		{name: "user_reminders_user_id_idx", query: models.USER_REMINDERS_USER_INDEX},
 	}
 	return s.runStatements("create index", indexes)
 }

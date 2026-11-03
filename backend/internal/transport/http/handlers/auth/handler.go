@@ -8,24 +8,35 @@ import (
 
 	"kanban-board/internal/middleware"
 	auth_service "kanban-board/internal/services/auth"
+	profile_service "kanban-board/internal/services/profile"
+	handlercommon "kanban-board/internal/transport/http/handlers/common"
 	"kanban-board/pkg"
 )
 
 type AuthHandler struct {
 	authService *auth_service.AuthService
+	profile     *profile_service.Service
 }
 
-func Init(authService *auth_service.AuthService) *AuthHandler {
-	return &AuthHandler{
-		authService: authService,
+func Init(authService *auth_service.AuthService, profiles ...*profile_service.Service) *AuthHandler {
+	handler := &AuthHandler{authService: authService}
+	if len(profiles) > 0 {
+		handler.profile = profiles[0]
 	}
+
+	return handler
 }
 
-func (h *AuthHandler) Start(mux *http.ServeMux) {
-	mux.HandleFunc("POST /register", h.Register)
+func (h *AuthHandler) StartPublic(mux *http.ServeMux) {
+	// Самостоятельная регистрация отключена: аккаунты создаёт капитан через POST /api/v1/users.
+	// mux.HandleFunc("POST /register", h.Register)
 	mux.HandleFunc("POST /login", h.Login)
 	mux.HandleFunc("POST /refresh", h.Refresh)
-	mux.HandleFunc("POST /logout", h.Logout)
+}
+
+func (h *AuthHandler) StartProtected(mux *http.ServeMux) {
+	mux.HandleFunc("POST /auth/logout", h.Logout)
+	mux.HandleFunc("POST /auth/change-password", h.ChangePassword)
 }
 
 func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
@@ -73,7 +84,7 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 	var req LoginRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		middleware.QueueErrorLog(r.Context(), "failed to decode login request", err)
-		pkg.WriteError(w, http.StatusBadRequest, "invalid_request", "Invalid request payload")
+		pkg.WriteError(w, http.StatusBadRequest, "VALIDATION", "Некорректное тело запроса")
 		return
 	}
 
@@ -85,22 +96,33 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if errors.Is(err, auth_service.ErrInvalidCredentials) {
-			pkg.WriteError(w, http.StatusUnauthorized, "invalid_credentials", "Invalid login or password")
+			pkg.WriteError(w, http.StatusUnauthorized, "INVALID_CREDENTIALS", "Неверный логин или пароль")
+			return
+		}
+		if errors.Is(err, auth_service.ErrAccountBlocked) {
+			pkg.WriteError(w, http.StatusForbidden, "FORBIDDEN", "Доступ к аккаунту закрыт")
 			return
 		}
 
-		pkg.WriteError(w, http.StatusInternalServerError, "login_failed", "Failed to login")
+		pkg.WriteError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Не удалось выполнить вход")
 		return
 	}
 
-	pkg.WriteJSON(w, http.StatusOK, newTokenResponse(userID, accessToken, refreshToken))
+	profile, err := h.profile.GetProfile(r.Context(), userID)
+	if err != nil {
+		handlercommon.WriteError(w, r, err)
+		return
+	}
+	response := newTokenResponse(accessToken, refreshToken, h.authService.AccessTokenExpiresIn())
+	response.User = profile
+	pkg.WriteJSON(w, http.StatusOK, response)
 }
 
 func (h *AuthHandler) Refresh(w http.ResponseWriter, r *http.Request) {
 	var req RefreshRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		middleware.QueueErrorLog(r.Context(), "failed to decode refresh request", err)
-		pkg.WriteError(w, http.StatusBadRequest, "invalid_request", "Invalid request payload")
+		pkg.WriteError(w, http.StatusBadRequest, "VALIDATION", "Некорректное тело запроса")
 		return
 	}
 
@@ -116,22 +138,23 @@ func (h *AuthHandler) Refresh(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if errors.Is(err, auth_service.ErrInvalidRefreshToken) {
-			pkg.WriteError(w, http.StatusUnauthorized, "invalid_refresh_token", "Invalid refresh token")
+			pkg.WriteError(w, http.StatusUnauthorized, "INVALID_REFRESH_TOKEN", "Refresh-токен недействителен")
 			return
 		}
 
-		pkg.WriteError(w, http.StatusInternalServerError, "refresh_failed", "Failed to refresh tokens")
+		pkg.WriteError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Не удалось обновить токены")
 		return
 	}
 
-	pkg.WriteJSON(w, http.StatusOK, newTokenResponse(userID, accessToken, refreshToken))
+	_ = userID
+	pkg.WriteJSON(w, http.StatusOK, newTokenResponse(accessToken, refreshToken, h.authService.AccessTokenExpiresIn()))
 }
 
 func (h *AuthHandler) Logout(w http.ResponseWriter, r *http.Request) {
 	var req LogoutRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		middleware.QueueErrorLog(r.Context(), "failed to decode logout request", err)
-		pkg.WriteError(w, http.StatusBadRequest, "invalid_request", "Invalid request payload")
+		pkg.WriteError(w, http.StatusBadRequest, "VALIDATION", "Некорректное тело запроса")
 		return
 	}
 
@@ -146,22 +169,42 @@ func (h *AuthHandler) Logout(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if errors.Is(err, auth_service.ErrInvalidRefreshToken) {
-			pkg.WriteError(w, http.StatusUnauthorized, "invalid_refresh_token", "Invalid refresh token")
+			pkg.WriteError(w, http.StatusUnauthorized, "INVALID_REFRESH_TOKEN", "Refresh-токен недействителен")
 			return
 		}
 
-		pkg.WriteError(w, http.StatusInternalServerError, "logout_failed", "Failed to logout")
+		pkg.WriteError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Не удалось завершить сессию")
 		return
 	}
 
 	pkg.WriteEmpty(w, http.StatusNoContent)
 }
 
-func newTokenResponse(userID, accessToken, refreshToken string) TokenResponse {
+func (h *AuthHandler) ChangePassword(w http.ResponseWriter, r *http.Request) {
+	userID, ok := middleware.UserIDFromContext(r.Context())
+	if !ok {
+		return
+	}
+	var request ChangePasswordRequest
+	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+		pkg.WriteError(w, http.StatusBadRequest, "VALIDATION", "Некорректное тело запроса")
+		return
+	}
+	if err := h.authService.ChangePassword(r.Context(), userID, request.CurrentPassword, request.NewPassword); err != nil {
+		if errors.Is(err, auth_service.ErrInvalidCredentials) {
+			pkg.WriteError(w, http.StatusUnauthorized, "INVALID_CREDENTIALS", "Текущий пароль указан неверно")
+			return
+		}
+		pkg.WriteError(w, http.StatusBadRequest, "VALIDATION", err.Error())
+		return
+	}
+	pkg.WriteEmpty(w, http.StatusNoContent)
+}
+
+func newTokenResponse(accessToken, refreshToken string, expiresIn int64) TokenResponse {
 	return TokenResponse{
-		UserID:       userID,
 		AccessToken:  accessToken,
 		RefreshToken: refreshToken,
-		TokenType:    "Bearer",
+		ExpiresIn:    expiresIn,
 	}
 }

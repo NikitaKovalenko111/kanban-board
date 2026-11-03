@@ -51,12 +51,12 @@ func (h *Handler) addComment(w http.ResponseWriter, r *http.Request) {
 	if !handlercommon.Decode(w, r, &req) {
 		return
 	}
-	commentID, err := h.service.AddComment(r.Context(), id, r.PathValue("taskId"), req.Text)
+	comment, err := h.service.AddComment(r.Context(), id, r.PathValue("taskId"), req.Text)
 	if err != nil {
 		handlercommon.WriteError(w, r, err)
 		return
 	}
-	pkg.WriteJSON(w, 201, map[string]string{"id": commentID})
+	pkg.WriteJSON(w, 201, comment)
 }
 
 func (h *Handler) updateComment(w http.ResponseWriter, r *http.Request) {

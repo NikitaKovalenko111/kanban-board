@@ -1,6 +1,7 @@
 package attachment_handler
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -9,68 +10,48 @@ import (
 	"time"
 
 	attachment_service "kanban-board/internal/services/attachment"
+	servicecommon "kanban-board/internal/services/common"
+	project_service "kanban-board/internal/services/project"
 	handlercommon "kanban-board/internal/transport/http/handlers/common"
 	"kanban-board/pkg"
 )
 
+const maxAttachmentSize = 10 << 20
+
 type Handler struct {
-	service *attachment_service.Service
+	service  *attachment_service.Service
+	projects *project_service.Service
 }
 
-func Init(service *attachment_service.Service) *Handler {
-	return &Handler{
-		service: service,
-	}
+func Init(service *attachment_service.Service, projects *project_service.Service) *Handler {
+	return &Handler{service: service, projects: projects}
 }
 
 func (h *Handler) Start(mux *http.ServeMux) {
-	mux.HandleFunc("GET /tasks/{taskId}/attachments", h.listAttachments)
 	mux.HandleFunc("POST /tasks/{taskId}/attachments", h.uploadAttachment)
-	mux.HandleFunc("GET /attachments/{attachmentId}/download", h.downloadAttachment)
-	mux.HandleFunc("DELETE /attachments/{attachmentId}", h.deleteAttachment)
-}
-
-const maxAttachmentSize = 10 << 20
-
-func (h *Handler) listAttachments(w http.ResponseWriter, r *http.Request) {
-	id, ok := handlercommon.UserID(r)
-	if !ok {
-		return
-	}
-	items, err := h.service.ListAttachments(r.Context(), id, r.PathValue("taskId"))
-	if err != nil {
-		handlercommon.WriteError(w, r, err)
-		return
-	}
-	pkg.WriteJSON(w, 200, items)
+	mux.HandleFunc("DELETE /tasks/{taskId}/attachments/{attachmentId}", h.deleteAttachment)
+	mux.HandleFunc("GET /files/{fileId}", h.downloadFile)
 }
 
 func (h *Handler) uploadAttachment(w http.ResponseWriter, r *http.Request) {
-	id, ok := handlercommon.UserID(r)
+	userID, ok := handlercommon.UserID(r)
 	if !ok {
 		return
 	}
 	r.Body = http.MaxBytesReader(w, r.Body, maxAttachmentSize+(1<<20))
-	if err := r.ParseMultipartForm(maxAttachmentSize); err != nil {
-		pkg.WriteError(w, 400, "invalid_attachment", "Attachment is too large or malformed")
-		return
-	}
 	file, header, err := r.FormFile("file")
 	if err != nil {
-		pkg.WriteError(w, 400, "invalid_attachment", "file is required")
+		pkg.WriteError(w, http.StatusBadRequest, "VALIDATION", "Выберите файл")
 		return
 	}
 	defer file.Close()
-	kind := r.FormValue("attachmentType")
-	if kind == "" {
-		kind = r.FormValue("kind")
-	}
+	kind := r.FormValue("kind")
 	if kind != "SOURCE" && kind != "RESULT" {
-		pkg.WriteError(w, 400, "invalid_attachment_type", "attachmentType must be SOURCE or RESULT")
+		pkg.WriteError(w, http.StatusBadRequest, "VALIDATION", "kind должен быть SOURCE или RESULT")
 		return
 	}
-	safeName := filepath.Base(header.Filename)
-	storageKey := filepath.Join("data", "uploads", r.PathValue("taskId"), fmt.Sprintf("%d-%s", time.Now().UnixNano(), safeName))
+	name := filepath.Base(header.Filename)
+	storageKey := filepath.Join("data", "tasks", r.PathValue("taskId"), fmt.Sprintf("%d-%s", time.Now().UnixNano(), name))
 	if err := os.MkdirAll(filepath.Dir(storageKey), 0750); err != nil {
 		handlercommon.WriteError(w, r, err)
 		return
@@ -84,43 +65,62 @@ func (h *Handler) uploadAttachment(w http.ResponseWriter, r *http.Request) {
 	closeErr := target.Close()
 	if copyErr != nil || closeErr != nil || size > maxAttachmentSize {
 		_ = os.Remove(storageKey)
-		pkg.WriteError(w, 400, "invalid_attachment", "Failed to save attachment")
+		pkg.WriteError(w, http.StatusRequestEntityTooLarge, "FILE_TOO_LARGE", "Файл превышает 10 МБ")
 		return
 	}
-	attachmentID, err := h.service.AddAttachment(r.Context(), id, r.PathValue("taskId"), kind, safeName, storageKey, header.Header.Get("Content-Type"), size)
+	attachment, err := h.service.AddAttachment(
+		r.Context(), userID, r.PathValue("taskId"), kind,
+		name, storageKey, header.Header.Get("Content-Type"), size,
+	)
 	if err != nil {
 		_ = os.Remove(storageKey)
 		handlercommon.WriteError(w, r, err)
 		return
 	}
-	pkg.WriteJSON(w, 201, map[string]string{"id": attachmentID})
+	pkg.WriteJSON(w, http.StatusCreated, attachment)
 }
 
-func (h *Handler) downloadAttachment(w http.ResponseWriter, r *http.Request) {
-	id, ok := handlercommon.UserID(r)
+func (h *Handler) downloadFile(w http.ResponseWriter, r *http.Request) {
+	userID, ok := handlercommon.UserID(r)
 	if !ok {
 		return
 	}
-	a, err := h.service.GetAttachment(r.Context(), id, r.PathValue("attachmentId"))
+	fileID := r.PathValue("fileId")
+	attachment, err := h.service.GetAttachment(r.Context(), userID, fileID)
+	if err == nil {
+		serveFile(w, r, attachment.StorageKey, attachment.File.Name, attachment.File.MimeType)
+		return
+	}
+	if !errors.Is(err, servicecommon.ErrNotFound) {
+		handlercommon.WriteError(w, r, err)
+		return
+	}
+	storageKey, name, mimeType, err := h.projects.GetSourceFile(r.Context(), userID, fileID)
 	if err != nil {
 		handlercommon.WriteError(w, r, err)
 		return
 	}
-	w.Header().Set("Content-Type", a.MimeType)
-	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%q", a.FileName))
-	http.ServeFile(w, r, a.StorageKey)
+	serveFile(w, r, storageKey, name, mimeType)
+}
+
+func serveFile(w http.ResponseWriter, r *http.Request, storageKey, name, mimeType string) {
+	w.Header().Set("Content-Type", mimeType)
+	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%q", name))
+	http.ServeFile(w, r, storageKey)
 }
 
 func (h *Handler) deleteAttachment(w http.ResponseWriter, r *http.Request) {
-	id, ok := handlercommon.UserID(r)
+	userID, ok := handlercommon.UserID(r)
 	if !ok {
 		return
 	}
-	a, err := h.service.DeleteAttachment(r.Context(), id, r.PathValue("attachmentId"))
+	attachment, err := h.service.DeleteAttachment(
+		r.Context(), userID, r.PathValue("taskId"), r.PathValue("attachmentId"),
+	)
 	if err != nil {
 		handlercommon.WriteError(w, r, err)
 		return
 	}
-	_ = os.Remove(a.StorageKey)
-	pkg.WriteEmpty(w, 204)
+	_ = os.Remove(attachment.StorageKey)
+	pkg.WriteEmpty(w, http.StatusNoContent)
 }

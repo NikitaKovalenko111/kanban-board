@@ -2,8 +2,10 @@ package pkg
 
 import (
 	"encoding/json"
-	"kanban-board/internal/models"
 	"net/http"
+	"strings"
+
+	"kanban-board/internal/models"
 )
 
 func WriteJSON(w http.ResponseWriter, status int, data any) error {
@@ -17,10 +19,17 @@ func WriteEmpty(w http.ResponseWriter, status int) {
 	w.WriteHeader(status)
 }
 
-func WriteError(w http.ResponseWriter, status int, code string, message string) {
+func WriteError(w http.ResponseWriter, status int, code, message string, fields ...map[string]string) {
+	var validationFields map[string]string
+	if len(fields) > 0 {
+		validationFields = fields[0]
+	}
 	response := models.ErrorResponse{
-		Message: message,
-		Error:   code,
+		Error: models.ErrorDetail{
+			Code:    strings.ToUpper(code),
+			Message: message,
+			Fields:  validationFields,
+		},
 	}
 
 	WriteJSON(w, status, response)

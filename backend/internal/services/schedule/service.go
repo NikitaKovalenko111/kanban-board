@@ -22,7 +22,7 @@ func (s *Service) ListStudentGroups(ctx context.Context) ([]models.StudentGroup,
 	return s.repo.ListStudentGroups(ctx)
 }
 
-func (s *Service) ListLessons(ctx context.Context, group string, from, to time.Time) ([]models.Lesson, error) {
+func (s *Service) ListLessons(ctx context.Context, group string, from, to time.Time) (*models.Schedule, error) {
 	if err := validateLessonQuery(group, from, to); err != nil {
 		return nil, err
 	}

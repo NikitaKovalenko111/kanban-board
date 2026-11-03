@@ -7,7 +7,7 @@ import (
 	servicecommon "kanban-board/internal/services/common"
 )
 
-const maxCommentLength = 10_000
+const maxCommentLength = 2_000
 
 func validateComment(text string) error {
 	if strings.TrimSpace(text) == "" {

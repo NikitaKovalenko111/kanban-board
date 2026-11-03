@@ -2,72 +2,50 @@ package board_service
 
 import (
 	"context"
+	"regexp"
+	"strings"
 
 	"kanban-board/internal/models"
 	servicecommon "kanban-board/internal/services/common"
 	board_repo "kanban-board/internal/storage/repositories/board"
 )
 
-type Board = models.Board
+var colorPattern = regexp.MustCompile(`^#[0-9A-Fa-f]{6}$`)
+
 type Service struct {
 	repo *board_repo.Repository
 }
 
 func Init(repo *board_repo.Repository) *Service {
-	return &Service{
-		repo: repo,
-	}
+	return &Service{repo: repo}
 }
 
-// переписать uid, pid, code, cid в полные названия типа userID (везде)
-func (s *Service) GetBoard(ctx context.Context, uid, pid string) (*Board, error) {
-	if err := servicecommon.ValidateUUID(uid, pid); err != nil {
+func (s *Service) ListColumns(ctx context.Context, userID, projectID string) ([]models.BoardColumn, error) {
+	if err := servicecommon.ValidateUUID(userID, projectID); err != nil {
 		return nil, err
 	}
+	return s.repo.ListColumns(ctx, userID, projectID)
+}
 
-	board, err := s.repo.GetBoard(ctx, uid, pid)
-	if err != nil {
+func (s *Service) ReplaceColumns(ctx context.Context, userID, projectID string, columns []models.BoardColumn) ([]models.BoardColumn, error) {
+	if err := servicecommon.ValidateUUID(userID, projectID); err != nil {
 		return nil, err
 	}
-
-	return board, nil
-}
-
-func (s *Service) CreateColumn(ctx context.Context, uid, pid, code, name string, position int) (string, error) {
-	if err := ValidateColumn(name, position, code, uid, pid); err != nil {
-		return "", err
+	if len(columns) < 4 {
+		return nil, servicecommon.InvalidInput("at least four columns are required")
 	}
-
-	id, err := s.repo.CreateColumn(ctx, uid, pid, code, name, position)
-	if err != nil {
-		return "", err
+	for index := range columns {
+		if columns[index].ID != "" {
+			if err := servicecommon.ValidateUUID(columns[index].ID); err != nil {
+				return nil, err
+			}
+		}
+		if strings.TrimSpace(columns[index].Title) == "" {
+			return nil, servicecommon.InvalidInput("column title is required")
+		}
+		if !colorPattern.MatchString(columns[index].Color) {
+			return nil, servicecommon.InvalidInput("column color must use #RRGGBB format")
+		}
 	}
-
-	return id, nil
-}
-
-func (s *Service) UpdateColumn(ctx context.Context, uid, cid, code, name string, position int) error {
-	if err := ValidateColumn(name, position, code, uid, cid); err != nil {
-		return err
-	}
-
-	err := s.repo.UpdateColumn(ctx, uid, cid, code, name, position)
-	if err != nil {
-		return err
-	}
-
-	return nil
-}
-
-func (s *Service) DeleteColumn(ctx context.Context, uid, cid string) error {
-	if err := servicecommon.ValidateUUID(uid, cid); err != nil {
-		return err
-	}
-
-	err := s.repo.DeleteColumn(ctx, uid, cid)
-	if err != nil {
-		return err
-	}
-
-	return nil
+	return s.repo.ReplaceColumns(ctx, userID, projectID, columns)
 }
