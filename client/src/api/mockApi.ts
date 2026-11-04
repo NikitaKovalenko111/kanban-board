@@ -70,7 +70,7 @@ let tasks: Task[] = taskSeeds.map((task) => {
 
 accounts = accounts.map((account) => ({ ...account, eventPrivacy: (localStorage.getItem(`event-privacy-${account.id}`) as EventPrivacy | null) ?? 'busy' }))
 
-const client = axios.create({ baseURL: import.meta.env.VITE_API_URL || '/mock-api', withCredentials: true })
+const client = axios.create({ baseURL: '/mock-api' })
 client.interceptors.response.use((result) => result, (reason: unknown) => {
   if (axios.isAxiosError(reason)) {
     const body = reason.response?.data as { message?: string } | undefined
@@ -122,7 +122,7 @@ const cloneTask = (task: Task): Task => ({
 const publicUser = ({ password: _password, active: _active, joinedAt: _joinedAt, ...user }: Account): User => user
 const publicMember = ({ password: _password, ...member }: Account): TeamMember => member
 
-if (!import.meta.env.VITE_API_URL) client.defaults.adapter = async (config) => {
+client.defaults.adapter = async (config) => {
   await new Promise((resolve) => setTimeout(resolve, 280))
   if (config.url !== '/auth/login') currentActor()
   if (config.url === '/users/me/password' && config.method === 'post') {

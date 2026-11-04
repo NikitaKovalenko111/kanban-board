@@ -2,6 +2,7 @@ import { configureStore } from '@reduxjs/toolkit'
 import createSagaMiddleware from 'redux-saga'
 import { all } from 'redux-saga/effects'
 import authReducer from './slices/authSlice'
+import backendAuthReducer from './slices/backendAuthSlice'
 import tasksReducer from './slices/tasksSlice'
 import { tasksSaga } from './sagas/tasksSaga'
 import teamReducer from './slices/teamSlice'
@@ -14,7 +15,7 @@ import { scheduleSaga } from './sagas/scheduleSaga'
 
 const sagaMiddleware = createSagaMiddleware()
 export const store = configureStore({
-  reducer: { auth: authReducer, tasks: tasksReducer, team: teamReducer, projects: projectsReducer, schedule: scheduleReducer },
+  reducer: { auth: authReducer, backendAuth: backendAuthReducer, tasks: tasksReducer, team: teamReducer, projects: projectsReducer, schedule: scheduleReducer },
   middleware: (getDefaultMiddleware) => getDefaultMiddleware({ thunk: false }).concat(sagaMiddleware),
 })
 function* rootSaga() { yield all([authSaga(), tasksSaga(), teamSaga(), projectsSaga(), scheduleSaga()]) }

@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from 'react'
-import { mockApi } from '../../api/mockApi'
+import { api } from '../../api'
 
 const ChangePasswordForm = () => {
   const [currentPassword, setCurrentPassword] = useState('')
@@ -18,7 +18,7 @@ const ChangePasswordForm = () => {
     if (currentPassword === newPassword) { setError('Новый пароль должен отличаться от текущего'); return }
     setSaving(true)
     try {
-      await mockApi.changePassword({ currentPassword, newPassword })
+      await api.changePassword({ currentPassword, newPassword })
       setCurrentPassword(''); setNewPassword(''); setConfirmation(''); setSuccess(true)
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : 'Не удалось изменить пароль')

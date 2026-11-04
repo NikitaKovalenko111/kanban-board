@@ -1,7 +1,7 @@
 import Icon from '../../components/Icon/Icon'
 import { useEffect, useState, type FormEvent } from 'react'
 import { Link, useParams } from 'react-router-dom'
-import { mockApi } from '../../api/mockApi'
+import { api } from '../../api'
 import FormModal from '../../components/FormModal/FormModal'
 import UserAvatar from '../../components/UserAvatar/UserAvatar'
 import { useAppDispatch, useAppSelector } from '../../store/hooks'
@@ -29,7 +29,7 @@ const ProjectManagementPage = () => {
   useEffect(() => {
     let cancelled = false
     setMembersLoading(true)
-    mockApi.getTeam().then((result) => { if (!cancelled) { setMembers(result.members); setMemberError('') } })
+    api.getTeam().then((result) => { if (!cancelled) { setMembers(result.members); setMemberError('') } })
       .catch((reason: unknown) => { if (!cancelled) setMemberError(reason instanceof Error ? reason.message : 'Не удалось загрузить участников') })
       .finally(() => { if (!cancelled) setMembersLoading(false) })
     return () => { cancelled = true }

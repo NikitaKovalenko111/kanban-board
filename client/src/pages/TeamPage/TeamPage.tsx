@@ -4,7 +4,7 @@ import { useSearchParams } from 'react-router-dom'
 import FormModal from '../../components/FormModal/FormModal'
 import SearchField from '../../components/SearchField/SearchField'
 import UserAvatar from '../../components/UserAvatar/UserAvatar'
-import { mockApi } from '../../api/mockApi'
+import { api } from '../../api'
 import { useAppDispatch, useAppSelector } from '../../store/hooks'
 import { useProjectSelection } from '../../store/useProjectSelection'
 import { createMemberRequest, loadTeamRequest, toggleMemberRequest } from '../../store/slices/teamSlice'
@@ -56,7 +56,7 @@ const TeamPage = () => {
   const resetPassword = async () => {
     if (!selected) return
     setResetting(true); setActionError('')
-    try { setTemporaryPassword((await mockApi.resetPassword(selected.id)).password) }
+    try { setTemporaryPassword((await api.resetPassword(selected.id)).password) }
     catch (reason) { setActionError(reason instanceof Error ? reason.message : 'Не удалось сбросить пароль') }
     finally { setResetting(false) }
   }

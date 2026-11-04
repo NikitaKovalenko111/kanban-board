@@ -1,23 +1,23 @@
 import type { PayloadAction } from '@reduxjs/toolkit'
 import { call, put, takeLatest } from 'redux-saga/effects'
-import { mockApi } from '../../api/mockApi'
+import { api } from '../../api'
 import type { NewTeamMember, TeamMember, TeamSettings } from '../../types'
 import { createMemberRequest, createMemberSuccess, loadTeamRequest, loadTeamSuccess, teamFailure, toggleMemberRequest, updateMemberSuccess, updateTeamRequest, updateTeamSuccess } from '../slices/teamSlice'
 
 function* loadTeamWorker() {
-  try { const team: { settings: TeamSettings; members: TeamMember[] } = yield call(mockApi.getTeam); yield put(loadTeamSuccess(team)) }
+  try { const team: { settings: TeamSettings; members: TeamMember[] } = yield call(api.getTeam); yield put(loadTeamSuccess(team)) }
   catch (error) { yield put(teamFailure(error instanceof Error ? error.message : 'Не удалось загрузить команду')) }
 }
 function* updateTeamWorker(action: PayloadAction<TeamSettings>) {
-  try { const settings: TeamSettings = yield call(mockApi.updateTeam, action.payload); yield put(updateTeamSuccess(settings)) }
+  try { const settings: TeamSettings = yield call(api.updateTeam, action.payload); yield put(updateTeamSuccess(settings)) }
   catch (error) { yield put(teamFailure(error instanceof Error ? error.message : 'Не удалось сохранить настройки')) }
 }
 function* createMemberWorker(action: PayloadAction<NewTeamMember>) {
-  try { const member: TeamMember = yield call(mockApi.createMember, action.payload); yield put(createMemberSuccess(member)) }
+  try { const member: TeamMember = yield call(api.createMember, action.payload); yield put(createMemberSuccess(member)) }
   catch (error) { yield put(teamFailure(error instanceof Error ? error.message : 'Не удалось создать аккаунт')) }
 }
 function* toggleMemberWorker(action: PayloadAction<{ id: number; active: boolean }>) {
-  try { const member: TeamMember = yield call(mockApi.toggleMember, action.payload.id, action.payload.active); yield put(updateMemberSuccess(member)) }
+  try { const member: TeamMember = yield call(api.toggleMember, action.payload.id, action.payload.active); yield put(updateMemberSuccess(member)) }
   catch (error) { yield put(teamFailure(error instanceof Error ? error.message : 'Не удалось изменить доступ')) }
 }
 export function* teamSaga() {

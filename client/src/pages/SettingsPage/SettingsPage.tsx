@@ -4,7 +4,7 @@ import { useAppDispatch, useAppSelector } from '../../store/hooks'
 import FormModal from '../../components/FormModal/FormModal'
 import { loadEventTypes, saveEventTypes, type EventTypeOption } from '../../utils/eventTypes'
 
-import { mockApi } from '../../api/mockApi'
+import { api } from '../../api'
 import { loginSuccess } from '../../store/slices/authSlice'
 import type { EventPrivacy } from '../../types'
 import ReminderEditor from '../../components/ReminderEditor/ReminderEditor'
@@ -22,7 +22,7 @@ const SettingsPage = () => {
   useEffect(() => { document.documentElement.dataset.theme = theme; localStorage.setItem('theme', theme) }, [theme])
   const savePrivacy = async () => {
     setSaving(true); setMessage('')
-    try { dispatch(loginSuccess(await mockApi.updatePrivacy(privacy))); setMessage('Сохранено') }
+    try { dispatch(loginSuccess(await api.updatePrivacy(privacy))); setMessage('Сохранено') }
     catch (reason) { setMessage(reason instanceof Error ? reason.message : 'Не удалось сохранить') }
     finally { setSaving(false) }
   }

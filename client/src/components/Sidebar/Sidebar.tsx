@@ -6,7 +6,7 @@ import { logout } from '../../store/slices/authSlice'
 import UserAvatar from '../UserAvatar/UserAvatar'
 import NotificationsModal, { type NotificationItem } from './NotificationsModal'
 import { loadTasksRequest } from '../../store/slices/tasksSlice'
-import { mockApi } from '../../api/mockApi'
+import { api } from '../../api'
 import type { ScheduleEvent } from '../../types'
 import { eventCategory } from '../../utils/schedule'
 
@@ -27,7 +27,7 @@ const Sidebar = ({ open, onClose }: Props) => {
   useEffect(() => { dispatch(loadTasksRequest()) }, [dispatch])
   useEffect(() => {
     let cancelled = false
-    void mockApi.getSchedule('all').then((items) => { if (!cancelled) setEvents(items) }).catch(() => {})
+    void api.getSchedule('all').then((items) => { if (!cancelled) setEvents(items) }).catch(() => {})
     return () => { cancelled = true }
   }, [user.id, scheduleItems])
   const notifications: NotificationItem[] = [
