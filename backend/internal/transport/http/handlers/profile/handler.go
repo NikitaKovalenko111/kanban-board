@@ -1,14 +1,13 @@
 package profile_handler
 
 import (
+	"bytes"
 	"fmt"
 	"io"
 	"net/http"
-	"os"
 	"path/filepath"
-	"strings"
-	"time"
 
+	"kanban-board/internal/objectstorage"
 	profile_service "kanban-board/internal/services/profile"
 	handlercommon "kanban-board/internal/transport/http/handlers/common"
 	"kanban-board/pkg"
@@ -18,10 +17,15 @@ const maxPhotoSize = 5 << 20
 
 type Handler struct {
 	service *profile_service.Service
+	objects objectstorage.Storage
 }
 
-func Init(service *profile_service.Service) *Handler {
-	return &Handler{service: service}
+func Init(service *profile_service.Service, objects ...objectstorage.Storage) *Handler {
+	handler := &Handler{service: service}
+	if len(objects) > 0 {
+		handler.objects = objects[0]
+	}
+	return handler
 }
 
 func (h *Handler) Start(mux *http.ServeMux) {
@@ -228,28 +232,20 @@ func (h *Handler) updatePhoto(w http.ResponseWriter, r *http.Request) {
 		pkg.WriteError(w, http.StatusBadRequest, "VALIDATION", "Поддерживаются JPG, PNG и WEBP")
 		return
 	}
-	extension := strings.ToLower(filepath.Ext(header.Filename))
-	storagePath := filepath.Join("data", "users", userID, fmt.Sprintf("%d%s", time.Now().UnixNano(), extension))
-	if err := os.MkdirAll(filepath.Dir(storagePath), 0750); err != nil {
-		handlercommon.WriteError(w, r, err)
-		return
-	}
-	target, err := os.OpenFile(storagePath, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0640)
-	if err != nil {
-		handlercommon.WriteError(w, r, err)
-		return
-	}
-	size, copyErr := io.Copy(target, io.LimitReader(file, maxPhotoSize+1))
-	closeErr := target.Close()
-	if copyErr != nil || closeErr != nil || size > maxPhotoSize {
-		_ = os.Remove(storagePath)
+	storageKey := filepath.ToSlash(filepath.Join("users", userID, "photo"))
+	data, err := io.ReadAll(io.LimitReader(file, maxPhotoSize+1))
+	if err != nil || len(data) > maxPhotoSize {
 		pkg.WriteError(w, http.StatusRequestEntityTooLarge, "FILE_TOO_LARGE", "Файл превышает допустимый размер")
+		return
+	}
+	if err := h.objects.Put(r.Context(), storageKey, bytes.NewReader(data), int64(len(data)), mimeType); err != nil {
+		handlercommon.WriteError(w, r, err)
 		return
 	}
 	imageURL := "/api/v1/users/" + userID + "/photo"
 	profile, err := h.service.SetPhoto(r.Context(), userID, imageURL)
 	if err != nil {
-		_ = os.Remove(storagePath)
+		_ = h.objects.Delete(r.Context(), storageKey)
 		handlercommon.WriteError(w, r, err)
 		return
 	}
@@ -266,6 +262,7 @@ func (h *Handler) deletePhoto(w http.ResponseWriter, r *http.Request) {
 		handlercommon.WriteError(w, r, err)
 		return
 	}
+	_ = h.objects.Delete(r.Context(), filepath.ToSlash(filepath.Join("users", userID, "photo")))
 	pkg.WriteJSON(w, http.StatusOK, profile)
 }
 
@@ -273,13 +270,18 @@ func (h *Handler) getPhoto(w http.ResponseWriter, r *http.Request) {
 	if _, ok := handlercommon.UserID(r); !ok {
 		return
 	}
-	pattern := filepath.Join("data", "users", r.PathValue("userId"), "*")
-	files, _ := filepath.Glob(pattern)
-	if len(files) == 0 {
+	storageKey := filepath.ToSlash(filepath.Join("users", r.PathValue("userId"), "photo"))
+	object, err := h.objects.Get(r.Context(), storageKey)
+	if err != nil {
 		pkg.WriteError(w, http.StatusNotFound, "NOT_FOUND", "Фотография не найдена")
 		return
 	}
-	http.ServeFile(w, r, files[len(files)-1])
+	defer object.Reader.Close()
+	if object.ContentType != "" {
+		w.Header().Set("Content-Type", object.ContentType)
+	}
+	w.Header().Set("Content-Length", fmt.Sprint(object.Size))
+	_, _ = io.Copy(w, object.Reader)
 }
 
 func (h *Handler) getTeam(w http.ResponseWriter, r *http.Request) {

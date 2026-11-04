@@ -1,14 +1,15 @@
 package project_handler
 
 import (
+	"bytes"
 	"fmt"
 	"io"
 	"net/http"
-	"os"
 	"path/filepath"
 	"time"
 
 	"kanban-board/internal/models"
+	"kanban-board/internal/objectstorage"
 	project_service "kanban-board/internal/services/project"
 	handlercommon "kanban-board/internal/transport/http/handlers/common"
 	"kanban-board/pkg"
@@ -18,10 +19,15 @@ const maxSourceFileSize = 10 << 20
 
 type Handler struct {
 	service *project_service.Service
+	objects objectstorage.Storage
 }
 
-func Init(service *project_service.Service) *Handler {
-	return &Handler{service: service}
+func Init(service *project_service.Service, objects ...objectstorage.Storage) *Handler {
+	handler := &Handler{service: service}
+	if len(objects) > 0 {
+		handler.objects = objects[0]
+	}
+	return handler
 }
 
 func (h *Handler) Start(mux *http.ServeMux) {
@@ -132,7 +138,7 @@ func (h *Handler) deleteProject(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	for _, storageKey := range storageKeys {
-		_ = os.Remove(storageKey)
+		_ = h.objects.Delete(r.Context(), storageKey)
 	}
 	pkg.WriteEmpty(w, http.StatusNoContent)
 }
@@ -168,29 +174,22 @@ func (h *Handler) addFileSource(w http.ResponseWriter, r *http.Request) {
 	defer file.Close()
 
 	name := filepath.Base(header.Filename)
-	storageKey := filepath.Join("data", "projects", r.PathValue("projectId"), fmt.Sprintf("%d-%s", time.Now().UnixNano(), name))
-	if err := os.MkdirAll(filepath.Dir(storageKey), 0750); err != nil {
-		handlercommon.WriteError(w, r, err)
-		return
-	}
-	target, err := os.OpenFile(storageKey, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0640)
-	if err != nil {
-		handlercommon.WriteError(w, r, err)
-		return
-	}
-	size, copyErr := io.Copy(target, io.LimitReader(file, maxSourceFileSize+1))
-	closeErr := target.Close()
-	if copyErr != nil || closeErr != nil || size > maxSourceFileSize {
-		_ = os.Remove(storageKey)
+	storageKey := filepath.ToSlash(filepath.Join("projects", r.PathValue("projectId"), fmt.Sprintf("%d-%s", time.Now().UnixNano(), name)))
+	data, err := io.ReadAll(io.LimitReader(file, maxSourceFileSize+1))
+	if err != nil || len(data) > maxSourceFileSize {
 		pkg.WriteError(w, http.StatusRequestEntityTooLarge, "FILE_TOO_LARGE", "Файл превышает 10 МБ")
+		return
+	}
+	if err := h.objects.Put(r.Context(), storageKey, bytes.NewReader(data), int64(len(data)), header.Header.Get("Content-Type")); err != nil {
+		handlercommon.WriteError(w, r, err)
 		return
 	}
 	source, err := h.service.AddFileSource(
 		r.Context(), userID, r.PathValue("projectId"), name,
-		storageKey, header.Header.Get("Content-Type"), size,
+		storageKey, header.Header.Get("Content-Type"), int64(len(data)),
 	)
 	if err != nil {
-		_ = os.Remove(storageKey)
+		_ = h.objects.Delete(r.Context(), storageKey)
 		handlercommon.WriteError(w, r, err)
 		return
 	}
@@ -208,7 +207,7 @@ func (h *Handler) deleteSource(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if storageKey != "" {
-		_ = os.Remove(storageKey)
+		_ = h.objects.Delete(r.Context(), storageKey)
 	}
 	pkg.WriteEmpty(w, http.StatusNoContent)
 }

@@ -1,14 +1,15 @@
 package attachment_handler
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 	"io"
 	"net/http"
-	"os"
 	"path/filepath"
 	"time"
 
+	"kanban-board/internal/objectstorage"
 	attachment_service "kanban-board/internal/services/attachment"
 	servicecommon "kanban-board/internal/services/common"
 	project_service "kanban-board/internal/services/project"
@@ -21,10 +22,15 @@ const maxAttachmentSize = 10 << 20
 type Handler struct {
 	service  *attachment_service.Service
 	projects *project_service.Service
+	objects  objectstorage.Storage
 }
 
-func Init(service *attachment_service.Service, projects *project_service.Service) *Handler {
-	return &Handler{service: service, projects: projects}
+func Init(service *attachment_service.Service, projects *project_service.Service, objects ...objectstorage.Storage) *Handler {
+	handler := &Handler{service: service, projects: projects}
+	if len(objects) > 0 {
+		handler.objects = objects[0]
+	}
+	return handler
 }
 
 func (h *Handler) Start(mux *http.ServeMux) {
@@ -51,29 +57,22 @@ func (h *Handler) uploadAttachment(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	name := filepath.Base(header.Filename)
-	storageKey := filepath.Join("data", "tasks", r.PathValue("taskId"), fmt.Sprintf("%d-%s", time.Now().UnixNano(), name))
-	if err := os.MkdirAll(filepath.Dir(storageKey), 0750); err != nil {
-		handlercommon.WriteError(w, r, err)
-		return
-	}
-	target, err := os.OpenFile(storageKey, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0640)
-	if err != nil {
-		handlercommon.WriteError(w, r, err)
-		return
-	}
-	size, copyErr := io.Copy(target, io.LimitReader(file, maxAttachmentSize+1))
-	closeErr := target.Close()
-	if copyErr != nil || closeErr != nil || size > maxAttachmentSize {
-		_ = os.Remove(storageKey)
+	storageKey := filepath.ToSlash(filepath.Join("tasks", r.PathValue("taskId"), fmt.Sprintf("%d-%s", time.Now().UnixNano(), name)))
+	data, err := io.ReadAll(io.LimitReader(file, maxAttachmentSize+1))
+	if err != nil || len(data) > maxAttachmentSize {
 		pkg.WriteError(w, http.StatusRequestEntityTooLarge, "FILE_TOO_LARGE", "Файл превышает 10 МБ")
+		return
+	}
+	if err := h.objects.Put(r.Context(), storageKey, bytes.NewReader(data), int64(len(data)), header.Header.Get("Content-Type")); err != nil {
+		handlercommon.WriteError(w, r, err)
 		return
 	}
 	attachment, err := h.service.AddAttachment(
 		r.Context(), userID, r.PathValue("taskId"), kind,
-		name, storageKey, header.Header.Get("Content-Type"), size,
+		name, storageKey, header.Header.Get("Content-Type"), int64(len(data)),
 	)
 	if err != nil {
-		_ = os.Remove(storageKey)
+		_ = h.objects.Delete(r.Context(), storageKey)
 		handlercommon.WriteError(w, r, err)
 		return
 	}
@@ -88,7 +87,7 @@ func (h *Handler) downloadFile(w http.ResponseWriter, r *http.Request) {
 	fileID := r.PathValue("fileId")
 	attachment, err := h.service.GetAttachment(r.Context(), userID, fileID)
 	if err == nil {
-		serveFile(w, r, attachment.StorageKey, attachment.File.Name, attachment.File.MimeType)
+		h.serveFile(w, r, attachment.StorageKey, attachment.File.Name, attachment.File.MimeType)
 		return
 	}
 	if !errors.Is(err, servicecommon.ErrNotFound) {
@@ -100,13 +99,20 @@ func (h *Handler) downloadFile(w http.ResponseWriter, r *http.Request) {
 		handlercommon.WriteError(w, r, err)
 		return
 	}
-	serveFile(w, r, storageKey, name, mimeType)
+	h.serveFile(w, r, storageKey, name, mimeType)
 }
 
-func serveFile(w http.ResponseWriter, r *http.Request, storageKey, name, mimeType string) {
+func (h *Handler) serveFile(w http.ResponseWriter, r *http.Request, storageKey, name, mimeType string) {
+	object, err := h.objects.Get(r.Context(), storageKey)
+	if err != nil {
+		handlercommon.WriteError(w, r, servicecommon.ErrNotFound)
+		return
+	}
+	defer object.Reader.Close()
 	w.Header().Set("Content-Type", mimeType)
 	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%q", name))
-	http.ServeFile(w, r, storageKey)
+	w.Header().Set("Content-Length", fmt.Sprint(object.Size))
+	_, _ = io.Copy(w, object.Reader)
 }
 
 func (h *Handler) deleteAttachment(w http.ResponseWriter, r *http.Request) {
@@ -121,6 +127,6 @@ func (h *Handler) deleteAttachment(w http.ResponseWriter, r *http.Request) {
 		handlercommon.WriteError(w, r, err)
 		return
 	}
-	_ = os.Remove(attachment.StorageKey)
+	_ = h.objects.Delete(r.Context(), attachment.StorageKey)
 	pkg.WriteEmpty(w, http.StatusNoContent)
 }

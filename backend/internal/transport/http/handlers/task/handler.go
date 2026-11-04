@@ -3,9 +3,9 @@ package task_handler
 import (
 	"context"
 	"net/http"
-	"os"
 	"time"
 
+	"kanban-board/internal/objectstorage"
 	task_service "kanban-board/internal/services/task"
 	handlercommon "kanban-board/internal/transport/http/handlers/common"
 	"kanban-board/pkg"
@@ -13,10 +13,15 @@ import (
 
 type Handler struct {
 	service *task_service.Service
+	objects objectstorage.Storage
 }
 
-func Init(service *task_service.Service) *Handler {
-	return &Handler{service: service}
+func Init(service *task_service.Service, objects ...objectstorage.Storage) *Handler {
+	handler := &Handler{service: service}
+	if len(objects) > 0 {
+		handler.objects = objects[0]
+	}
+	return handler
 }
 
 func (h *Handler) Start(mux *http.ServeMux) {
@@ -135,7 +140,7 @@ func (h *Handler) deleteTask(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	for _, storageKey := range storageKeys {
-		_ = os.Remove(storageKey)
+		_ = h.objects.Delete(r.Context(), storageKey)
 	}
 	pkg.WriteEmpty(w, http.StatusNoContent)
 }

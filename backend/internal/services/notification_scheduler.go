@@ -24,6 +24,14 @@ func (s *Services) RunNotificationScheduler(
 		if created > 0 {
 			logger.Info("EVENT NOTIFICATIONS CREATED", slog.Int64("notifications", created))
 		}
+		sent, err := s.Notification.DispatchPush(operationContext)
+		if err != nil {
+			logger.Error("PUSH DISPATCH FAILED", slog.Any("error", err))
+			return
+		}
+		if sent > 0 {
+			logger.Info("PUSH NOTIFICATIONS SENT", slog.Int("notifications", sent))
+		}
 	}
 
 	run()

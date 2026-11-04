@@ -2,6 +2,7 @@ package services
 
 import (
 	"kanban-board/internal/config"
+	"kanban-board/internal/push"
 	attachment_service "kanban-board/internal/services/attachment"
 	auth_service "kanban-board/internal/services/auth"
 	board_service "kanban-board/internal/services/board"
@@ -39,10 +40,14 @@ type Services struct {
 	Notification *notification_service.Service
 }
 
-func Init(appStorage *storage.Storage, jwtConfig config.JWT) *Services {
+func Init(appStorage *storage.Storage, jwtConfig config.JWT, pushSenders ...push.Sender) *Services {
 	userRepo := users_repo.Init(appStorage.Db)
 	sessionRepo := session_repo.Init(appStorage.Db)
 
+	var pushSender push.Sender
+	if len(pushSenders) > 0 {
+		pushSender = pushSenders[0]
+	}
 	return &Services{
 		Auth:         auth_service.Init(sessionRepo, userRepo, jwtConfig),
 		Profile:      profile_service.Init(profile_repo.Init(appStorage.Db)),
@@ -53,6 +58,6 @@ func Init(appStorage *storage.Storage, jwtConfig config.JWT) *Services {
 		Attachment:   attachment_service.Init(attachment_repo.Init(appStorage.Db)),
 		Schedule:     schedule_service.Init(schedule_repo.Init(appStorage.Db)),
 		Event:        event_service.Init(event_repo.Init(appStorage.Db)),
-		Notification: notification_service.Init(notification_repo.Init(appStorage.Db)),
+		Notification: notification_service.Init(notification_repo.Init(appStorage.Db), pushSender),
 	}
 }

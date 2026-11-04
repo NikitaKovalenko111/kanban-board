@@ -219,8 +219,11 @@ const (
 			text VARCHAR NOT NULL,
 			task_id UUID REFERENCES tasks (task_id) ON DELETE CASCADE,
 			event_id UUID REFERENCES events (event_id) ON DELETE CASCADE,
+			reminder_key VARCHAR,
+			lesson_key VARCHAR,
 			created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
-			read_at TIMESTAMPTZ
+			read_at TIMESTAMPTZ,
+			push_sent_at TIMESTAMPTZ
 		);`
 	PUSH_TOKENS_TABLE = `
 		CREATE TABLE IF NOT EXISTS push_tokens (
@@ -361,6 +364,10 @@ const SCHEMA_MIGRATION = `
 	ALTER TABLE tasks ALTER COLUMN priority SET DEFAULT 'NORMAL';
 	ALTER TABLE tasks ADD CONSTRAINT tasks_priority_check CHECK (priority IN ('LOW', 'NORMAL', 'HIGH'));
 	ALTER TABLE comments ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ;
+	ALTER TABLE notifications ADD COLUMN IF NOT EXISTS push_sent_at TIMESTAMPTZ;
+	ALTER TABLE notifications ADD COLUMN IF NOT EXISTS reminder_key VARCHAR;
+	ALTER TABLE notifications ADD COLUMN IF NOT EXISTS lesson_key VARCHAR;
+	DROP INDEX IF EXISTS notifications_user_event_uidx;
 	ALTER TABLE attachments ADD COLUMN IF NOT EXISTS attachment_type VARCHAR NOT NULL DEFAULT 'SOURCE';
 	ALTER TABLE events DROP CONSTRAINT IF EXISTS events_visibility_check;
 	ALTER TABLE events DROP CONSTRAINT IF EXISTS events_check;
@@ -416,6 +423,7 @@ const (
 	PROJECT_SOURCES_PROJECT_INDEX             = `CREATE INDEX IF NOT EXISTS project_sources_project_id_idx ON project_sources (project_id, added_at);`
 	NOTIFICATIONS_USER_INDEX                  = `CREATE INDEX IF NOT EXISTS notifications_user_created_at_idx ON notifications (user_id, created_at DESC);`
 	NOTIFICATIONS_UNREAD_INDEX                = `CREATE INDEX IF NOT EXISTS notifications_user_unread_idx ON notifications (user_id) WHERE read_at IS NULL;`
-	NOTIFICATIONS_EVENT_UNIQUE_INDEX          = `CREATE UNIQUE INDEX IF NOT EXISTS notifications_user_event_uidx ON notifications (user_id, event_id) WHERE event_id IS NOT NULL AND kind = 'EVENT';`
+	NOTIFICATIONS_EVENT_UNIQUE_INDEX          = `CREATE UNIQUE INDEX IF NOT EXISTS notifications_user_event_uidx ON notifications (user_id, event_id, reminder_key) WHERE event_id IS NOT NULL AND kind = 'EVENT' AND reminder_key IS NOT NULL;`
+	NOTIFICATIONS_LESSON_UNIQUE_INDEX         = `CREATE UNIQUE INDEX IF NOT EXISTS notifications_user_lesson_uidx ON notifications (user_id, lesson_key, reminder_key) WHERE lesson_key IS NOT NULL AND kind = 'EVENT';`
 	USER_REMINDERS_USER_INDEX                 = `CREATE INDEX IF NOT EXISTS user_reminders_user_id_idx ON user_reminders (user_id);`
 )

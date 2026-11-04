@@ -7,6 +7,54 @@ import (
 	"time"
 )
 
+type SyncLesson struct {
+	ExternalID, Title, Room, Teacher, Kind string
+	StartsAt, EndsAt                       time.Time
+}
+
+func (r *Repository) ListGroupCodes(ctx context.Context) ([]string, error) {
+	rows, err := r.db.QueryContext(ctx, `SELECT group_code FROM student_groups ORDER BY group_code`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := make([]string, 0)
+	for rows.Next() {
+		var value string
+		if err := rows.Scan(&value); err != nil {
+			return nil, err
+		}
+		items = append(items, value)
+	}
+	return items, rows.Err()
+}
+
+func (r *Repository) ReplaceLessons(ctx context.Context, group string, lessons []SyncLesson) error {
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	var groupID string
+	if err := tx.QueryRowContext(ctx, `SELECT student_group_id FROM student_groups WHERE group_code = $1`, group).Scan(&groupID); err != nil {
+		return err
+	}
+	if _, err := tx.ExecContext(ctx, `DELETE FROM lessons WHERE student_group_id = $1 AND starts_at >= CURRENT_DATE - INTERVAL '30 days'`, groupID); err != nil {
+		return err
+	}
+	for _, lesson := range lessons {
+		if _, err := tx.ExecContext(ctx, `INSERT INTO lessons (lesson_id, student_group_id, external_id, title, room, teacher, lesson_kind, starts_at, ends_at, source_status, source_updated_at) VALUES (gen_random_uuid(), $1,$2,$3,NULLIF($4,''),NULLIF($5,''),$6,$7,$8,'ACTUAL',CURRENT_TIMESTAMP)`, groupID, lesson.ExternalID, lesson.Title, lesson.Room, lesson.Teacher, lesson.Kind, lesson.StartsAt, lesson.EndsAt); err != nil {
+			return err
+		}
+	}
+	return tx.Commit()
+}
+
+func (r *Repository) MarkGroupCached(ctx context.Context, group string) error {
+	_, err := r.db.ExecContext(ctx, `UPDATE lessons SET source_status = 'CACHED' WHERE student_group_id = (SELECT student_group_id FROM student_groups WHERE group_code = $1)`, group)
+	return err
+}
+
 type Repository struct {
 	db *sql.DB
 }

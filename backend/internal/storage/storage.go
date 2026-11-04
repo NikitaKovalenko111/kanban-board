@@ -31,17 +31,9 @@ func Connect(cfg config.Postgres) (*Storage, error) {
 	appStorage := &Storage{
 		Db: db,
 	}
-	if err := appStorage.CreateTables(); err != nil {
+	if err := appStorage.Migrate(); err != nil {
 		db.Close()
-		return nil, fmt.Errorf("initialize tables: %w", err)
-	}
-	if err := appStorage.ApplySchemaMigration(); err != nil {
-		db.Close()
-		return nil, fmt.Errorf("migrate tables: %w", err)
-	}
-	if err := appStorage.CreateIndexes(); err != nil {
-		db.Close()
-		return nil, fmt.Errorf("initialize indexes: %w", err)
+		return nil, fmt.Errorf("migrate database: %w", err)
 	}
 	return appStorage, nil
 }
@@ -116,6 +108,7 @@ func (s *Storage) CreateIndexes() error {
 		{name: "notifications_user_created_at_idx", query: models.NOTIFICATIONS_USER_INDEX},
 		{name: "notifications_user_unread_idx", query: models.NOTIFICATIONS_UNREAD_INDEX},
 		{name: "notifications_user_event_uidx", query: models.NOTIFICATIONS_EVENT_UNIQUE_INDEX},
+		{name: "notifications_user_lesson_uidx", query: models.NOTIFICATIONS_LESSON_UNIQUE_INDEX},
 		{name: "user_reminders_user_id_idx", query: models.USER_REMINDERS_USER_INDEX},
 	}
 	return s.runStatements("create index", indexes)
