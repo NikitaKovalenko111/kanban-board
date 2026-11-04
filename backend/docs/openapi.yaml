@@ -781,6 +781,39 @@ paths:
           content:
             application/json:
               schema: {type: array, items: {$ref: '#/components/schemas/Notification'}}
+              example:
+                - id: 550e8400-e29b-41d4-a716-446655440000
+                  kind: COMMENT
+                  title: Новый комментарий
+                  text: Проверь результат задачи
+                  at: '2026-11-04T18:45:00+05:00'
+                  read: false
+                  taskId: 7db10a98-9b1f-47db-8092-e7a98248a37c
+                  eventId: null
+                - id: 650e8400-e29b-41d4-a716-446655440001
+                  kind: STATUS
+                  title: Статус задачи изменён
+                  text: Задача взята в работу
+                  at: '2026-11-04T18:40:00+05:00'
+                  read: false
+                  taskId: 8db10a98-9b1f-47db-8092-e7a98248a37d
+                  eventId: null
+                - id: 750e8400-e29b-41d4-a716-446655440002
+                  kind: RETURNED
+                  title: Задача возвращена на доработку
+                  text: Задача возвращена на доработку
+                  at: '2026-11-04T18:35:00+05:00'
+                  read: true
+                  taskId: 9db10a98-9b1f-47db-8092-e7a98248a37e
+                  eventId: null
+                - id: 850e8400-e29b-41d4-a716-446655440003
+                  kind: EVENT
+                  title: Защита проекта
+                  text: Событие начнётся через 15 мин.
+                  at: '2026-11-04T18:30:00+05:00'
+                  read: false
+                  taskId: null
+                  eventId: adb10a98-9b1f-47db-8092-e7a98248a37f
   /api/v1/notifications/stream:
     get:
       tags: [Notifications]
@@ -801,7 +834,52 @@ paths:
             text/event-stream:
               schema:
                 type: string
-                example: "id: 550e8400-e29b-41d4-a716-446655440000\nevent: notification\ndata: {\"id\":\"550e8400-e29b-41d4-a716-446655440000\"}\n\n"
+              examples:
+                commentNotification:
+                  summary: Полное уведомление о комментарии
+                  value: |
+                    id: 550e8400-e29b-41d4-a716-446655440000
+                    event: notification
+                    data: {"id":"550e8400-e29b-41d4-a716-446655440000","kind":"COMMENT","title":"Новый комментарий","text":"Проверь результат задачи","at":"2026-11-04T18:45:00+05:00","read":false,"taskId":"7db10a98-9b1f-47db-8092-e7a98248a37c","eventId":null}
+
+                statusNotification:
+                  summary: Полное уведомление об изменении задачи
+                  value: |
+                    id: 650e8400-e29b-41d4-a716-446655440001
+                    event: notification
+                    data: {"id":"650e8400-e29b-41d4-a716-446655440001","kind":"STATUS","title":"Статус задачи изменён","text":"Задача взята в работу","at":"2026-11-04T18:40:00+05:00","read":false,"taskId":"8db10a98-9b1f-47db-8092-e7a98248a37d","eventId":null}
+
+                returnedNotification:
+                  summary: Полное уведомление о возврате задачи
+                  value: |
+                    id: 750e8400-e29b-41d4-a716-446655440002
+                    event: notification
+                    data: {"id":"750e8400-e29b-41d4-a716-446655440002","kind":"RETURNED","title":"Задача возвращена на доработку","text":"Задача возвращена на доработку","at":"2026-11-04T18:35:00+05:00","read":true,"taskId":"9db10a98-9b1f-47db-8092-e7a98248a37e","eventId":null}
+
+                eventNotification:
+                  summary: Полное уведомление о календарном событии
+                  value: |
+                    id: 850e8400-e29b-41d4-a716-446655440003
+                    event: notification
+                    data: {"id":"850e8400-e29b-41d4-a716-446655440003","kind":"EVENT","title":"Защита проекта","text":"Событие начнётся через 15 мин.","at":"2026-11-04T18:30:00+05:00","read":false,"taskId":null,"eventId":"adb10a98-9b1f-47db-8092-e7a98248a37f"}
+
+                ready:
+                  summary: Соединение установлено
+                  value: |
+                    event: ready
+                    data: {"status":"connected"}
+
+                refresh:
+                  summary: Список или прочитанность изменились
+                  value: |
+                    event: refresh
+                    data: {"reason":"notifications_changed"}
+
+                heartbeat:
+                  summary: Heartbeat для удержания соединения
+                  value: |
+                    : keep-alive
+
   /api/v1/notifications/read-all:
     post:
       tags: [Notifications]
@@ -1186,3 +1264,12 @@ components:
         read: {type: boolean}
         taskId: {type: string, format: uuid, nullable: true}
         eventId: {type: string, format: uuid, nullable: true}
+      example:
+        id: 550e8400-e29b-41d4-a716-446655440000
+        kind: COMMENT
+        title: Новый комментарий
+        text: Проверь результат задачи
+        at: '2026-11-04T18:45:00+05:00'
+        read: false
+        taskId: 7db10a98-9b1f-47db-8092-e7a98248a37c
+        eventId: null

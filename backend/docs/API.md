@@ -187,6 +187,110 @@ Refresh-токен при обновлении ротируется: стары�
 
 `GET /notifications/stream` требует обычный `Authorization: Bearer <accessToken>` и отвечает с `Content-Type: text/event-stream`. Событие `notification` содержит объект уведомления, `refresh` сообщает об изменении списка или прочитанности, `ready` подтверждает подключение. Поле SSE `id` равно идентификатору уведомления; при переподключении клиент передаёт его в `Last-Event-ID`. Для браузера нужен `fetch`/SSE-клиент с поддержкой заголовка `Authorization`, поскольку стандартный `EventSource` не позволяет задать этот заголовок.
 
+Полный ответ `GET /notifications?limit=100`:
+
+```json
+[
+  {
+    "id": "550e8400-e29b-41d4-a716-446655440000",
+    "kind": "COMMENT",
+    "title": "Новый комментарий",
+    "text": "Проверь результат задачи",
+    "at": "2026-11-04T18:45:00+05:00",
+    "read": false,
+    "taskId": "7db10a98-9b1f-47db-8092-e7a98248a37c",
+    "eventId": null
+  },
+  {
+    "id": "650e8400-e29b-41d4-a716-446655440001",
+    "kind": "STATUS",
+    "title": "Статус задачи изменён",
+    "text": "Задача взята в работу",
+    "at": "2026-11-04T18:40:00+05:00",
+    "read": false,
+    "taskId": "8db10a98-9b1f-47db-8092-e7a98248a37d",
+    "eventId": null
+  },
+  {
+    "id": "750e8400-e29b-41d4-a716-446655440002",
+    "kind": "RETURNED",
+    "title": "Задача возвращена на доработку",
+    "text": "Задача возвращена на доработку",
+    "at": "2026-11-04T18:35:00+05:00",
+    "read": true,
+    "taskId": "9db10a98-9b1f-47db-8092-e7a98248a37e",
+    "eventId": null
+  },
+  {
+    "id": "850e8400-e29b-41d4-a716-446655440003",
+    "kind": "EVENT",
+    "title": "Защита проекта",
+    "text": "Событие начнётся через 15 мин.",
+    "at": "2026-11-04T18:30:00+05:00",
+    "read": false,
+    "taskId": null,
+    "eventId": "adb10a98-9b1f-47db-8092-e7a98248a37f"
+  }
+]
+```
+
+Полное начало SSE-соединения:
+
+```http
+GET /api/v1/notifications/stream HTTP/1.1
+Authorization: Bearer <accessToken>
+Accept: text/event-stream
+```
+
+После подключения сервер сначала может отправить последние уведомления, а затем подтверждение:
+
+```text
+id: 550e8400-e29b-41d4-a716-446655440000
+event: notification
+data: {"id":"550e8400-e29b-41d4-a716-446655440000","kind":"COMMENT","title":"Новый комментарий","text":"Проверь результат задачи","at":"2026-11-04T18:45:00+05:00","read":false,"taskId":"7db10a98-9b1f-47db-8092-e7a98248a37c","eventId":null}
+
+event: ready
+data: {"status":"connected"}
+
+```
+
+Полное SSE-уведомление о календарном событии:
+
+```text
+id: 850e8400-e29b-41d4-a716-446655440003
+event: notification
+data: {"id":"850e8400-e29b-41d4-a716-446655440003","kind":"EVENT","title":"Защита проекта","text":"Событие начнётся через 15 мин.","at":"2026-11-04T18:30:00+05:00","read":false,"taskId":null,"eventId":"adb10a98-9b1f-47db-8092-e7a98248a37f"}
+
+```
+
+Сам объект календарного события в SSE не вкладывается. Клиент получает его актуальное состояние с проверкой приватности через `GET /events/{eventId}`.
+
+После изменения списка или прочитанности сервер отправляет:
+
+```text
+event: refresh
+data: {"reason":"notifications_changed"}
+
+```
+
+Клиент после `refresh` повторяет `GET /notifications?limit=100`. Heartbeat, не содержащий данных приложения, выглядит так:
+
+```text
+: keep-alive
+
+```
+
+При восстановлении соединения клиент передаёт ID последнего обработанного уведомления:
+
+```http
+GET /api/v1/notifications/stream HTTP/1.1
+Authorization: Bearer <accessToken>
+Accept: text/event-stream
+Last-Event-ID: 550e8400-e29b-41d4-a716-446655440000
+```
+
+Backend отправит все более новые уведомления. После истечения access-токена соединение закрывается: клиент обновляет пару токенов и подключается заново.
+
 ## Системный маршрут
 
 ```http
