@@ -1,4 +1,4 @@
-@import './mixins';
+@use './mixins' as *;
 
 body {
     font-family: var(--font-family);
@@ -6,6 +6,15 @@ body {
     color: var(--color-text);
     background: var(--color-bg);
 }
+
+.app-shell { min-height: 100vh; padding-left: 252px; }
+@media (max-width: 1024px) { .app-shell { padding-left: 0; } }
+
+/* Минимальный читаемый кегль для служебного текста интерфейса. */
+.app-shell :where(button, input, select, textarea, label, small, time, em) { font-size: 12px !important; }
+.form-modal :where(button, input, select, textarea, label, small, p) { font-size: 12px !important; }
+.app-shell p { font-size: max(12px, .8rem) !important; }
+.app-shell :where(.eyebrow, .task__meta, .task__project, .task__deadline, .task__revision, .status-badge, .role-badge, .page-heading__count, .project-card__active, .project-card__stats, .text-button, .history-event__heading strong, .task-comments strong) { font-size: 12px !important; }
 
 a,
 button,
@@ -40,7 +49,8 @@ button { color: inherit; }
     width: 40px; height: 40px; border: 1px solid var(--color-border); border-radius: 12px;
     background: var(--color-surface); cursor: pointer; font-size: 22px;
     transition: background-color .2s ease, border-color .2s ease, transform .2s ease;
-    &:hover { background: #f0f2f8; transform: rotate(3deg); }
+    color: var(--color-text);
+    &:hover, &:focus-visible { color: var(--color-text); background: var(--color-surface-accent); border-color: var(--color-primary); }
     &:active { transform: scale(.94); }
 }
 
@@ -51,7 +61,7 @@ button { color: inherit; }
     &:hover { background: var(--color-primary-dark); transform: translateY(-1px); box-shadow: 0 10px 24px rgba(101, 118, 223, .24); }
     &:active { transform: translateY(0) scale(.98); }
     &:disabled { opacity: .5; cursor: not-allowed; transform: none; }
-    &--secondary { color: var(--color-text); background: #eef0f5; box-shadow: none; &:hover { background: #e3e6ed; } }
+    &--secondary { color: var(--color-text); background: var(--color-surface-soft); box-shadow: none; &:hover { background: #e3e6ed; } }
     &--danger { background: #fff0f1; color: var(--color-danger); box-shadow: none; &:hover { background: #ffe5e7; } }
 }
 
@@ -62,7 +72,7 @@ button { color: inherit; }
     &--large { width: 52px; height: 52px; font-size: 15px; }
     &--xl { width: 92px; height: 92px; font-size: 24px; }
 }
-.eyebrow { color: var(--color-muted); font-size: 11px; font-weight: 750; letter-spacing: .08em; text-transform: uppercase; }
+.eyebrow { color: var(--color-muted); font-size: 12px; font-weight: 750; letter-spacing: .08em; text-transform: uppercase; }
 .muted { color: var(--color-muted); }
 
 @keyframes page-enter {

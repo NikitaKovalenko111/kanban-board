@@ -1,12 +1,15 @@
+import Icon from '../../components/Icon/Icon'
 import { useRef, useState, type ChangeEvent } from 'react'
 import UserAvatar from '../../components/UserAvatar/UserAvatar'
 import { useAppDispatch, useAppSelector } from '../../store/hooks'
+import { isAssignedTo } from '../../utils/taskPermissions'
 import { updateAvatar } from '../../store/slices/authSlice'
 
 const ProfilePage = () => {
   const dispatch = useAppDispatch()
   const user = useAppSelector((state) => state.auth.user)!
   const tasks = useAppSelector((state) => state.tasks.items)
+  const projects = useAppSelector((state) => state.projects.items)
   const inputRef = useRef<HTMLInputElement>(null)
   const [avatarError, setAvatarError] = useState('')
 
@@ -36,6 +39,7 @@ const ProfilePage = () => {
     reader.readAsDataURL(file)
   }
 
-  return <main className="profile-page"><div className="container"><div className="profile-page__heading"><span className="eyebrow">Личный кабинет</span><h1>Мой профиль</h1></div><section className="profile-card"><div className="profile-card__hero"><div className="avatar-editor"><UserAvatar user={user} size="xl" /><button type="button" onClick={() => inputRef.current?.click()} aria-label="Изменить аватар">✎</button><input ref={inputRef} type="file" accept="image/png,image/jpeg,image/webp" onChange={changeAvatar} /></div><div className="profile-card__identity"><h2>{user.name}</h2><p>{user.position}</p><span className="role-badge">{user.role === 'lead' ? 'Капитан команды' : 'Участник команды'}</span><div className="avatar-actions"><button type="button" onClick={() => inputRef.current?.click()}>Изменить фото</button>{user.avatarUrl && <button type="button" className="is-danger" onClick={() => dispatch(updateAvatar(undefined))}>Удалить</button>}</div>{avatarError && <small className="avatar-error">{avatarError}</small>}</div></div><div className="profile-card__info"><label>Логин<strong>@{user.login}</strong></label><label>Команда<strong>Веб-продукт</strong></label><label>Роль<strong>{user.role === 'lead' ? 'Тимлид' : 'Исполнитель'}</strong></label></div></section><section className="profile-stats"><div><span>{tasks.filter((task) => task.taskStatus === 'working').length}</span><p>В работе</p></div><div><span>{tasks.filter((task) => task.taskStatus === 'done').length}</span><p>Завершено</p></div><div><span>{tasks.length}</span><p>Всего задач</p></div></section></div></main>
+  const ownTasks = tasks.filter((task) => isAssignedTo(task, user))
+  return <main className="profile-page"><div className="container"><div className="profile-page__heading"><h1>Мой профиль</h1></div><section className="profile-card"><div className="profile-card__hero"><div className="avatar-editor"><UserAvatar user={user} size="xl" /><button type="button" onClick={() => inputRef.current?.click()} aria-label="Изменить аватар">✎</button><input ref={inputRef} type="file" accept="image/png,image/jpeg,image/webp" onChange={changeAvatar} /></div><div className="profile-card__identity"><h2>{user.name}</h2><div className="avatar-actions"><button type="button" onClick={() => inputRef.current?.click()}>Изменить фото</button>{user.avatarUrl && <button type="button" className="is-danger" onClick={() => dispatch(updateAvatar(undefined))}><Icon name="trash" />Удалить фото</button>}</div>{avatarError && <small className="avatar-error">{avatarError}</small>}</div></div><div className="profile-card__info"><label>Логин<strong>@{user.login}</strong></label><label>Роль в команде<strong>{user.role === 'lead' ? 'Тимлид команды' : 'Участник'}</strong></label></div></section><section className="project-roles"><div className="panel__heading"><div><h2>Роли в проектах</h2></div></div><div>{projects.map((project) => <article key={project.id}><i style={{ background: project.color }} /><span><strong>{project.name}</strong><small>{user.projectRoles?.[project.id] ?? 'Не участвует'}</small></span></article>)}</div></section><section className="profile-stats"><div><span>{ownTasks.filter((task) => task.taskStatus === 'working').length}</span><p>Мои задачи в работе</p></div><div><span>{ownTasks.filter((task) => task.taskStatus === 'done').length}</span><p>Мои завершённые задачи</p></div><div><span>{ownTasks.length}</span><p>Всего моих задач</p></div></section></div></main>
 }
 export default ProfilePage

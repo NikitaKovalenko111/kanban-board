@@ -3,7 +3,8 @@ import type { LoginCredentials, User } from '../../types'
 
 interface AuthState { user: User | null; loading: boolean; error: string | null }
 const savedUser = localStorage.getItem('mock-session')
-const initialState: AuthState = { user: savedUser ? JSON.parse(savedUser) as User : null, loading: false, error: null }
+const restoredUser = savedUser ? JSON.parse(savedUser) as User : null
+const initialState: AuthState = { user: restoredUser ? { ...restoredUser, projectRoles: restoredUser.projectRoles ?? {} } : null, loading: false, error: null }
 
 const authSlice = createSlice({
   name: 'auth', initialState,
@@ -11,7 +12,7 @@ const authSlice = createSlice({
     loginRequest(state, _action: PayloadAction<LoginCredentials>) { state.loading = true; state.error = null },
     loginSuccess(state, action: PayloadAction<User>) {
       const savedAvatar = localStorage.getItem(`mock-avatar-${action.payload.login}`)
-      state.user = { ...action.payload, avatarUrl: savedAvatar ?? action.payload.avatarUrl }
+      state.user = { ...action.payload, projectRoles: action.payload.projectRoles ?? {}, avatarUrl: savedAvatar ?? action.payload.avatarUrl }
       state.loading = false
       localStorage.setItem('mock-session', JSON.stringify(state.user))
     },
