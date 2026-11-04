@@ -1,38 +1,81 @@
 name: CD
 
 on:
-    workflow_run:
-        workflows:
-            - CI
-        types:
-            - completed
-        branches:
-            - main
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: production-deploy
+  cancel-in-progress: false
 
 jobs:
-    deploy:
-        if: ${{ github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push' }}
+  deploy:
+    if: >-
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'push' &&
+      github.event.workflow_run.head_repository.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      SERVER_HOST: ${{ secrets.SERVER_HOST }}
+      SERVER_USER: ${{ secrets.SERVER_USER }}
+      SERVER_SSH_KEY: ${{ secrets.SERVER_SSH_KEY }}
+      SERVER_KNOWN_HOSTS: ${{ secrets.SERVER_KNOWN_HOSTS }}
+      SERVER_PATH: ${{ vars.SERVER_PATH }}
+      DEPLOY_SHA: ${{ github.event.workflow_run.head_sha }}
+      DEPLOY_REPOSITORY: ${{ github.repository }}
 
-        runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
 
-        steps:
-            - name: Configure SSH
-              run: |
-                  mkdir -p ~/.ssh
+      - name: Validate deployment settings
+        shell: bash
+        run: |
+          set -euo pipefail
+          for name in SERVER_HOST SERVER_USER SERVER_SSH_KEY SERVER_KNOWN_HOSTS SERVER_PATH; do
+            if [[ -z "${!name}" ]]; then
+              echo "::error::Missing deployment setting: $name"
+              exit 1
+            fi
+          done
+          [[ "$SERVER_HOST" =~ ^[a-zA-Z0-9][a-zA-Z0-9.-]*$ ]]
+          [[ "$SERVER_USER" =~ ^[a-zA-Z_][a-zA-Z0-9_-]*$ ]]
+          [[ "$SERVER_PATH" =~ ^/[a-zA-Z0-9_./-]+$ ]]
+          [[ "$DEPLOY_SHA" =~ ^[a-f0-9]{40}$ ]]
+          [[ "$DEPLOY_REPOSITORY" =~ ^[a-zA-Z0-9_.-]+/[a-zA-Z0-9_.-]+$ ]]
 
-                  echo "${{ secrets.SERVER_SSH_KEY }}" > ~/.ssh/id_ed25519
-                  chmod 600 ~/.ssh/id_ed25519
+      - name: Configure SSH
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          mkdir -p ~/.ssh
+          printf '%s\n' "$SERVER_SSH_KEY" > ~/.ssh/kanban_deploy
+          printf '%s\n' "$SERVER_KNOWN_HOSTS" > ~/.ssh/kanban_known_hosts
+          ssh-keygen -y -P '' -f ~/.ssh/kanban_deploy > /dev/null
+          ssh-keygen -F "[$SERVER_HOST]:2222" -f ~/.ssh/kanban_known_hosts > /dev/null
 
-                  echo "${{ secrets.SERVER_KNOWN_HOSTS }}" > ~/.ssh/known_hosts
+      - name: Deploy tested commit and verify health
+        shell: bash
+        run: |
+          set -euo pipefail
+          ssh -p 2222 -i ~/.ssh/kanban_deploy \
+            -o BatchMode=yes -o IdentitiesOnly=yes \
+            -o StrictHostKeyChecking=yes \
+            -o UserKnownHostsFile=~/.ssh/kanban_known_hosts \
+            -o ConnectTimeout=15 -o ServerAliveInterval=15 -o ServerAliveCountMax=3 \
+            "$SERVER_USER@$SERVER_HOST" \
+            "bash -s -- '$DEPLOY_SHA' '$SERVER_PATH' '$DEPLOY_REPOSITORY'" \
+            < scripts/deploy.sh
 
-            - name: Deploy
-              run: |
-                  ssh -p 2222 ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} '
-                    set -e
-
-                    cd /projects/kod_v_sapoge/it-project-showcase
-
-                    git pull --ff-only origin main
-
-                    docker compose up -d --build --remove-orphans
-                  '
+      - name: Remove SSH credentials
+        if: always()
+        shell: bash
+        run: rm -f ~/.ssh/kanban_deploy ~/.ssh/kanban_known_hosts
