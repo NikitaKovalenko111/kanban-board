@@ -1,75 +1,38 @@
 name: CD
 
 on:
-  workflow_run:
-    workflows:
-      - CI
-    types:
-      - completed
-    branches:
-      - main
-
-env:
-  REGISTRY: ghcr.io
+    workflow_run:
+        workflows:
+            - CI
+        types:
+            - completed
+        branches:
+            - main
 
 jobs:
-  build:
-    if: ${{ github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push' }}
+    deploy:
+        if: ${{ github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push' }}
 
-    runs-on: ubuntu-latest
+        runs-on: ubuntu-latest
 
-    permissions:
-      contents: read
-      packages: write
-    
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v7
-        with:
-          ref: ${{ github.event.workflow_run.head_sha }}
+        steps:
+            - name: Configure SSH
+              run: |
+                  mkdir -p ~/.ssh
 
-      - name: Login to GHCR
-        uses: docker/login-action@v3
-        with:
-          registry: ${{ env.REGISTRY }}
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-      
-      - name: Build backend
-        uses: docker/build-push-action@v7
-        with:
-          context: ./backend
-          push: true
-          tags: |
-            ${{ env.REGISTRY }}/${{ github.repository_owner }}/kanban-board-backend:latest
-            ${{ env.REGISTRY }}/${{ github.repository_owner }}/kanban-board-backend:${{ github.event.workflow_run.head_sha }}
-      
-      - name: Build frontend
-        uses: docker/build-push-action@v7
-        with:
-          context: ./client
-          push: true
-          tags: |
-            ${{ env.REGISTRY }}/${{ github.repository_owner }}/kanban-board-frontend:latest
-            ${{ env.REGISTRY }}/${{ github.repository_owner }}/kanban-board-frontend:${{ github.event.workflow_run.head_sha }}
-  deploy:
-    needs: build
-    runs-on: ubuntu-latest
+                  echo "${{ secrets.SERVER_SSH_KEY }}" > ~/.ssh/id_ed25519
+                  chmod 600 ~/.ssh/id_ed25519
 
-    steps:
-      - name: Configure SSH
-        run:  |
-          mkdir -p ~/.ssh
-          echo "${{ secrets.SERVER_SSH_KEY }}" > ~/.ssh/id_ed25519
-          chmod 600 ~/.ssh/id_ed25519
+                  echo "${{ secrets.SERVER_KNOWN_HOSTS }}" > ~/.ssh/known_hosts
 
-          echo "${{ secrets.SERVER_KNOWN_HOSTS }}" > ~/.ssh/known_hosts
-      
-      - name: Deploy
-        run: |
-          ssh -p 2222 ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} '
-          cd /projects/kod_v_sapoge/ &&
-          docker compose pull &&
-          docker compose up -d --remove-orphans &&
-          docker image prune -f
-        '
+            - name: Deploy
+              run: |
+                  ssh -p 2222 ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} '
+                    set -e
+
+                    cd /projects/kod_v_sapoge/it-project-showcase
+
+                    git pull --ff-only origin main
+
+                    docker compose up -d --build --remove-orphans
+                  '
