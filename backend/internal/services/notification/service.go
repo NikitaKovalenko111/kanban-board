@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"sync"
 
 	"kanban-board/internal/models"
 	"kanban-board/internal/push"
@@ -12,16 +13,75 @@ import (
 )
 
 type Service struct {
-	repo *notification_repo.Repository
-	push push.Sender
+	repo        *notification_repo.Repository
+	push        push.Sender
+	subscribers map[string]map[chan struct{}]struct{}
+	mu          sync.Mutex
 }
 
 func Init(repo *notification_repo.Repository, senders ...push.Sender) *Service {
-	service := &Service{repo: repo}
+	service := &Service{
+		repo:        repo,
+		subscribers: make(map[string]map[chan struct{}]struct{}),
+	}
 	if len(senders) > 0 {
 		service.push = senders[0]
 	}
 	return service
+}
+
+func (s *Service) ListAfter(ctx context.Context, userID, notificationID string, limit int) ([]models.Notification, error) {
+	if err := servicecommon.ValidateUUID(userID, notificationID); err != nil {
+		return nil, err
+	}
+	if limit <= 0 || limit > 100 {
+		limit = 100
+	}
+
+	return s.repo.ListAfter(ctx, userID, notificationID, limit)
+}
+
+func (s *Service) Subscribe(userID string) (<-chan struct{}, func(), error) {
+	if err := servicecommon.ValidateUUID(userID); err != nil {
+		return nil, nil, err
+	}
+
+	events := make(chan struct{}, 1)
+	s.mu.Lock()
+	if s.subscribers[userID] == nil {
+		s.subscribers[userID] = make(map[chan struct{}]struct{})
+	}
+	s.subscribers[userID][events] = struct{}{}
+	s.mu.Unlock()
+
+	unsubscribe := func() {
+		s.mu.Lock()
+		delete(s.subscribers[userID], events)
+		if len(s.subscribers[userID]) == 0 {
+			delete(s.subscribers, userID)
+		}
+		s.mu.Unlock()
+	}
+
+	return events, unsubscribe, nil
+}
+
+func (s *Service) Listen(ctx context.Context) error {
+	return s.repo.Listen(ctx, func(userID, _ string) {
+		s.publish(userID)
+	})
+}
+
+func (s *Service) publish(userID string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	for subscriber := range s.subscribers[userID] {
+		select {
+		case subscriber <- struct{}{}:
+		default:
+		}
+	}
 }
 
 func (s *Service) List(ctx context.Context, userID string, limit int) ([]models.Notification, error) {

@@ -54,6 +54,7 @@ func Run(cfg *config.Config) {
 		cfg.TIMEOUT,
 		logger,
 	)
+	go services.RunNotificationListener(cleanupContext, logger)
 	go services.RunScheduleSync(cleanupContext, cfg.ScheduleSync, logger)
 
 	handlers := handlers.Init(services, objects)
@@ -62,7 +63,10 @@ func Run(cfg *config.Config) {
 	transport := transport.Init(handlers, cfg.JWT.AccessSecret, logger, services.Auth.IsUserActive)
 	transport.Start(mux)
 
-	requestHandler := middleware.Logger(logger)(middleware.Timeout(cfg.TIMEOUT)(mux))
+	requestHandler := middleware.Logger(logger)(middleware.TimeoutExcept(
+		cfg.TIMEOUT,
+		"/api/v1/notifications/stream",
+	)(mux))
 	server := &http.Server{
 		Addr:              cfg.HTTP_ADDRESS,
 		Handler:           requestHandler,

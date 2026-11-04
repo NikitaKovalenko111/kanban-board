@@ -781,6 +781,27 @@ paths:
           content:
             application/json:
               schema: {type: array, items: {$ref: '#/components/schemas/Notification'}}
+  /api/v1/notifications/stream:
+    get:
+      tags: [Notifications]
+      summary: Подключиться к SSE-потоку уведомлений
+      description: |
+        Требует Bearer access token. События `notification` содержат объект Notification,
+        `refresh` требуют обновить состояние списка, `ready` подтверждает подключение.
+        При переподключении передайте последний идентификатор через заголовок Last-Event-ID.
+      parameters:
+        - in: header
+          name: Last-Event-ID
+          required: false
+          schema: {type: string, format: uuid}
+      responses:
+        '200':
+          description: Долгоживущее SSE-соединение
+          content:
+            text/event-stream:
+              schema:
+                type: string
+                example: "id: 550e8400-e29b-41d4-a716-446655440000\nevent: notification\ndata: {\"id\":\"550e8400-e29b-41d4-a716-446655440000\"}\n\n"
   /api/v1/notifications/read-all:
     post:
       tags: [Notifications]

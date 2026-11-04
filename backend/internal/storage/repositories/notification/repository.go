@@ -3,8 +3,12 @@ package notification_repo
 import (
 	"context"
 	"database/sql"
+	"fmt"
+	"strings"
 
 	"kanban-board/internal/models"
+
+	"github.com/jackc/pgx/v5/stdlib"
 )
 
 type PendingPush struct {
@@ -46,6 +50,89 @@ func (r *Repository) List(ctx context.Context, userID string, limit int) ([]mode
 		items = append(items, item)
 	}
 	return items, rows.Err()
+}
+
+func (r *Repository) ListAfter(ctx context.Context, userID, notificationID string, limit int) ([]models.Notification, error) {
+	rows, err := r.db.QueryContext(ctx, `
+		WITH cursor AS (
+			SELECT
+				created_at,
+				notification_id
+			FROM notifications
+			WHERE user_id = $1
+				AND notification_id = $2
+		)
+		SELECT
+			n.notification_id,
+			n.kind,
+			n.title,
+			n.text,
+			n.created_at,
+			n.read_at IS NOT NULL,
+			n.task_id,
+			n.event_id
+		FROM notifications n
+		CROSS JOIN cursor c
+		WHERE n.user_id = $1
+			AND (n.created_at, n.notification_id) > (c.created_at, c.notification_id)
+		ORDER BY n.created_at, n.notification_id
+		LIMIT $3
+	`, userID, notificationID, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	items := make([]models.Notification, 0)
+	for rows.Next() {
+		var item models.Notification
+		if err := rows.Scan(
+			&item.ID,
+			&item.Kind,
+			&item.Title,
+			&item.Text,
+			&item.At,
+			&item.Read,
+			&item.TaskID,
+			&item.EventID,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, item)
+	}
+
+	return items, rows.Err()
+}
+
+func (r *Repository) Listen(ctx context.Context, notify func(userID, eventType string)) error {
+	connection, err := r.db.Conn(ctx)
+	if err != nil {
+		return err
+	}
+	defer connection.Close()
+
+	return connection.Raw(func(driverConnection any) error {
+		stdlibConnection, ok := driverConnection.(*stdlib.Conn)
+		if !ok {
+			return fmt.Errorf("notification listener requires pgx stdlib connection")
+		}
+		pgxConnection := stdlibConnection.Conn()
+		if _, err := pgxConnection.Exec(ctx, `LISTEN notification_events`); err != nil {
+			return err
+		}
+
+		for {
+			notification, err := pgxConnection.WaitForNotification(ctx)
+			if err != nil {
+				return err
+			}
+			separator := strings.LastIndexByte(notification.Payload, ':')
+			if separator <= 0 || separator == len(notification.Payload)-1 {
+				continue
+			}
+			notify(notification.Payload[:separator], notification.Payload[separator+1:])
+		}
+	})
 }
 
 func (r *Repository) ReadAll(ctx context.Context, userID string) error {
