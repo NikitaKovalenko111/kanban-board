@@ -2,17 +2,18 @@ import Icon from '../../components/Icon/Icon'
 import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 import FormModal from '../../components/FormModal/FormModal'
 import { useAppDispatch, useAppSelector } from '../../store/hooks'
-import { createScheduleEventRequest, loadScheduleRequest } from '../../store/slices/scheduleSlice'
-import type { EventCategory, ReminderScenario, StudyGroup } from '../../types'
+import { createScheduleEventRequest, loadScheduleRequest, updateEventRemindersRequest } from '../../store/slices/scheduleSlice'
+import type { EventCategory, EventReminders, ScheduleEvent } from '../../types'
 import { loadEventTypes } from '../../utils/eventTypes'
 import SearchField from '../../components/SearchField/SearchField'
 import { useProjectSelection } from '../../store/useProjectSelection'
 import { loadTeamRequest } from '../../store/slices/teamSlice'
 import { eventCategory } from '../../utils/schedule'
 import { useSearchParams } from 'react-router-dom'
+import EventReminderEditor from '../../components/ReminderEditor/EventReminderEditor'
+import { eventReminderMinutes, validateReminderMinutes } from '../../utils/reminders'
 import { useDaySlider } from './useDaySlider'
 
-const reminderLabels: Record<ReminderScenario, string> = { none: 'Без напоминания', 'at-start': 'В момент начала', '15-min': 'За 15 минут', '1-hour': 'За 1 час', '1-day': 'За 1 день' }
 const localDate = (day: Date) => `${day.getFullYear()}-${String(day.getMonth() + 1).padStart(2, '0')}-${String(day.getDate()).padStart(2, '0')}`
 const formatTime = (value: string) => new Date(value).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })
 
@@ -46,8 +47,10 @@ const SchedulePage = () => {
   const [endTime, setEndTime] = useState('')
   const [eventTypes] = useState(loadEventTypes)
   const [type, setType] = useState(eventTypes[0]?.id ?? '')
-  const [group, setGroup] = useState<StudyGroup>('both')
-  const [reminder, setReminder] = useState<ReminderScenario>('15-min')
+  const [reminders, setReminders] = useState<EventReminders>({ reminderMode: 'type', reminderMinutes: eventTypes[0]?.reminderMinutes ?? [] })
+  const [reminderEvent, setReminderEvent] = useState<ScheduleEvent | null>(null)
+  const [reminderError, setReminderError] = useState('')
+  const [reminderSubmitted, setReminderSubmitted] = useState(false)
   const [eventProjectId, setEventProjectId] = useState(activeProjectId === 'all' ? '' : activeProjectId)
   const [location, setLocation] = useState('')
   const slider = useDaySlider(selectedDate, setSelectedDate, `${layout}-${loading}`)
@@ -85,7 +88,7 @@ const SchedulePage = () => {
     const matchesOwner = personal ? event.ownerId === selectedOwnerId : !!owner.projectRoles[event.projectId] || owner.role === 'lead'
     return (activeProjectId === 'all' || event.projectId === activeProjectId)
       && (categoryFilter === 'all' || eventCategory(event) === categoryFilter)
-      && (scope.startsWith('group:') ? !personal && (group === 'both' || event.group === 'both' || event.group === group) : matchesOwner)
+      && (scope.startsWith('group:') ? !personal && (!event.group || group === 'both' || event.group === 'both' || event.group === group) : matchesOwner)
       && `${event.title} ${event.description} ${projectName}`.toLowerCase().includes(query.toLowerCase())
   }).sort((a, b) => a.startsAt.localeCompare(b.startsAt))
 
@@ -95,15 +98,36 @@ const SchedulePage = () => {
     next.setDate(next.getDate() + direction * (visibleMode === 'week' ? 7 : 1))
     setSelectedDate(localDate(next))
   }
+  useEffect(() => {
+    if (reminderSubmitted && !saving && !error) { setReminderEvent(null); setReminderSubmitted(false) }
+  }, [reminderSubmitted, saving, error])
+  const editableReminders = (event: ScheduleEvent) => event.ownerId === user.id || (user.role === 'lead' && eventCategory(event) !== 'personal')
+  const openReminders = (event: ScheduleEvent) => {
+    setReminderEvent(event); setReminderError(''); setReminderSubmitted(false)
+    setReminders({ reminderMode: event.reminderMode ?? 'custom', reminderMinutes: eventReminderMinutes(event, eventTypes) })
+  }
+  const reminderButton = (event: ScheduleEvent) => editableReminders(event) && <button type="button" className="schedule-reminder-button" aria-label={`Напоминания: ${event.title}`} onClick={() => openReminders(event)}>Напоминания</button>
+  const selectedDefaults = eventTypes.find((item) => item.id === (reminderEvent?.type ?? type))?.reminderMinutes ?? []
+  const submitReminders = (event: FormEvent) => {
+    event.preventDefault()
+    if (!reminderEvent) return
+    try {
+      const reminderMinutes = validateReminderMinutes(reminders.reminderMode === 'type' ? selectedDefaults : reminders.reminderMinutes)
+      dispatch(updateEventRemindersRequest({ id: reminderEvent.id, ...reminders, reminderMinutes }))
+      setReminderSubmitted(true)
+    } catch (reason) { setReminderError((reason as Error).message) }
+  }
   const submit = (event: FormEvent) => {
     event.preventDefault()
     const selectedType = eventTypes.find((item) => item.id === type)
     if (!selectedType) return
+    let reminderMinutes: number[]
+    try { reminderMinutes = validateReminderMinutes(reminders.reminderMode === 'type' ? selectedDefaults : reminders.reminderMinutes) } catch (reason) { setReminderError((reason as Error).message); return }
     dispatch(createScheduleEventRequest({
       projectId: eventProjectId, title: title.trim(), description: description.trim(),
       startsAt: `${date}T${time}:00`, endsAt: endTime ? `${date}T${endTime}:00` : undefined,
       type, typeLabel: selectedType.label, typeColor: selectedType.color,
-      group, reminder, category, ownerId: user.id, location: location.trim() || undefined, author: user.name,
+      reminder: 'none', ...reminders, reminderMinutes, category, ownerId: user.id, location: location.trim() || undefined, author: user.name,
     }))
     setSelectedDate(date)
     setTitle(''); setDescription(''); setLocation(''); setEndTime(''); setShowForm(false)
@@ -112,7 +136,7 @@ const SchedulePage = () => {
   return <main className="schedule-page"><div className="container" ref={scheduleRef}>
     <div className="schedule-page__heading">
       <h1>Расписание</h1>
-      {<button className="button" onClick={() => { setDate(selectedDate); setCategory(user.role === 'lead' ? 'team' : 'personal'); setShowForm(true) }}><Icon name="plus" /> Добавить событие</button>}
+      {<button className="button" onClick={() => { setDate(selectedDate); setReminderEvent(null); setReminderError(''); setReminders({ reminderMode: 'type', reminderMinutes: eventTypes.find((item) => item.id === type)?.reminderMinutes ?? [] }); setCategory(user.role === 'lead' ? 'team' : 'personal'); setShowForm(true) }}><Icon name="plus" /> Добавить событие</button>}
     </div>
     <section className="schedule-controls">
       <div className="schedule-period">
@@ -154,7 +178,7 @@ const SchedulePage = () => {
       {visibleDays.map((day) => {
         const dayEvents = filteredEvents.filter((event) => event.startsAt.slice(0, 10) === day)
         return <section className={`${layout === 'rows' ? 'agenda-day' : 'schedule-day'} ${day === selectedDate ? 'is-selected' : ''}`} aria-hidden={slider.mobile && day !== selectedDate ? true : undefined} key={day} id={`schedule-day-${day}`}>
-          {layout === 'rows' ? <div className="agenda-day__date"><strong>{new Date(`${day}T12:00:00`).toLocaleDateString('ru-RU', { day: '2-digit' })}</strong><span>{new Date(`${day}T12:00:00`).toLocaleDateString('ru-RU', slider.mobile ? { month: 'short' } : { month: 'short', weekday: 'long' })}</span></div> : <h2>{new Date(`${day}T12:00:00`).toLocaleDateString('ru-RU', { day: 'numeric', month: 'long' })}</h2>}
+          {layout === 'rows' ? <div className="agenda-day__date"><strong>{new Date(`${day}T12:00:00`).toLocaleDateString('ru-RU', { day: '2-digit' })}</strong><span>{new Date(`${day}T12:00:00`).toLocaleDateString('ru-RU', slider.mobile ? { month: 'short' } : { month: 'short', weekday: 'long' })}</span></div> : <h2>{visibleMode === 'week' && <span>{new Date(`${day}T12:00:00`).toLocaleDateString('ru-RU', { weekday: 'long' })}</span>}<span>{new Date(`${day}T12:00:00`).toLocaleDateString('ru-RU', { day: 'numeric', month: 'long' })}</span></h2>}
           <div className={layout === 'rows' ? 'agenda-day__items' : 'schedule-day__events'}>{dayEvents.map((event) => {
             const eventType = eventTypes.find((item) => item.id === event.type)
             const project = projects.find((item) => item.id === event.projectId)
@@ -163,8 +187,8 @@ const SchedulePage = () => {
               <span><span className="agenda-item__labels">
                 <small style={{ color: eventType?.color ?? event.typeColor }}>{eventType?.label ?? event.typeLabel}</small>
                 <small className="agenda-item__project"><i style={{ background: project?.color }} />{project?.name ?? 'Проект'}</small>
-                {eventCategory(event) !== 'personal' && <small className="agenda-item__group">{event.group === 'both' ? 'Группы 203 и 204' : `Группа ${event.group}`}</small>}
-              </span><strong>{event.title}</strong><p>{event.description}</p></span>
+                {event.group && eventCategory(event) !== 'personal' && <small className="agenda-item__group">{event.group === 'both' ? 'Группы 203 и 204' : `Группа ${event.group}`}</small>}
+              </span><strong>{event.title}</strong><p>{event.description}</p>{reminderButton(event)}</span>
               {event.location && <em>{event.location}</em>}
             </article>
             return <article className="schedule-event" key={event.id}>
@@ -174,7 +198,8 @@ const SchedulePage = () => {
                 <h3>{event.title}</h3><p>{event.description}</p>
                 {event.location && <span>{event.location}</span>}
                 <span className="schedule-event__project"><i style={{ background: project?.color }} />{project?.name ?? 'Проект'}</span>
-                {eventCategory(event) !== 'personal' && <small>{event.group === 'both' ? 'Группы 203 и 204' : `Группа ${event.group}`}</small>}
+                {event.group && eventCategory(event) !== 'personal' && <small>{event.group === 'both' ? 'Группы 203 и 204' : `Группа ${event.group}`}</small>}
+                {reminderButton(event)}
               </div>
             </article>
           })}{!dayEvents.length && <p className={layout === 'rows' ? 'agenda-day__empty' : 'schedule-day__empty'}>Нет событий</p>}</div>
@@ -191,15 +216,16 @@ const SchedulePage = () => {
         <label>Дата<input type="date" value={date} onChange={(event) => setDate(event.target.value)} required /></label>
         <label>Начало<input type="time" value={time} onChange={(event) => setTime(event.target.value)} required /></label>
         <label><span>Окончание <small>(необязательно)</small></span><input type="time" value={endTime} onChange={(event) => setEndTime(event.target.value)} min={time} /></label>
-        <label>Категория<select value={category} onChange={(event) => setCategory(event.target.value as EventCategory)}><option value="personal">Личные</option>{user.role === 'lead' && <><option value="class">Пары</option><option value="team">Командные</option><option value="group">Групповые</option><option value="deadline">Контрольные точки</option></>}</select></label>
+        <label>Категория<select value={category} onChange={(event) => setCategory(event.target.value as EventCategory)}><option value="personal">Личные</option><option value="class">Пары</option><option value="team">Командные</option><option value="group">Групповые</option><option value="deadline">Контрольные точки</option></select></label>
         <label>Тип<select value={type} onChange={(event) => setType(event.target.value)} required>{eventTypes.map((item) => <option value={item.id} key={item.id}>{item.label}</option>)}</select></label>
-        <label>Учебная группа<select value={group} onChange={(event) => setGroup(event.target.value as StudyGroup)}><option value="203">Группа 203</option><option value="204">Группа 204</option><option value="both">Обе группы</option></select></label>
-        <label>Напоминание<select value={reminder} onChange={(event) => setReminder(event.target.value as ReminderScenario)}>{Object.entries(reminderLabels).map(([value, label]) => <option value={value} key={value}>{label}</option>)}</select></label>
         <label>Место<input value={location} onChange={(event) => setLocation(event.target.value)} placeholder="Необязательно" /></label>
       </div>
+      <EventReminderEditor value={reminders} defaults={selectedDefaults} onChange={setReminders} />
+      {reminderError && <p className="error-banner" role="alert">{reminderError}</p>}
       <button className="button" disabled={saving || !eventProjectId || !type}>Добавить</button>
     </form>
-  </FormModal>}</main>
+  </FormModal>}
+  {reminderEvent && <FormModal title="Напоминания события" onClose={() => setReminderEvent(null)}><form className="management-form" onSubmit={submitReminders}><h3>{reminderEvent.title}</h3><EventReminderEditor value={reminders} defaults={selectedDefaults} onChange={setReminders} />{(reminderError || error) && <p className="error-banner" role="alert">{reminderError || error}</p>}<button className="button" disabled={saving}>Сохранить</button></form></FormModal>}</main>
 }
 
 export default SchedulePage

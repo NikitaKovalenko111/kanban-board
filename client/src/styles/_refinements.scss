@@ -17,6 +17,22 @@
 .change-password { margin-top: 18px; }
 .change-password .management-form { max-width: 520px; }
 .password-success { color: var(--color-text); margin: 0; }
+.reminder-editor { display: flex; min-width: 0; flex-direction: column; gap: 12px; margin: 0; padding: 14px; border: 1px solid var(--color-border); border-radius: 12px; }
+.reminder-editor legend { padding-inline: 5px; font-weight: 700; }
+.reminder-editor label.reminder-editor__enabled { display: flex; flex-direction: row; align-items: center; gap: 10px; }
+.reminder-editor__enabled input { width: 18px; height: 18px; flex: 0 0 auto; }
+.reminder-editor p { margin: 0; }
+.reminder-editor__row { display: flex; align-items: center; gap: 12px; }
+.reminder-editor__row label { flex: 1; min-width: 0; }
+.reminder-editor > .button { align-self: flex-start; }
+.event-reminders { display: flex; flex-direction: column; gap: 14px; }
+.event-reminders label.event-reminders__inherit { display: flex; flex-direction: row; align-items: center; gap: 10px; }
+.event-reminders__inherit input { width: 18px; height: 18px; flex: 0 0 auto; }
+.event-reminders__summary { margin: 0; color: var(--color-muted); line-height: 1.5; }
+.schedule-form > .event-reminders { grid-column: 1 / -1; }
+.schedule-form--modal > label:first-of-type { grid-column: 1 / -1; }
+.schedule-reminder-button { align-self: flex-start; padding: 6px 8px; border: 1px solid var(--color-border); border-radius: 8px; color: var(--color-text); background: var(--color-surface-muted); cursor: pointer; }
+.schedule-reminder-button:hover { background: var(--color-surface-accent); }
 .schedule-slider.is-mobile {
   overflow: hidden;
   touch-action: pan-y;
@@ -33,6 +49,7 @@
 .history-row > span { background: transparent; }
 input, select, textarea { color: var(--color-text); }
 :root[data-theme='dark'] { --color-danger: #ff9da7; }
+:root:not([data-theme='dark']) { --color-danger: #a83b48; }
 .history-filters select { color: var(--color-text); }
 input::placeholder, textarea::placeholder { color: var(--color-muted); opacity: 1; }
 select option, select optgroup { color: var(--color-text); background: var(--color-surface); }

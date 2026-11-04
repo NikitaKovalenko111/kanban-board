@@ -3,6 +3,7 @@ export type UserRole = 'lead' | 'member'
 export type ScheduleEventType = string
 export type StudyGroup = '203' | '204' | 'both'
 export type ReminderScenario = 'none' | 'at-start' | '15-min' | '1-hour' | '1-day'
+export interface EventReminders { reminderMode: 'type' | 'custom'; reminderMinutes: number[] }
 export type EventPrivacy = 'hidden' | 'busy' | 'title' | 'details'
 export type EventCategory = 'class' | 'team' | 'group' | 'personal' | 'deadline'
 
@@ -44,8 +45,10 @@ export interface ScheduleEvent {
   type: ScheduleEventType
   typeLabel: string
   typeColor: string
-  group: StudyGroup
+  group?: StudyGroup
   reminder: ReminderScenario
+  reminderMode?: EventReminders['reminderMode']
+  reminderMinutes?: number[]
   location?: string
   author: string
   ownerId?: number

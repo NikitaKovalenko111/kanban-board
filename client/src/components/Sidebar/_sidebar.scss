@@ -7,5 +7,5 @@
   &__team { display: flex; flex-direction: column; padding: 15px; border-radius: 12px; background: var(--color-surface-muted); span, small { color: var(--color-muted); font-size: 12px; } strong { font-size: 13px; margin: 3px 0; } }
   &__logout { margin-top: auto; padding: 11px; border: 0; border-radius: 10px; color: #9c555d; background: #fff3f4; cursor: pointer; text-align: left; }
 }
-@media (min-width: 1025px) { .sidebar-backdrop { display: none; } .sidebar__top { visibility: hidden; margin-bottom: 12px; } }
+@media (min-width: 1025px) { .sidebar-backdrop { display: none; } .sidebar__top { display: none; } }
 @media (max-width: 1024px) { .sidebar { width: 285px; transform: translateX(-105%); box-shadow: 15px 0 45px rgba(30,35,45,.12); } }

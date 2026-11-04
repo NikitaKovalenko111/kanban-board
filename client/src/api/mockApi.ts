@@ -1,8 +1,10 @@
 import axios, { type AxiosRequestConfig, type AxiosResponse } from 'axios'
 import { loadFile, saveFile } from './fileStorage'
 import { visibleSchedule } from '../utils/schedule'
+import { loadEventTypes } from '../utils/eventTypes'
+import { eventReminderMinutes, validateReminderMinutes } from '../utils/reminders'
 import { validateTaskTransition } from '../utils/taskPermissions'
-import type { EventPrivacy, TaskStatusUpdate } from '../types'
+import type { EventPrivacy, EventReminders, TaskStatusUpdate } from '../types'
 import type { AddProjectSourcesPayload, AddTaskCommentPayload, Attachment, LoginCredentials, NewProject, NewScheduleEvent, NewTask, NewTeamMember, Project, ProjectSource, ScheduleEvent, Task, TaskComment, TaskHistoryEvent, TaskStatus, TeamMember, TeamSettings, User } from '../types'
 
 interface Account extends TeamMember { password: string }
@@ -216,15 +218,28 @@ if (!import.meta.env.VITE_API_URL) client.defaults.adapter = async (config) => {
   }
   if (config.url?.startsWith('/schedule/') && config.method === 'get') {
     const projectId = config.url.split('/').pop()
-    return response(config, visibleSchedule(scheduleEvents.filter((event) => projectId === 'all' || event.projectId === projectId), currentActor(), accounts))
+    return response(config, visibleSchedule(scheduleEvents.filter((event) => projectId === 'all' || event.projectId === projectId).map((event) => ({ ...event, ...(event.reminderMode ? { reminderMinutes: eventReminderMinutes(event, loadEventTypes()) } : {}) })), currentActor(), accounts))
   }
   if (config.url === '/schedule' && config.method === 'post') {
     const actor = currentActor()
     const payload = JSON.parse(config.data as string) as NewScheduleEvent
-    if (payload.category !== 'personal' && actor.role !== 'lead') throw new Error('Общие события создаёт капитан')
+    if (payload.reminderMode && !['type', 'custom'].includes(payload.reminderMode)) throw new Error('Неизвестный режим напоминаний')
+    if (payload.reminderMinutes) payload.reminderMinutes = validateReminderMinutes(payload.reminderMinutes)
     const event: ScheduleEvent = { ...payload, author: actor.name, ownerId: actor.id, id: Date.now() }
     scheduleEvents = [...scheduleEvents, event]
     return response(config, { ...event }, 201)
+  }
+  if (config.method === 'patch' && config.url?.match(/^\/schedule\/\d+\/reminders$/)) {
+    const actor = currentActor()
+    const id = Number(config.url.split('/')[2])
+    const previous = scheduleEvents.find((event) => event.id === id)
+    if (!previous) throw new Error('Событие не найдено')
+    if (previous.ownerId !== actor.id && !(actor.role === 'lead' && previous.category !== 'personal')) throw new Error('Нельзя менять напоминания чужого события')
+    const payload = JSON.parse(config.data as string) as EventReminders
+    if (!['type', 'custom'].includes(payload.reminderMode)) throw new Error('Неизвестный режим напоминаний')
+    const updated: ScheduleEvent = { ...previous, reminder: 'none', reminderMode: payload.reminderMode, reminderMinutes: validateReminderMinutes(payload.reminderMinutes) }
+    scheduleEvents = scheduleEvents.map((event) => event.id === id ? updated : event)
+    return response(config, { ...updated, reminderMinutes: eventReminderMinutes(updated, loadEventTypes()) })
   }
   if (config.method === 'get' && config.url?.match(/^\/attachments\/[^/]+\/download$/)) {
     const attachmentId = config.url.split('/')[2]
@@ -337,6 +352,7 @@ if (!import.meta.env.VITE_API_URL) client.defaults.adapter = async (config) => {
 }
 
 export const mockApi = {
+  updateEventReminders: async (id: number, reminders: EventReminders) => (await client.patch<ScheduleEvent>(`/schedule/${id}/reminders`, reminders)).data,
   uploadAttachment: async (file: File) => {
     const form = new FormData()
     form.append('file', file)

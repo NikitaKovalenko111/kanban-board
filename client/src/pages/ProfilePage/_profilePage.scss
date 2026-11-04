@@ -8,3 +8,9 @@
 .project-roles { margin-top: 16px; padding: 20px; border: 1px solid var(--color-border); border-radius: 16px; background: var(--color-surface); > div:last-child { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 9px; } article { display: flex; align-items: center; gap: 9px; padding: 12px; border-radius: 11px; background: var(--color-surface-muted); i { flex: 0 0 auto; width: 8px; height: 30px; border-radius: 6px; } span { display: flex; min-width: 0; flex-direction: column; } strong { overflow: hidden; font-size: 12px; text-overflow: ellipsis; white-space: nowrap; } small { color: var(--color-muted); font-size: 12px; } } }
 @media (max-width: 750px) { .project-roles > div:last-child { grid-template-columns: 1fr; } }
 @media (max-width: 650px) { .profile-card__info, .profile-stats { grid-template-columns: 1fr; } }
+.profile-page > .container { display: flex; flex-direction: column; gap: 16px; }
+.profile-page__heading { margin-bottom: 8px; h1 { margin: 0; } }
+.profile-page .project-roles, .profile-page .profile-stats { margin-top: 0; }
+.profile-stats p { margin: 8px 0 0; color: var(--color-text); font-weight: 700; line-height: 1.5; }
+.profile-stats span { display: block; line-height: 1; }
+.project-roles .panel__heading { margin-bottom: 16px; h2 { margin: 0; font-size: 20px; } }

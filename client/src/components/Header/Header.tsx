@@ -12,7 +12,7 @@ const Header: React.FC<PropsType> = ({ onMenu }): JSX.Element => {
     return (
         <header className="header">
             <div className="container header__container">
-                <button className="icon-button header__menu" onClick={onMenu} aria-label="Открыть меню">☰</button>
+                <button className="icon-button header__menu" onClick={onMenu} aria-label="Открыть меню"><svg className="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16" /></svg></button>
                 <div className="header__right">
                     <span className="header__role">{user.role === 'lead' ? 'Капитан' : 'Участник'}</span>
                     <button className="header__user" onClick={() => navigate('/profile')}>

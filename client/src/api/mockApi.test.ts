@@ -34,6 +34,39 @@ const readText = (blob: Blob) => new Promise<string>((resolve, reject) => {
 })
 
 describe('mockApi', () => {
+  it('событие наследует интервалы типа, индивидуальные напоминания не меняют тип', async () => {
+    localStorage.setItem('event-types', JSON.stringify([{ id: scheduleEvent.type, label: 'Встреча', color: '#123456', reminderMinutes: [30] }]))
+    const event = await request(api.createScheduleEvent({ ...scheduleEvent, projectId: 'ai-hackathon', reminderMode: 'type', reminderMinutes: [30] }))
+    expect((await request(api.getSchedule('all'))).find((item) => item.id === event.id)?.reminderMinutes).toEqual([30])
+    expect(await request(api.updateEventReminders(event.id, { reminderMode: 'custom', reminderMinutes: [45] }))).toMatchObject({ reminderMode: 'custom', reminderMinutes: [45] })
+    expect(JSON.parse(localStorage.getItem('event-types')!)[0].reminderMinutes).toEqual([30])
+    localStorage.setItem('event-types', JSON.stringify([{ id: scheduleEvent.type, label: 'Встреча', color: '#123456', reminderMinutes: [120] }]))
+    expect((await request(api.getSchedule('all'))).find((item) => item.id === event.id)?.reminderMinutes).toEqual([45])
+    expect(await request(api.updateEventReminders(event.id, { reminderMode: 'type', reminderMinutes: [] }))).toMatchObject({ reminderMinutes: [120] })
+  })
+
+  it('участник меняет напоминания своего события, чужие личные события защищены', async () => {
+    await signIn('maria')
+    const event = await request(api.createScheduleEvent({ ...scheduleEvent, category: 'personal', reminderMode: 'custom', reminderMinutes: [90] }))
+    expect(await request(api.updateEventReminders(event.id, { reminderMode: 'custom', reminderMinutes: [30] }))).toMatchObject({ reminderMinutes: [30] })
+    await signIn('alexey', 'lead123')
+    await expect(request(api.updateEventReminders(event.id, { reminderMode: 'custom', reminderMinutes: [15] }))).rejects.toThrow('Нельзя менять напоминания чужого события')
+    const hidden = (await request(api.getSchedule('all'))).find((item) => item.id === event.id)!
+    expect(hidden.reminderMinutes).toEqual([])
+  })
+
+  it.each(['team', 'group', 'class', 'deadline', 'personal'] as const)('участник может создать событие категории %s', async (category) => {
+    const actor = await signIn('maria')
+    const created = await request(api.createScheduleEvent({ ...scheduleEvent, category, ownerId: 1, author: 'Поддельный автор' }))
+    expect(created).toMatchObject({ category, ownerId: actor.id, author: actor.name })
+  })
+
+  it('не сохраняет недопустимые интервалы напоминаний', async () => {
+    await expect(request(api.createScheduleEvent({ ...scheduleEvent, reminderMode: 'custom', reminderMinutes: [-30] }))).rejects.toThrow('Укажите целое число минут от 0')
+    const event = await request(api.createScheduleEvent({ ...scheduleEvent, reminderMode: 'custom', reminderMinutes: [90] }))
+    await expect(request(api.updateEventReminders(event.id, { reminderMode: 'custom', reminderMinutes: [1.5] }))).rejects.toThrow()
+    expect((await request(api.getSchedule('all'))).find((item) => item.id === event.id)?.reminderMinutes).toEqual([90])
+  })
   it('капитан назначает задачу участнику при создании и только исполнитель берёт её в работу', async () => {
     const created = await request(api.createTask({ projectId: 'ai-hackathon', taskName: 'Назначенная задача', taskDesc: 'ТЗ', attachments: [], assigneeId: 2 }))
     expect(created).toMatchObject({ assigneeId: 2, assignee: 'Мария Волкова', taskStatus: 'waiting' })

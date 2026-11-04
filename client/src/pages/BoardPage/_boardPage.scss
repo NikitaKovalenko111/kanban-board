@@ -1,11 +1,12 @@
 .board-page {
-    padding: 42px 0 50px;
+    padding: 24px 0 50px;
     animation: page-enter .3s ease both;
     &__heading { display: flex; align-items: center; justify-content: space-between; gap: 24px; margin-bottom: 27px; }
+    &__heading h1 { margin: 0; }
     &__toolbar { display: flex; align-items: center; justify-content: space-between; margin-bottom: 18px; }
     &__tables { overflow: hidden; padding-bottom: 14px; }
     &__track { display: grid; grid-template-columns: repeat(4, minmax(270px, 1fr)); align-items: start; gap: 15px; }
-    @media (max-width: 700px) { padding-top: 28px; &__heading { align-items: flex-start; flex-direction: column; } &__heading .button { width: 100%; } }
+    @media (max-width: 760px) { padding-top: 24px; &__heading { align-items: flex-start; flex-direction: column; } &__heading .button { width: 100%; } }
 }
 
 .board-slider__controls { display: none; }
@@ -16,9 +17,9 @@
 
 @keyframes loader-pulse { to { opacity: .45; } }
 
-@media (max-width: 700px) {
-    .board-page__tables { margin-inline: -2px; padding-inline: 2px; touch-action: pan-y; }
-    .board-page__track { display: flex; align-items: flex-start; gap: 0; transform: translateX(calc(var(--slide-index) * -100%)); transition: transform .34s cubic-bezier(.22,.75,.25,1); }
+@media (max-width: 760px) {
+    .board-page__tables { margin-inline: 0; padding-inline: 0; touch-action: pan-y; }
+    .board-page__track { display: flex; align-items: flex-start; gap: 16px; transform: translateX(calc(var(--slide-index) * -100% - var(--slide-index) * 16px)); transition: transform .34s cubic-bezier(.22,.75,.25,1); }
     .board-page__track > .board-element { flex: 0 0 100%; min-width: 100%; }
     .board-slider__controls { display: grid; grid-template-columns: 38px 1fr 38px; align-items: center; gap: 12px; margin-top: 2px; button { display: grid; place-items: center; width: 38px; height: 34px; border: 1px solid var(--color-border); border-radius: 10px; color: var(--color-primary); background: var(--color-surface); cursor: pointer; &:disabled { opacity: .35; } } > div { display: flex; justify-content: center; gap: 7px; button { width: 7px; height: 7px; padding: 0; border: 0; border-radius: 50%; background: #cdd2dc; &.is-active { width: 20px; border-radius: 5px; background: var(--color-primary); } } } }
 }

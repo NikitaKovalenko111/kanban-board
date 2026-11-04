@@ -2,6 +2,7 @@
   padding: 38px 0 55px;
   animation: page-enter .3s ease both;
 }
+.settings-page .page-heading > .button { border-radius: 12px; flex-shrink: 0; }
 
 .event-types-panel {
   max-width: 820px;
@@ -29,11 +30,13 @@
       padding: 8px 10px;
       border: 0;
       border-radius: 8px;
-      color: var(--color-primary);
-      background: var(--color-surface-accent);
+      color: var(--color-text);
+      background: var(--color-surface-soft);
+      font-weight: 650;
       cursor: pointer;
 
-      &.is-danger { color: var(--color-danger); background: #fff0f1; }
+      &:hover, &:focus-visible { background: var(--color-surface-accent); outline: 1px solid var(--color-primary); }
+      &.is-danger { color: var(--color-danger); background: var(--color-surface-muted); }
       &:disabled { opacity: .4; }
     }
   }

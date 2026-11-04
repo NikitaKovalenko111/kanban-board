@@ -22,7 +22,8 @@ const BoardPage: React.FC<PropsType> = (): JSX.Element => {
     const [selectedTask, setSelectedTask] = useState<Task | null>(null)
     const query = searchParams.get('q') ?? ''
     const [activeColumn, setActiveColumn] = useState(0)
-    const touchStart = useRef<number | null>(null)
+    const touchStart = useRef<{ x: number; y: number } | null>(null)
+    const swiped = useRef(false)
 
     useEffect(() => { if (!items.length) dispatch(loadTasksRequest()) }, [dispatch, items.length])
     const notificationTaskId = Number(searchParams.get('task'))
@@ -40,11 +41,18 @@ const BoardPage: React.FC<PropsType> = (): JSX.Element => {
     const openTask = (task: Task) => { setSelectedTask(task); setDrawerOpen(true) }
     const openCreate = () => { setSelectedTask(null); setDrawerOpen(true) }
     const showColumn = (index: number) => setActiveColumn(Math.max(0, Math.min(columns.length - 1, index)))
-    const handleTouchStart = (event: TouchEvent) => { touchStart.current = event.touches[0].clientX }
+    const handleTouchStart = (event: TouchEvent) => {
+      swiped.current = false
+      touchStart.current = event.touches.length === 1 ? { x: event.touches[0].clientX, y: event.touches[0].clientY } : null
+    }
     const handleTouchEnd = (event: TouchEvent) => {
       if (touchStart.current === null) return
-      const distance = event.changedTouches[0].clientX - touchStart.current
-      if (Math.abs(distance) > 45) showColumn(activeColumn + (distance > 0 ? 1 : -1))
+      const distance = event.changedTouches[0].clientX - touchStart.current.x
+      const vertical = event.changedTouches[0].clientY - touchStart.current.y
+      if (window.matchMedia('(max-width: 760px)').matches && Math.abs(distance) > 45 && Math.abs(distance) > Math.abs(vertical) * 1.3) {
+        swiped.current = true
+        showColumn(activeColumn + (distance < 0 ? 1 : -1))
+      }
       touchStart.current = null
     }
     return (
@@ -55,7 +63,7 @@ const BoardPage: React.FC<PropsType> = (): JSX.Element => {
                   {user.role === 'lead' && !allProjectsSelected && <button className="button" onClick={openCreate}><Icon name="plus" /> Новая задача</button>}
                 </div>
                 {error && <div className="error-banner">{error}</div>}
-                <div className="board-slider" onTouchStart={handleTouchStart} onTouchEnd={handleTouchEnd}>
+                <div className="board-slider" onTouchStart={handleTouchStart} onTouchEnd={handleTouchEnd} onTouchCancel={() => { touchStart.current = null }} onClickCapture={(event) => { if (swiped.current) { event.preventDefault(); event.stopPropagation(); swiped.current = false } }}>
                   <div className="board-page__tables">
                     <div className="board-page__track" style={{ '--slide-index': activeColumn } as CSSProperties}>
                     {loading ? <div className="loader">Загружаем доску…</div> : columns.map((column) => {

@@ -27,7 +27,7 @@
   &:focus-within { border-color: var(--color-primary); }
 }
 .sidebar { overflow-y: auto; }
-.sidebar__person { border-radius: 10px; cursor: pointer; &:hover, &:focus-visible { background: var(--color-surface-accent); outline: 2px solid var(--color-primary); outline-offset: 4px; } }
+.sidebar__person { padding: 8px; margin: -8px -8px 4px; border: 0; border-radius: 10px; cursor: pointer; &:hover, &:focus-visible { background: var(--color-surface-accent); outline: 2px solid var(--color-primary); outline-offset: 0; } }
 .sidebar__notifications { color: var(--color-muted); background: transparent; &:hover { background: var(--color-surface-muted); } &.is-active { background: var(--color-surface-accent); color: var(--color-primary); } }
 .sidebar__nav a { color: var(--color-muted); &:hover { background: var(--color-surface-muted); } }
 .team-page > .container > .search, .projects-page > .container > .search { margin-bottom: 20px; }
