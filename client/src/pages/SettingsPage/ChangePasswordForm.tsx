@@ -1,3 +1,4 @@
+import { isBackendMode } from '../../api/config'
 import { useState, type FormEvent } from 'react'
 import { api } from '../../api'
 
@@ -14,7 +15,7 @@ const ChangePasswordForm = () => {
     if (saving) return
     setError(''); setSuccess(false)
     if (newPassword !== confirmation) { setError('Новые пароли не совпадают'); return }
-    if (newPassword.length < 6) { setError('Новый пароль должен содержать не менее 6 символов'); return }
+    if (newPassword.length < (isBackendMode ? 8 : 6)) { setError(`Новый пароль должен содержать не менее ${isBackendMode ? 8 : 6} символов`); return }
     if (currentPassword === newPassword) { setError('Новый пароль должен отличаться от текущего'); return }
     setSaving(true)
     try {
@@ -29,8 +30,8 @@ const ChangePasswordForm = () => {
     <h2>Смена пароля</h2>
     <form className="management-form" onSubmit={(event) => void submit(event)}>
       <label>Текущий пароль<input type="password" autoComplete="current-password" value={currentPassword} onChange={(event) => { setCurrentPassword(event.target.value); setError(''); setSuccess(false) }} disabled={saving} required /></label>
-      <label>Новый пароль<input type="password" autoComplete="new-password" minLength={6} value={newPassword} onChange={(event) => { setNewPassword(event.target.value); setError(''); setSuccess(false) }} disabled={saving} required /></label>
-      <label>Подтвердите новый пароль<input type="password" autoComplete="new-password" minLength={6} value={confirmation} onChange={(event) => { setConfirmation(event.target.value); setError(''); setSuccess(false) }} disabled={saving} required /></label>
+      <label>Новый пароль<input type="password" autoComplete="new-password" minLength={isBackendMode ? 8 : 6} value={newPassword} onChange={(event) => { setNewPassword(event.target.value); setError(''); setSuccess(false) }} disabled={saving} required /></label>
+      <label>Подтвердите новый пароль<input type="password" autoComplete="new-password" minLength={isBackendMode ? 8 : 6} value={confirmation} onChange={(event) => { setConfirmation(event.target.value); setError(''); setSuccess(false) }} disabled={saving} required /></label>
       {error && <div className="error-banner" role="alert">{error}</div>}
       {success && <p className="password-success" role="status">Пароль успешно изменён</p>}
       <button className="button" disabled={saving}>{saving ? 'Сохраняем…' : 'Изменить пароль'}</button>

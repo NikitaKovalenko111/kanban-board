@@ -13,10 +13,10 @@ const authSlice = createSlice({
     loginRequest(state, _action: PayloadAction<LoginCredentials>) { state.loading = true; state.error = null },
     loginFinished(state) { state.loading = false; state.error = null },
     loginSuccess(state, action: PayloadAction<User>) {
-      const savedAvatar = localStorage.getItem(`mock-avatar-${action.payload.login}`)
+      const savedAvatar = isBackendMode ? null : localStorage.getItem(`mock-avatar-${action.payload.login}`)
       state.user = { ...action.payload, projectRoles: action.payload.projectRoles ?? {}, avatarUrl: savedAvatar ?? action.payload.avatarUrl }
       state.loading = false
-      localStorage.setItem('mock-session', JSON.stringify(state.user))
+      if (!isBackendMode) localStorage.setItem('mock-session', JSON.stringify(state.user))
     },
     loginFailure(state, action: PayloadAction<string>) { state.loading = false; state.error = action.payload },
     clearLoginError(state) { state.error = null },

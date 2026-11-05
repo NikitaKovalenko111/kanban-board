@@ -10,7 +10,7 @@ export default defineConfig(({ mode }) => ({
       '/api': {
         target: loadEnv(mode, process.cwd(), '').API_PROXY_TARGET || 'http://127.0.0.1:3005',
         changeOrigin: true,
-        rewrite: (path) => path.replace(/^\/api/, ''),
+        rewrite: (path) => path.startsWith('/api/v1/') ? path : path.replace(/^\/api/, ''),
       },
     },
   },

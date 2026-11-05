@@ -4,6 +4,7 @@ import { authHttp, backendApi, backendHttp, backendSessionExpiredEvent, refreshB
 import { clearBackendSession, readBackendSession, saveBackendSession } from './backendSession'
 
 const tokens = { user_id: '8c57db56-a1e6-459d-9e92-4d164299e134', access_token: 'access-1', refresh_token: 'refresh-1', token_type: 'Bearer' }
+const wire = (value = tokens) => ({ accessToken: value.access_token, refreshToken: value.refresh_token, expiresIn: 60, user: { id: value.user_id } })
 const originalAuthAdapter = authHttp.defaults.adapter
 const originalApiAdapter = backendHttp.defaults.adapter
 const ok = (config: InternalAxiosRequestConfig, data: unknown = {}, status = 200): AxiosResponse => ({ data, config, status, statusText: 'OK', headers: {} })
@@ -15,12 +16,12 @@ beforeEach(() => { sessionStorage.clear(); localStorage.clear() })
 afterEach(() => { authHttp.defaults.adapter = originalAuthAdapter; backendHttp.defaults.adapter = originalApiAdapter; sessionStorage.clear() })
 
 describe('существующий backend: авторизация', () => {
-  it('отправляет login/password, принимает snake_case DTO и сохраняет UUID без фиктивной роли', async () => {
+  it('отправляет login/password, принимает camelCase DTO и сохраняет UUID без фиктивной роли', async () => {
     const adapter = vi.fn(async (config: InternalAxiosRequestConfig) => {
       expect(config.url).toBe('/auth/login')
       expect(JSON.parse(config.data)).toEqual({ login: 'student', password: ' Password123 ' })
       expect(config.headers.get('Authorization')).toBeUndefined()
-      return ok(config, tokens)
+      return ok(config, wire())
     })
     authHttp.defaults.adapter = adapter
     expect(await backendApi.login({ login: ' student ', password: ' Password123 ' })).toEqual({ userId: tokens.user_id, login: 'student' })
@@ -35,8 +36,8 @@ describe('существующий backend: авторизация', () => {
     expect(readBackendSession()).toBeNull()
   })
 
-  it('отклоняет ответ без токенов и неподдерживаемый token_type', async () => {
-    for (const data of [{ user_id: tokens.user_id }, { ...tokens, token_type: 'Cookie' }]) {
+  it('отклоняет ответ без токенов и некорректную пару токенов', async () => {
+    for (const data of [{ user: { id: tokens.user_id } }, { accessToken: '', refreshToken: 'r', expiresIn: 60, user: { id: tokens.user_id } }]) {
       authHttp.defaults.adapter = async config => ok(config, data)
       await expect(backendApi.login({ login: 'student', password: 'Password123' })).rejects.toThrow('некорректный ответ')
       expect(readBackendSession()).toBeNull()
@@ -47,8 +48,8 @@ describe('существующий backend: авторизация', () => {
     seed()
     authHttp.defaults.adapter = async config => {
       expect(config.url).toBe('/auth/refresh')
-      expect(JSON.parse(config.data)).toEqual({ refresh_token: 'refresh-1' })
-      return ok(config, { ...tokens, access_token: 'access-2', refresh_token: 'refresh-2' })
+      expect(JSON.parse(config.data)).toEqual({ refreshToken: 'refresh-1' })
+      return ok(config, wire({ ...tokens, access_token: 'access-2', refresh_token: 'refresh-2' }))
     }
     expect(await backendApi.restore()).toEqual({ userId: tokens.user_id, login: 'student' })
     expect(readBackendSession()).toMatchObject({ access_token: 'access-2', refresh_token: 'refresh-2' })
@@ -67,7 +68,7 @@ describe('существующий backend: авторизация', () => {
     const gate = new Promise<void>(resolve => { release = resolve })
     const refresh = vi.fn(async (config: InternalAxiosRequestConfig) => {
       await gate
-      return ok(config, { ...tokens, access_token: 'access-2', refresh_token: 'refresh-2' })
+      return ok(config, wire({ ...tokens, access_token: 'access-2', refresh_token: 'refresh-2' }))
     })
     authHttp.defaults.adapter = refresh
     const apiAdapter = vi.fn(async (config: InternalAxiosRequestConfig) => {
@@ -103,7 +104,7 @@ describe('существующий backend: авторизация', () => {
 
   it('после одного повторного 401 возвращает пользователя к входу', async () => {
     seed()
-    authHttp.defaults.adapter = async config => ok(config, { ...tokens, access_token: 'access-2', refresh_token: 'refresh-2' })
+    authHttp.defaults.adapter = async config => ok(config, wire({ ...tokens, access_token: 'access-2', refresh_token: 'refresh-2' }))
     const adapter = vi.fn(async (config: InternalAxiosRequestConfig) => fail(config, 401, 'invalid_access_token'))
     backendHttp.defaults.adapter = adapter
     await expect(backendHttp.get('/test-protected')).rejects.toThrow('Сессия истекла')
@@ -122,7 +123,7 @@ describe('существующий backend: авторизация', () => {
     seed()
     let release!: () => void
     const gate = new Promise<void>(resolve => { release = resolve })
-    authHttp.defaults.adapter = async config => { await gate; return ok(config, { ...tokens, refresh_token: 'refresh-2' }) }
+    authHttp.defaults.adapter = async config => { await gate; return ok(config, wire({ ...tokens, refresh_token: 'refresh-2' })) }
     const pending = refreshBackendSession()
     clearBackendSession()
     release()
@@ -132,7 +133,7 @@ describe('существующий backend: авторизация', () => {
 
   it('отклоняет подмену user_id при refresh', async () => {
     seed()
-    authHttp.defaults.adapter = async config => ok(config, { ...tokens, user_id: 'another-account' })
+    authHttp.defaults.adapter = async config => ok(config, wire({ ...tokens, user_id: 'another-account' }))
     await expect(refreshBackendSession()).rejects.toThrow('другого пользователя')
     expect(readBackendSession()?.user_id).toBe(tokens.user_id)
   })
@@ -141,7 +142,7 @@ describe('существующий backend: авторизация', () => {
     seed()
     authHttp.defaults.adapter = async config => {
       expect(config.url).toBe('/auth/logout')
-      expect(JSON.parse(config.data)).toEqual({ refresh_token: 'refresh-1' })
+      expect(JSON.parse(config.data)).toEqual({ refreshToken: 'refresh-1' })
       return ok(config, undefined, 204)
     }
     await backendApi.logout()
@@ -154,9 +155,26 @@ describe('существующий backend: авторизация', () => {
     await expect(backendApi.logout()).rejects.toThrow('Вы вышли на этом устройстве')
     expect(readBackendSession()).toBeNull()
   })
+  it('не выдаёт HTTP 401 защищённого logout за подтверждённый серверный выход', async () => {
+    seed()
+    authHttp.defaults.adapter = async config => fail(config, 401, 'invalid_access_token')
+    await expect(backendApi.logout()).rejects.toThrow('Вы вышли на этом устройстве')
+    expect(readBackendSession()).toBeNull()
+  })
 
   it('запрашивает реальный /system/health и принимает пустой HTTP 200', async () => {
     authHttp.defaults.adapter = async config => { expect(config.url).toBe('/system/health'); return ok(config, '') }
     await expect(backendApi.health()).resolves.toBeUndefined()
+  })
+  it('не отдаёт поздний ответ предыдущего аккаунта после смены сессии', async () => {
+    seed()
+    let release!: () => void
+    const gate = new Promise<void>(resolve => { release = resolve })
+    backendHttp.defaults.adapter = async config => { await gate; return ok(config, { privateData: 'old-account' }) }
+    const pending = backendHttp.get('/test-private')
+    await Promise.resolve(); await Promise.resolve()
+    saveBackendSession({ ...tokens, user_id: 'another-user', login: 'other' })
+    release()
+    await expect(pending).rejects.toThrow('Сессия изменилась')
   })
 })

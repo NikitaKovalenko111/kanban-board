@@ -1,3 +1,4 @@
+import { isBackendMode } from '../../api/config'
 import Icon from '../../components/Icon/Icon'
 import { useEffect, useState, type FormEvent } from 'react'
 import { useSearchParams } from 'react-router-dom'
@@ -8,7 +9,7 @@ import { api } from '../../api'
 import { useAppDispatch, useAppSelector } from '../../store/hooks'
 import { useProjectSelection } from '../../store/useProjectSelection'
 import { createMemberRequest, loadTeamRequest, toggleMemberRequest } from '../../store/slices/teamSlice'
-import type { UserRole } from '../../types'
+import type { EntityId, UserRole } from '../../types'
 
 const createPassword = () => 'team-' + crypto.randomUUID().slice(0, 12)
 
@@ -24,6 +25,7 @@ const TeamPage = () => {
   const [showCreate, setShowCreate] = useState(false)
   const [submitted, setSubmitted] = useState(false)
   const [name, setName] = useState('')
+  const [studentGroup, setStudentGroup] = useState('')
   const [login, setLogin] = useState('')
   const [projectId, setProjectId] = useState('')
   const [projectRole, setProjectRole] = useState('')
@@ -32,7 +34,7 @@ const TeamPage = () => {
   const [temporaryPassword, setTemporaryPassword] = useState('')
   const [actionError, setActionError] = useState('')
   const [resetting, setResetting] = useState(false)
-  const selected = members.find((member) => member.id === Number(params.get('member')))
+  const selected = members.find((member) => String(member.id) === params.get('member'))
 
   useEffect(() => { dispatch(loadTeamRequest()) }, [dispatch])
   useEffect(() => {
@@ -46,10 +48,10 @@ const TeamPage = () => {
   const createMember = (event: FormEvent) => {
     event.preventDefault()
     if (!canManage) return
-    dispatch(createMemberRequest({ name: name.trim(), login, password, position: '', projectRoles: projectId ? { [projectId]: projectRole.trim() || 'Участник' } : {}, role }))
+    dispatch(createMemberRequest({ name: name.trim(), login, password, position: '', studentGroup, projectRoles: projectId ? { [projectId]: projectRole.trim() || 'Участник' } : {}, role }))
     setSubmitted(true)
   }
-  const openMember = (id: number) => {
+  const openMember = (id: EntityId) => {
     setTemporaryPassword(''); setActionError('')
     setParams({ member: String(id) })
   }
@@ -92,9 +94,10 @@ const TeamPage = () => {
       <label>Имя и фамилия<input value={name} onChange={(event) => setName(event.target.value)} required /></label>
       <label>Логин<input autoComplete="off" value={login} onChange={(event) => setLogin(event.target.value.toLowerCase())} pattern="[a-z0-9._-]+" required /></label>
       <label>Статус<select value={role} onChange={(event) => setRole(event.target.value as UserRole)}><option value="member">Участник</option><option value="lead">Капитан</option></select></label>
-      <label>Проект<select value={projectId} onChange={(event) => setProjectId(event.target.value)}><option value="">Без проекта</option>{projects.map((project) => <option key={project.id} value={project.id}>{project.name}</option>)}</select></label>
-      {projectId && <label>Роль в проекте<input value={projectRole} onChange={(event) => setProjectRole(event.target.value)} required /></label>}
-      <label>Временный пароль<div className="generated-password"><input value={password} onChange={(event) => setPassword(event.target.value)} minLength={6} required /><button type="button" onClick={() => setPassword(createPassword())}>Обновить</button></div></label>
+      {!isBackendMode && <label>Проект<select value={projectId} onChange={(event) => setProjectId(event.target.value)}><option value="">Без проекта</option>{projects.map((project) => <option key={project.id} value={project.id}>{project.name}</option>)}</select></label>}
+      {isBackendMode && <label>Учебная группа<input value={studentGroup} onChange={(event) => setStudentGroup(event.target.value)} required /></label>}
+      {!isBackendMode && projectId && <label>Роль в проекте<input value={projectRole} onChange={(event) => setProjectRole(event.target.value)} required /></label>}
+      <label>Временный пароль<div className="generated-password"><input value={password} onChange={(event) => setPassword(event.target.value)} minLength={isBackendMode ? 8 : 6} required /><button type="button" onClick={() => setPassword(createPassword())}>Обновить</button></div></label>
       {error && <div className="error-banner" role="alert">{error}</div>}
       <button className="button" disabled={saving}>Создать аккаунт</button>
     </form>

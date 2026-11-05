@@ -1,3 +1,4 @@
+import { isBackendMode } from '../../api/config'
 import Icon from '../../components/Icon/Icon'
 import { useEffect, useState, type ChangeEvent, type FormEvent } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
@@ -96,7 +97,7 @@ const ProjectsPage = () => {
       {uploading && <p role="status">Загрузка файлов…</p>}
       <div className="source-list">{sources.map((source) => <article className="source-row" key={source.id}><button className="source-row__download" onClick={() => { setFileError(''); void downloadFile(source).catch((reason: unknown) => setFileError(reason instanceof Error ? reason.message : 'Не удалось скачать файл')) }}>
         <svg className="attachment-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m8 12 6-6a3 3 0 0 1 4 4l-8 8a5 5 0 0 1-7-7l8-8" /></svg>
-        <span className="source-row__name"><strong>{source.name}</strong><small>{source.projectName} · {source.uploadedBy}</small></span><span className="source-row__size">{formatSize(source.size)} <Icon name="arrow-down" /></span>
+        <span className="source-row__name"><strong>{source.name}</strong><small>{source.projectName} · {source.uploadedBy}</small></span><span className="source-row__size">{source.url ? 'Ссылка' : formatSize(source.size)} <Icon name={source.url ? 'arrow-right' : 'arrow-down'} /></span>
       </button>{(user.role === 'lead' || (source.uploadedById !== undefined ? source.uploadedById === user.id : source.uploadedBy === user.name)) && <button className="icon-button source-row__delete" disabled={saving || uploading} title="Удалить источник" aria-label={`Удалить источник ${source.name}`} onClick={() => setSourceToDelete({ projectId: source.projectId, sourceId: source.id, name: source.name })}><Icon name="trash" /></button>}</article>)}</div>
       {!sources.length && <div className="empty-state">Источники не найдены</div>}
     </section>}
@@ -110,7 +111,7 @@ const ProjectsPage = () => {
     <form className="management-form" onSubmit={(event) => void submit(event)}>
       <label>Название<input value={name} onChange={(event) => setName(event.target.value)} required /></label>
       <label>Описание<textarea value={description} onChange={(event) => setDescription(event.target.value)} /></label>
-      <fieldset className="color-picker"><legend>Цвет проекта</legend><div>{projectColors.map((value) => <label key={value} style={{ background: value }} className={color === value ? 'is-selected' : ''}><input type="radio" name="project-color" value={value} checked={color === value} onChange={() => setColor(value)} /><span>Выбрать цвет</span></label>)}</div></fieldset>
+      {!isBackendMode && <fieldset className="color-picker"><legend>Цвет проекта</legend><div>{projectColors.map((value) => <label key={value} style={{ background: value }} className={color === value ? 'is-selected' : ''}><input type="radio" name="project-color" value={value} checked={color === value} onChange={() => setColor(value)} /><span>Выбрать цвет</span></label>)}</div></fieldset>}
       <label className="file-upload">Прикрепить источники<input type="file" multiple onChange={(event) => {
         const files = Array.from(event.target.files ?? [])
         event.target.value = ''

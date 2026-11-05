@@ -34,7 +34,15 @@ services:
         ports:
             - "127.0.0.1:${MINIO_CONSOLE_PORT:-9001}:9001"
         healthcheck:
-            test: ["CMD", "curl", "--fail", "--silent", "--show-error", "http://127.0.0.1:9000/minio/health/ready"]
+            test:
+                [
+                    "CMD",
+                    "curl",
+                    "--fail",
+                    "--silent",
+                    "--show-error",
+                    "http://127.0.0.1:9000/minio/health/ready",
+                ]
             interval: 5s
             timeout: 3s
             retries: 10
@@ -63,7 +71,15 @@ services:
             minio_use_ssl: "false"
         # Override the old image healthcheck for the current API prefix.
         healthcheck:
-            test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:3005/api/v1/system/health"]
+            test:
+                [
+                    "CMD",
+                    "wget",
+                    "-q",
+                    "-O",
+                    "/dev/null",
+                    "http://127.0.0.1:3005/api/v1/system/health",
+                ]
             interval: 10s
             timeout: 3s
             retries: 5

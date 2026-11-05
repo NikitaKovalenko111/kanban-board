@@ -16,8 +16,7 @@ import { useAppDispatch, useAppSelector } from './store/hooks'
 import { isBackendMode } from './api/config'
 import { backendSessionExpiredEvent } from './api/backendApi'
 import { backendSessionCleared, restoreBackendSessionRequest } from './store/slices/backendAuthSlice'
-import { loginFailure } from './store/slices/authSlice'
-import ConnectedWorkspace from './pages/ConnectedWorkspace/ConnectedWorkspace'
+import { loginFailure, logout } from './store/slices/authSlice'
 
 import './styles/style.scss'
 
@@ -29,7 +28,7 @@ function App() {
   const dispatch = useAppDispatch()
   useEffect(() => {
     if (!isBackendMode) return
-    const expired = () => { dispatch(backendSessionCleared()); dispatch(loginFailure('Сессия истекла. Войдите снова')) }
+    const expired = () => { dispatch(logout()); dispatch(backendSessionCleared()); dispatch(loginFailure('Сессия истекла. Войдите снова')) }
     window.addEventListener(backendSessionExpiredEvent, expired)
     dispatch(restoreBackendSessionRequest())
     return () => window.removeEventListener(backendSessionExpiredEvent, expired)
@@ -39,7 +38,7 @@ function App() {
 
   if (isBackendMode) {
     if (restoring) return <main className="loader" role="status">Проверяем сессию…</main>
-    return identity ? <ConnectedWorkspace /> : <Routes><Route path="*" element={<LoginPage />} /></Routes>
+    if (!identity || !user) return <Routes><Route path="*" element={<LoginPage />} /></Routes>
   }
 
   if (!user) {

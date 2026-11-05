@@ -1,4 +1,5 @@
 import Icon from '../Icon/Icon'
+import { isBackendMode } from '../../api/config'
 import { useEffect, useRef, useState } from 'react'
 import { Link, useLocation, useSearchParams } from 'react-router-dom'
 import { useAppDispatch, useAppSelector } from '../../store/hooks'
@@ -13,7 +14,7 @@ const WorkspaceNav = () => {
   const [params, setParams] = useSearchParams()
   const tab = projectTab(pathname)
   const activeProjectId = useProjectSelection(tab ?? '')
-  const showSwitcher = !!tab && (pathname !== '/projects' || params.get('tab') === 'sources')
+  const showSwitcher = !(isBackendMode && pathname === '/schedule') && !!tab && (pathname !== '/projects' || params.get('tab') === 'sources')
   const showSearch = pathname === '/' || pathname === '/history'
   const { items, loading } = useAppSelector((state) => state.projects)
   const user = useAppSelector((state) => state.auth.user)!

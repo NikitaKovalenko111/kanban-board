@@ -20,7 +20,9 @@ const messages: Record<string, string> = {
 export function backendError(error: unknown): Error {
   if (!axios.isAxiosError(error)) return error instanceof Error ? error : new Error('Не удалось выполнить запрос')
   const body = error.response?.data
-  const code = body && typeof body === 'object' ? body.error : undefined
+  const detail = body && typeof body === 'object' && typeof body.error === 'object' ? body.error : null
+  const code = detail?.code?.toLowerCase() ?? (body && typeof body === 'object' ? body.error : undefined)
+  if (detail?.message && error.response && error.response.status < 500 && error.response.status !== 401) return new Error(detail.message)
   if (typeof code === 'string' && messages[code]) return new Error(messages[code])
   if (error.response?.status === 401) return new Error('Сессия истекла. Войдите снова')
   if (error.response?.status === 404) return new Error('Запрошенный API не найден на сервере')
@@ -42,8 +44,8 @@ export function refreshBackendSession(): Promise<BackendSession> {
   if (!previous) return Promise.reject(new Error('Войдите в аккаунт'))
   refreshFlight = (async () => {
     try {
-      const { data } = await authHttp.post('/auth/refresh', { refresh_token: previous.refresh_token })
-      const tokens = validateTokens(data)
+      const { data } = await authHttp.post('/auth/refresh', { refreshToken: previous.refresh_token })
+      const tokens = validateTokens(data, previous.user_id)
       if (tokens.user_id !== previous.user_id) throw new Error('Сервер вернул сессию другого пользователя')
       if (readBackendSession()?.refresh_token !== previous.refresh_token) throw new Error('Сессия была изменена. Повторите вход')
       const session = { ...tokens, login: previous.login }
@@ -57,13 +59,22 @@ export function refreshBackendSession(): Promise<BackendSession> {
   return refreshFlight
 }
 
+type SessionConfig = InternalAxiosRequestConfig & { sessionUserId?: string; retried?: boolean }
 backendHttp.interceptors.request.use((config) => {
   const session = readBackendSession()
+  const scoped = config as SessionConfig
+  if (scoped.sessionUserId && scoped.sessionUserId !== session?.user_id) throw new Error('Сессия изменилась')
+  if (session) scoped.sessionUserId = session.user_id
   if (session) config.headers.set('Authorization', `Bearer ${session.access_token}`)
   return config
 })
-backendHttp.interceptors.response.use(response => response, async (error: unknown) => {
-  const config = axios.isAxiosError(error) ? error.config as (InternalAxiosRequestConfig & { retried?: boolean }) | undefined : undefined
+backendHttp.interceptors.response.use(response => {
+  const owner = (response.config as SessionConfig).sessionUserId
+  if (owner && owner !== readBackendSession()?.user_id) throw new Error('Сессия изменилась')
+  return response
+}, async (error: unknown) => {
+  const config = axios.isAxiosError(error) ? error.config as SessionConfig | undefined : undefined
+  if (config?.sessionUserId && config.sessionUserId !== readBackendSession()?.user_id) throw new Error('Сессия изменилась')
   if (axios.isAxiosError(error) && error.response?.status === 401 && config && !config.retried && readBackendSession()) {
     config.retried = true
     // Another request may already have rotated the token while this response was in flight.
@@ -94,9 +105,8 @@ export const backendApi = {
     const session = readBackendSession()
     clearBackendSession()
     if (!session) return
-    try { await authHttp.post('/auth/logout', { refresh_token: session.refresh_token }) }
+    try { await authHttp.post('/auth/logout', { refreshToken: session.refresh_token }, { headers: { Authorization: `Bearer ${session.access_token}` } }) }
     catch (error) {
-      if (axios.isAxiosError(error) && error.response?.status === 401) return
       throw new Error(`Вы вышли на этом устройстве. ${backendError(error).message}`)
     }
   },

@@ -7,7 +7,8 @@ export const uploadFiles = async (files: FileList | File[]): Promise<Attachment[
   return Promise.all(selected.map((file) => api.uploadAttachment(file)))
 }
 export const downloadFile = async (file: Attachment): Promise<void> => {
-  const blob = await api.downloadAttachment(file.id)
+  if (file.url) { const url = new URL(file.url); if (!['http:', 'https:'].includes(url.protocol)) throw new Error('Недопустимый адрес источника'); window.open(url.href, '_blank', 'noopener,noreferrer'); return }
+  const blob = await api.downloadAttachment(file.downloadId ?? file.id)
   const url = URL.createObjectURL(blob)
   const link = document.createElement('a')
   link.href = url

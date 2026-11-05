@@ -1,4 +1,5 @@
 import Icon from '../../components/Icon/Icon'
+import { isBackendMode } from '../../api/config'
 import { useEffect, useState, type FormEvent } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { api } from '../../api'
@@ -21,7 +22,7 @@ const ProjectManagementPage = () => {
   const [name, setName] = useState('')
   const [description, setDescription] = useState('')
   const [color, setColor] = useState('#6577df')
-  const [roles, setRoles] = useState<Record<number, string>>({})
+  const [roles, setRoles] = useState<Record<string, string>>({})
   const [submitted, setSubmitted] = useState(false)
   const canManage = user.role === 'lead'
 
@@ -45,7 +46,7 @@ const ProjectManagementPage = () => {
   const submit = (event: FormEvent) => {
     event.preventDefault()
     if (!project || !canManage) return
-    dispatch(updateProjectRequest({ id: project.id, name, description, color, members: Object.entries(roles).map(([id, role]) => ({ userId: Number(id), role })) }))
+    dispatch(updateProjectRequest({ id: project.id, name, description, color, members: Object.entries(roles).map(([id, role]) => ({ userId: isBackendMode ? id : Number(id), role })) }))
     setSubmitted(true)
   }
   if (loading) return <div className="loader">Загружаем проект…</div>
@@ -63,7 +64,7 @@ const ProjectManagementPage = () => {
     </section>
   </div>{dialog && canManage && <FormModal title={dialog === 'details' ? 'Настройки проекта' : 'Участники и роли'} onClose={() => { if (!saving) setDialog(null) }}>
     <form className="management-form" onSubmit={submit}>
-      {dialog === 'details' ? <><label>Название<input value={name} onChange={(event) => setName(event.target.value)} required /></label><label>Описание<textarea value={description} onChange={(event) => setDescription(event.target.value)} /></label><label>Цвет<input className="event-color-input" type="color" value={color} onChange={(event) => setColor(event.target.value)} /></label></> : <div className="project-members-editor">{members.map((member) => <article key={member.id}>
+      {dialog === 'details' ? <><label>Название<input value={name} onChange={(event) => setName(event.target.value)} required /></label><label>Описание<textarea value={description} onChange={(event) => setDescription(event.target.value)} /></label>{!isBackendMode && <label>Цвет<input className="event-color-input" type="color" value={color} onChange={(event) => setColor(event.target.value)} /></label>}</> : <div className="project-members-editor">{members.map((member) => <article key={member.id}>
         <label className="project-members-editor__check"><input type="checkbox" checked={member.id in roles} onChange={(event) => setRoles((current) => { const next = { ...current }; if (event.target.checked) next[member.id] = 'Участник проекта'; else delete next[member.id]; return next })} />{member.name}</label>
         {member.id in roles && <label>Роль в проекте<input value={roles[member.id]} onChange={(event) => setRoles({ ...roles, [member.id]: event.target.value })} placeholder="Например, Backend-разработчик" required /></label>}
       </article>)}</div>}

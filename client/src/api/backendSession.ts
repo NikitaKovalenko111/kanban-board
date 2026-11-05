@@ -9,18 +9,20 @@ export interface BackendSession extends TokenResponse { login: string }
 
 const sessionKey = 'kanban.backend.session.v1'
 
-export function validateTokens(value: unknown): TokenResponse {
+export function validateTokens(value: unknown, fallbackUserId?: string): TokenResponse {
   if (!value || typeof value !== 'object') throw new Error('Сервер вернул некорректный ответ авторизации')
   const dto = value as Record<string, unknown>
-  if (typeof dto.user_id !== 'string' || !dto.user_id || typeof dto.access_token !== 'string' || !dto.access_token || typeof dto.refresh_token !== 'string' || !dto.refresh_token || typeof dto.token_type !== 'string' || dto.token_type.toLowerCase() !== 'bearer') throw new Error('Сервер вернул некорректный ответ авторизации')
-  return { user_id: dto.user_id, access_token: dto.access_token, refresh_token: dto.refresh_token, token_type: 'Bearer' }
+  const userId = typeof dto.user === 'object' && dto.user ? (dto.user as Record<string, unknown>).id : fallbackUserId
+  if (typeof userId !== 'string' || !userId || typeof dto.accessToken !== 'string' || !dto.accessToken || typeof dto.refreshToken !== 'string' || !dto.refreshToken || typeof dto.expiresIn !== 'number' || dto.expiresIn <= 0) throw new Error('Сервер вернул некорректный ответ авторизации')
+  return { user_id: userId, access_token: dto.accessToken, refresh_token: dto.refreshToken, token_type: 'Bearer' }
 }
 
 export function readBackendSession(): BackendSession | null {
   try {
     const saved = JSON.parse(sessionStorage.getItem(sessionKey) ?? 'null')
     if (!saved || typeof saved.login !== 'string') return null
-    return { ...validateTokens(saved), login: saved.login }
+    if (typeof saved.user_id !== 'string' || typeof saved.access_token !== 'string' || typeof saved.refresh_token !== 'string' || !saved.access_token || !saved.refresh_token) return null
+    return saved as BackendSession
   } catch { sessionStorage.removeItem(sessionKey); return null }
 }
 export const saveBackendSession = (session: BackendSession) => sessionStorage.setItem(sessionKey, JSON.stringify(session))

@@ -1,3 +1,4 @@
+import type { EntityId } from '../types'
 import axios, { type AxiosRequestConfig, type AxiosResponse } from 'axios'
 import { loadFile, saveFile } from './fileStorage'
 import { visibleSchedule } from '../utils/schedule'
@@ -8,7 +9,7 @@ import type { EventPrivacy, EventReminders, TaskStatusUpdate } from '../types'
 import type { AddProjectSourcesPayload, AddTaskCommentPayload, Attachment, LoginCredentials, NewProject, NewScheduleEvent, NewTask, NewTeamMember, Project, ProjectSource, ScheduleEvent, Task, TaskComment, TaskHistoryEvent, TaskStatus, TeamMember, TeamSettings, User } from '../types'
 
 interface Account extends TeamMember { password: string }
-interface ProjectUpdate { id: string; name: string; description: string; color: string; members: { userId: number; role: string }[] }
+interface ProjectUpdate { id: string; name: string; description: string; color: string; members: { userId: EntityId; role: string }[] }
 
 let teamSettings: TeamSettings = {
   name: 'Веб-продукт',
@@ -61,7 +62,7 @@ function createInitialHistory(task: Omit<Task, 'history' | 'comments'>): TaskHis
 }
 
 let tasks: Task[] = taskSeeds.map((task) => {
-  const projectId = [101, 103, 107, 109].includes(task.taskId) ? 'ai-hackathon' : [105, 108, 111].includes(task.taskId) ? 'web-course' : 'internal-portal'
+  const projectId = [101, 103, 107, 109].includes(Number(task.taskId)) ? 'ai-hackathon' : [105, 108, 111].includes(Number(task.taskId)) ? 'web-course' : 'internal-portal'
   const withProject: Omit<Task, 'history' | 'comments'> = { ...task, projectId }
   const normalized = task.taskId === 104 ? { ...withProject, completedAt: '2026-10-12' } : withProject
   const comments: TaskComment[] = task.taskId === 103 ? [{ id: 'comment-103-1', author: 'Алексей Морозов', text: 'Проверьте также горизонтальную ориентацию планшета.', createdAt: '2026-10-12T14:20:00' }] : []
@@ -294,7 +295,7 @@ client.defaults.adapter = async (config) => {
     const previous = tasks.find((task) => task.taskId === id)
     if (!previous) throw new Error('Задача не найдена')
     if (previous.taskStatus !== 'waiting' && previous.taskStatus !== 'working') throw new Error('Исполнителя можно менять только в ожидании или в работе')
-    const { assigneeId } = JSON.parse(config.data as string) as { assigneeId: number | null }
+    const { assigneeId } = JSON.parse(config.data as string) as { assigneeId: EntityId | null }
     const assignee = assigneeId === null ? undefined : accounts.find((account) => account.id === assigneeId && account.active)
     if (assigneeId !== null && !assignee) throw new Error('Выберите активного участника')
     if (!assignee && previous.taskStatus === 'working') throw new Error('У задачи в работе должен быть исполнитель')
@@ -352,13 +353,13 @@ client.defaults.adapter = async (config) => {
 }
 
 export const mockApi = {
-  updateEventReminders: async (id: number, reminders: EventReminders) => (await client.patch<ScheduleEvent>(`/schedule/${id}/reminders`, reminders)).data,
+  updateEventReminders: async (id: EntityId, reminders: EventReminders) => (await client.patch<ScheduleEvent>(`/schedule/${id}/reminders`, reminders)).data,
   uploadAttachment: async (file: File) => {
     const form = new FormData()
     form.append('file', file)
     return (await client.post<Attachment>('/attachments', form)).data
   },
-  resetPassword: async (id: number) => (await client.post<{ password: string }>(`/team/members/${id}/password`)).data,
+  resetPassword: async (id: EntityId) => (await client.post<{ password: string }>(`/team/members/${id}/password`)).data,
   changePassword: async (payload: { currentPassword: string; newPassword: string }) => (await client.post<{ success: boolean }>('/users/me/password', payload)).data,
   updatePrivacy: async (eventPrivacy: EventPrivacy) => (await client.patch<User>('/users/me', { eventPrivacy })).data,
   getProjects: async () => (await client.get<Project[]>('/projects')).data,
@@ -366,17 +367,17 @@ export const mockApi = {
   updateProject: async (project: ProjectUpdate) => (await client.patch<{ project: Project; members: TeamMember[] }>(`/projects/${project.id}`, project)).data,
   addProjectSources: async (payload: AddProjectSourcesPayload) => (await client.post<Project>(`/projects/${payload.projectId}/sources`, payload)).data,
   deleteProjectSource: async (projectId: string, sourceId: string) => (await client.delete<Project>(`/projects/${projectId}/sources/${sourceId}`)).data,
-  getSchedule: async (projectId: string) => (await client.get<ScheduleEvent[]>(`/schedule/${projectId}`)).data,
+  getSchedule: async (projectId: string, _query?: import('../types').ScheduleQuery) => (await client.get<ScheduleEvent[]>(`/schedule/${projectId}`)).data,
   createScheduleEvent: async (event: NewScheduleEvent) => (await client.post<ScheduleEvent>('/schedule', event)).data,
   downloadAttachment: async (attachmentId: string) => (await client.get<Blob>(`/attachments/${attachmentId}/download`, { responseType: 'blob' })).data,
   login: async (credentials: LoginCredentials) => (await client.post<User>('/auth/login', credentials)).data,
   getTeam: async () => (await client.get<{ settings: TeamSettings; members: TeamMember[] }>('/team')).data,
   updateTeam: async (settings: TeamSettings) => (await client.patch<TeamSettings>('/team', settings)).data,
   createMember: async (member: NewTeamMember) => (await client.post<TeamMember>('/team/members', member)).data,
-  toggleMember: async (id: number, active: boolean) => (await client.patch<TeamMember>(`/team/members/${id}`, { active })).data,
+  toggleMember: async (id: EntityId, active: boolean) => (await client.patch<TeamMember>(`/team/members/${id}`, { active })).data,
   getTasks: async () => (await client.get<Task[]>('/tasks')).data,
   createTask: async (task: NewTask) => (await client.post<Task>('/tasks', task)).data,
-  assignTask: async (taskId: number, assigneeId: number | null) => (await client.patch<Task>(`/tasks/${taskId}/assignee`, { assigneeId })).data,
-  updateTaskStatus: async (taskId: number, status: TaskStatus, author: string, revisionComment?: string, resultAttachments?: Attachment[], assignee?: string) => (await client.patch<Task>(`/tasks/${taskId}`, { status, author, revisionComment, resultAttachments, assignee })).data,
+  assignTask: async (taskId: EntityId, assigneeId: EntityId | null) => (await client.patch<Task>(`/tasks/${taskId}/assignee`, { assigneeId })).data,
+  updateTaskStatus: async (taskId: EntityId, status: TaskStatus, author: string, revisionComment?: string, resultAttachments?: Attachment[], assignee?: string) => (await client.patch<Task>(`/tasks/${taskId}`, { status, author, revisionComment, resultAttachments, assignee })).data,
   addTaskComment: async (payload: AddTaskCommentPayload) => (await client.post<Task>(`/tasks/${payload.taskId}/comments`, payload)).data,
 }

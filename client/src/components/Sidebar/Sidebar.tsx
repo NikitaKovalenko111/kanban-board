@@ -1,3 +1,6 @@
+import { isBackendMode } from '../../api/config'
+import { backendLogoutRequest } from '../../store/slices/backendAuthSlice'
+import { useServerNotifications } from './useServerNotifications'
 import Icon from '../Icon/Icon'
 import { useEffect, useState } from 'react'
 import { Link, NavLink, useNavigate } from 'react-router-dom'
@@ -15,31 +18,35 @@ interface Props { open: boolean; onClose: () => void }
 const Sidebar = ({ open, onClose }: Props) => {
   const dispatch = useAppDispatch()
   const navigate = useNavigate()
+  const signingOut = useAppSelector((state) => state.backendAuth?.signingOut ?? false)
   const user = useAppSelector((state) => state.auth.user)!
   const activeProjectId = useAppSelector((state) => state.projects.activeProjectId)
   const tasks = useAppSelector((state) => state.tasks.items)
   const scheduleItems = useAppSelector((state) => state.schedule.items)
   const [events, setEvents] = useState<ScheduleEvent[]>([])
   const [notificationsOpen, setNotificationsOpen] = useState(false)
+  const serverNotifications = useServerNotifications(notificationsOpen)
   const [readIds, setReadIds] = useState<string[]>(() => {
     try { return JSON.parse(localStorage.getItem(`notification-reads-${user.id}`) ?? '[]') } catch { return [] }
   })
   useEffect(() => { dispatch(loadTasksRequest()) }, [dispatch])
   useEffect(() => {
+    if (isBackendMode) return
     let cancelled = false
     void api.getSchedule('all').then((items) => { if (!cancelled) setEvents(items) }).catch(() => {})
     return () => { cancelled = true }
   }, [user.id, scheduleItems])
-  const notifications: NotificationItem[] = [
+  const notifications: NotificationItem[] = isBackendMode ? serverNotifications.items : [
     ...tasks.filter((task) => user.role === 'lead' || task.assignee === user.name).flatMap((task) => [
       ...task.comments.filter((comment) => comment.author !== user.name).map((comment) => ({ id: comment.id, title: `Комментарий к задаче #${task.taskId}`, text: `${comment.author}: ${comment.text}`, createdAt: comment.createdAt, href: `/?task=${task.taskId}` })),
       ...task.history.filter((event) => event.author !== user.name).map((event) => ({ id: event.id, title: event.type === 'assignment' ? 'Изменён исполнитель задачи' : event.type === 'revision' ? 'Задача возвращена на доработку' : 'Изменён статус задачи', text: `${task.taskName}${event.comment ? ': ' + event.comment : ''}`, createdAt: event.createdAt, href: `/?task=${task.taskId}` })),
     ]),
     ...events.filter((event) => new Date(event.startsAt) >= new Date() && (eventCategory(event) !== 'personal' || event.ownerId === user.id)).map((event) => ({ id: `schedule-${event.id}`, title: 'Предстоящее событие', text: event.title, createdAt: event.startsAt, href: `/schedule?date=${event.startsAt.slice(0, 10)}` })),
   ].sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+  const effectiveReadIds = isBackendMode ? serverNotifications.readIds : readIds
   const notificationIds = notifications.map((item) => item.id).join('|')
   useEffect(() => {
-    if (!notificationsOpen) return
+    if (!notificationsOpen || isBackendMode) return
     setReadIds((current) => {
       const next = [...new Set([...current, ...notificationIds.split('|').filter(Boolean)])]
       if (next.length === current.length) return current
@@ -48,11 +55,12 @@ const Sidebar = ({ open, onClose }: Props) => {
     })
   }, [notificationsOpen, notificationIds, user.id])
   const markRead = (ids: string[]) => {
+    if (isBackendMode) return
     const next = [...new Set([...readIds, ...ids])]
     setReadIds(next)
     localStorage.setItem(`notification-reads-${user.id}`, JSON.stringify(next))
   }
-  const unreadCount = notifications.filter((item) => !readIds.includes(item.id)).length
+  const unreadCount = notifications.filter((item) => !effectiveReadIds.includes(item.id)).length
   const projectRole = activeProjectId === 'all' ? (user.role === 'lead' ? 'Капитан' : 'Участник') : user.projectRoles?.[activeProjectId] ?? 'Участник проекта'
   return (
     <>
@@ -70,9 +78,9 @@ const Sidebar = ({ open, onClose }: Props) => {
           <NavLink to="/profile" onClick={onClose}>◎ <span>Мой профиль</span></NavLink>
           <NavLink to="/settings" onClick={onClose}>⚙ <span>Настройки</span></NavLink>
         </nav>
-        <button className="sidebar__logout" onClick={() => dispatch(logout())}><Icon name="arrow-right" /> Выйти</button>
+        <button className="sidebar__logout" disabled={signingOut} onClick={() => dispatch(isBackendMode ? backendLogoutRequest() : logout())}><Icon name="arrow-right" /> {signingOut ? 'Выходим…' : 'Выйти'}</button>
       </aside>
-      {notificationsOpen && <NotificationsModal items={notifications} readIds={readIds} onClose={() => setNotificationsOpen(false)} onOpen={(href) => { setNotificationsOpen(false); onClose(); navigate(href) }} />}
+      {notificationsOpen && <NotificationsModal items={notifications} readIds={effectiveReadIds} error={serverNotifications.error} onClose={() => setNotificationsOpen(false)} onOpen={(href) => { setNotificationsOpen(false); onClose(); navigate(href) }} />}
     </>
   )
 }

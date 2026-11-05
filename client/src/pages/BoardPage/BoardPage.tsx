@@ -1,3 +1,4 @@
+import { isBackendMode } from '../../api/config'
 import Icon from '../../components/Icon/Icon'
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type JSX, type TouchEvent } from 'react'
 import type React from 'react'
@@ -26,8 +27,8 @@ const BoardPage: React.FC<PropsType> = (): JSX.Element => {
     const swiped = useRef(false)
 
     useEffect(() => { if (!items.length) dispatch(loadTasksRequest()) }, [dispatch, items.length])
-    const notificationTaskId = Number(searchParams.get('task'))
-    const notificationTask = items.find((task) => task.taskId === notificationTaskId)
+    const notificationTaskId = searchParams.get('task')
+    const notificationTask = items.find((task) => String(task.taskId) === notificationTaskId)
     const allProjectsSelected = activeProjectId === 'all'
     const filtered = useMemo(() => items.filter((task) => (allProjectsSelected || task.projectId === activeProjectId) && `${task.taskName} ${task.taskDesc}`.toLowerCase().includes(query.toLowerCase())), [activeProjectId, allProjectsSelected, items, query])
     const latestDoneIds = useMemo(() => new Set([...items].filter((task) => (allProjectsSelected || task.projectId === activeProjectId) && task.taskStatus === 'done').sort((a, b) => (b.completedAt ?? '').localeCompare(a.completedAt ?? '')).slice(0, 5).map((task) => task.taskId)), [activeProjectId, allProjectsSelected, items])
@@ -62,6 +63,7 @@ const BoardPage: React.FC<PropsType> = (): JSX.Element => {
                   <h1>Kanban-доска</h1>
                   {user.role === 'lead' && !allProjectsSelected && <button className="button" onClick={openCreate}><Icon name="plus" /> Новая задача</button>}
                 </div>
+                {isBackendMode && user.role !== 'lead' && !allProjectsSelected && !user.projectRoles[activeProjectId] && <p className="error-banner">Вы не участник этого проекта. Доступ к задачам открывает тимлид.</p>}
                 {error && <div className="error-banner">{error}</div>}
                 <div className="board-slider" onTouchStart={handleTouchStart} onTouchEnd={handleTouchEnd} onTouchCancel={() => { touchStart.current = null }} onClickCapture={(event) => { if (swiped.current) { event.preventDefault(); event.stopPropagation(); swiped.current = false } }}>
                   <div className="board-page__tables">

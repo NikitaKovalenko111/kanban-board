@@ -1,3 +1,4 @@
+import type { EntityId } from '../../types'
 import type { PayloadAction } from '@reduxjs/toolkit'
 import { call, put, takeLatest } from 'redux-saga/effects'
 import { api } from '../../api'
@@ -16,7 +17,7 @@ function* createMemberWorker(action: PayloadAction<NewTeamMember>) {
   try { const member: TeamMember = yield call(api.createMember, action.payload); yield put(createMemberSuccess(member)) }
   catch (error) { yield put(teamFailure(error instanceof Error ? error.message : 'Не удалось создать аккаунт')) }
 }
-function* toggleMemberWorker(action: PayloadAction<{ id: number; active: boolean }>) {
+function* toggleMemberWorker(action: PayloadAction<{ id: EntityId; active: boolean }>) {
   try { const member: TeamMember = yield call(api.toggleMember, action.payload.id, action.payload.active); yield put(updateMemberSuccess(member)) }
   catch (error) { yield put(teamFailure(error instanceof Error ? error.message : 'Не удалось изменить доступ')) }
 }
