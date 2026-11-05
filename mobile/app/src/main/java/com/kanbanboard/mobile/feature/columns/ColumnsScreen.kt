@@ -21,15 +21,10 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.outlined.Delete
-import androidx.compose.material.icons.outlined.KeyboardArrowDown
-import androidx.compose.material.icons.outlined.KeyboardArrowUp
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
@@ -56,8 +51,6 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.kanbanboard.mobile.core.data.BoardRepository
-import com.kanbanboard.mobile.core.designsystem.AppButton
-import com.kanbanboard.mobile.core.designsystem.AppButtonKind
 import com.kanbanboard.mobile.core.designsystem.AppPalette
 import com.kanbanboard.mobile.core.designsystem.AppTopBar
 import com.kanbanboard.mobile.core.designsystem.BackButton
@@ -67,7 +60,6 @@ import com.kanbanboard.mobile.core.model.ColumnId
 import com.kanbanboard.mobile.core.model.ColumnKind
 import com.kanbanboard.mobile.core.model.ProjectId
 import com.kanbanboard.mobile.di.LocalAppContainer
-import java.util.UUID
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -89,9 +81,9 @@ data class ColumnsUiState(
 )
 
 /**
- * Настройка колонок (спринт 3): у колонки только название и цвет; можно добавлять свои этапы
- * («Pull request»), менять порядок стрелками и удалять. Роль колонки задаёт её место:
- * первая — новые задачи, предпоследняя — проверка, последняя — выполненные.
+ * Настройка колонок: на доске всегда четыре стандартные колонки (Ожидает / В работе / На проверке /
+ * Выполнено), у них меняются только название и цвет. Свои этапы, порядок и удаление убраны —
+ * в вебе их нет, и команда решила их не делать.
  */
 class ColumnsViewModel(private val projectId: ProjectId, private val board: BoardRepository) : ViewModel() {
     private val _state = MutableStateFlow(ColumnsUiState())
@@ -120,20 +112,6 @@ class ColumnsViewModel(private val projectId: ProjectId, private val board: Boar
     fun recolor(key: String, color: Long) = edit { list ->
         val i = list.indexOfFirst { it.key == key }
         if (i >= 0) list[i] = list[i].copy(color = color)
-    }
-
-    fun move(key: String, delta: Int) = edit { list ->
-        val i = list.indexOfFirst { it.key == key }
-        val j = i + delta
-        if (i >= 0 && j in list.indices) list.add(j, list.removeAt(i))
-    }
-
-    fun remove(key: String) = edit { list -> list.removeAll { it.key == key } }
-
-    /** Новый этап добавляется перед «проверкой», чтобы не сдвинуть роли последних колонок. */
-    fun add() = edit { list ->
-        val index = (list.size - 2).coerceAtLeast(0)
-        list.add(index, EditableColumn(UUID.randomUUID().toString(), null, "", AppPalette[index % AppPalette.size]))
     }
 
     fun save() {
@@ -182,7 +160,7 @@ private fun ColumnsScreen(state: ColumnsUiState, vm: ColumnsViewModel, onClose: 
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             itemsIndexed(state.columns, key = { _, item -> item.key }) { index, column ->
-                Panel(contentPadding = PaddingValues(start = 12.dp, end = 4.dp, top = 8.dp, bottom = 8.dp)) {
+                Panel(contentPadding = PaddingValues(start = 12.dp, end = 4.dp, top = 12.dp, bottom = 4.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         // Нажатие на кружок — выбор цвета колонки.
                         Box(
@@ -201,31 +179,12 @@ private fun ColumnsScreen(state: ColumnsUiState, vm: ColumnsViewModel, onClose: 
                             onValueChange = { vm.rename(column.key, it) },
                             placeholder = { Text("Название") },
                             singleLine = true,
-                            supportingText = roleHint(index, state.columns.size)?.let { hint -> { Text(hint) } },
+                            supportingText = { Text(roleHint(index, state.columns.size)) },
                             modifier = Modifier.weight(1f),
                         )
-                        Column {
-                            IconButton(onClick = { vm.move(column.key, -1) }, enabled = index > 0) {
-                                Icon(Icons.Outlined.KeyboardArrowUp, contentDescription = "Выше")
-                            }
-                            IconButton(onClick = { vm.move(column.key, +1) }, enabled = index < state.columns.lastIndex) {
-                                Icon(Icons.Outlined.KeyboardArrowDown, contentDescription = "Ниже")
-                            }
-                        }
-                        IconButton(onClick = { vm.remove(column.key) }, enabled = state.columns.size > ColumnKind.MIN_COLUMNS) {
-                            Icon(Icons.Outlined.Delete, contentDescription = "Удалить колонку")
-                        }
+                        Spacer(Modifier.width(12.dp))
                     }
                 }
-            }
-            item {
-                AppButton(
-                    "Добавить этап",
-                    onClick = vm::add,
-                    kind = AppButtonKind.SECONDARY,
-                    icon = Icons.Filled.Add,
-                    modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
-                )
             }
             state.error?.let { error ->
                 item { Text(error, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium) }
@@ -247,12 +206,12 @@ private fun ColumnsScreen(state: ColumnsUiState, vm: ColumnsViewModel, onClose: 
     }
 }
 
-/** Подпись под первой и последними колонками: их роль в процессе. */
-private fun roleHint(index: Int, count: Int): String? = when (ColumnKind.forPosition(index, count)) {
+/** Подпись под колонкой: её роль в процессе. */
+private fun roleHint(index: Int, count: Int): String = when (ColumnKind.forPosition(index, count)) {
     ColumnKind.BACKLOG -> "Новые задачи"
+    ColumnKind.IN_PROGRESS -> "Задачи в работе"
     ColumnKind.REVIEW -> "Проверка капитаном"
     ColumnKind.DONE -> "Выполненные"
-    ColumnKind.IN_PROGRESS -> null
 }
 
 /** Выбор цвета из общей палитры приложения. */

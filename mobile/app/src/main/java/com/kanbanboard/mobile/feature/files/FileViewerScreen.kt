@@ -88,11 +88,15 @@ fun FileViewerRouteScreen(fileRef: String, name: String, projectName: String, on
     val scope = rememberCoroutineScope()
     val snackbar = remember { SnackbarHostState() }
     val settings by c.settingsRepository.settings.collectAsStateWithLifecycle(initialValue = null)
-    val file = remember(fileRef) { c.fileStore.file(fileRef)?.takeIf { it.exists() } }
+    val load by produceState<Pair<Boolean, String?>>(false to null, fileRef) {
+        value = true to runCatching { c.resolveFile(fileRef, name) }.getOrNull()
+    }
+    val resolvedRef = load.second
+    val file = remember(resolvedRef) { resolvedRef?.let(c.fileStore::file)?.takeIf { it.exists() } }
 
     fun save(tree: Uri) {
         scope.launch {
-            runCatching { c.fileStore.exportToFolder(fileRef, tree, projectName) }
+            runCatching { c.fileStore.exportToFolder(resolvedRef ?: fileRef, tree, projectName) }
                 .onSuccess { snackbar.showSnackbar("Сохранено: $projectName/$it") }
                 .onFailure { snackbar.showSnackbar(it.message ?: "Не удалось сохранить файл") }
         }
@@ -146,12 +150,16 @@ fun FileViewerRouteScreen(fileRef: String, name: String, projectName: String, on
         },
     ) { padding ->
         val modifier = Modifier.fillMaxSize().padding(padding)
+        if (!load.first) {
+            Box(modifier, contentAlignment = Alignment.Center) { CircularProgressIndicator() }
+            return@Scaffold
+        }
         if (file == null) {
             EmptyState(
                 Icons.Outlined.InsertDriveFile,
                 "Файла нет на устройстве",
                 modifier,
-                "В демо-режиме доступны только файлы, добавленные на этом телефоне.",
+                "Не удалось загрузить файл.",
             )
             return@Scaffold
         }

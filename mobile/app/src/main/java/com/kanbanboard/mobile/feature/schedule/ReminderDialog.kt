@@ -77,7 +77,7 @@ fun ReminderDialog(
                         )
                     }
                 }
-                Caption("свой интервал", modifier = Modifier.padding(top = 4.dp))
+                Caption("Свой интервал", modifier = Modifier.padding(top = 4.dp))
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     OutlinedTextField(
                         value = amount,

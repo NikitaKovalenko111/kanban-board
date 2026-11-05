@@ -97,22 +97,27 @@ class DemoBackendTest {
     }
 
     @Test
-    fun `board keeps at least four columns and blocks removing column with tasks`() = runTest {
+    fun `columns can only be renamed and recolored`() = runTest {
         val team = TestTeam.create()
         val columns = team.columns()
+        val drafts = columns.map { ColumnDraft(it.id, it.title, it.color) }
+        // Добавить свой этап, удалить или переставить колонку нельзя.
         expectError(AppError.Validation::class.java) {
-            team.backend.saveColumns(team.lead, team.project.id, columns.take(2).map { ColumnDraft(it.id, it.title, it.color) })
+            team.backend.saveColumns(team.lead, team.project.id, drafts + ColumnDraft(null, "Pull request", 0xFF6576DF))
         }
-        // Свой этап перед проверкой становится рабочим.
-        val drafts = columns.map { ColumnDraft(it.id, it.title, it.color) }.toMutableList()
-        drafts.add(2, ColumnDraft(null, "Pull request", 0xFF6576DF))
-        team.backend.saveColumns(team.lead, team.project.id, drafts)
-        assertEquals(ColumnKind.IN_PROGRESS, team.columns().first { it.title == "Pull request" }.kind)
+        expectError(AppError.Validation::class.java) { team.backend.saveColumns(team.lead, team.project.id, drafts.drop(1)) }
+        expectError(AppError.Validation::class.java) { team.backend.saveColumns(team.lead, team.project.id, drafts.reversed()) }
+        expectError(AppError.Forbidden::class.java) { team.backend.saveColumns(team.samir, team.project.id, drafts) }
 
-        team.newTask()
-        expectError(AppError.Validation::class.java) {
-            team.backend.saveColumns(team.lead, team.project.id, team.columns().drop(1).map { ColumnDraft(it.id, it.title, it.color) })
-        }
+        team.backend.saveColumns(
+            team.lead, team.project.id,
+            drafts.mapIndexed { i, d -> if (i == 1) d.copy(title = "Делаем", color = 0xFF3A9BDC) else d },
+        )
+        val renamed = team.columns()[1]
+        assertEquals("Делаем", renamed.title)
+        assertEquals(0xFF3A9BDC, renamed.color)
+        assertEquals(ColumnKind.IN_PROGRESS, renamed.kind)
+        assertEquals(4, team.columns().size)
     }
 
     @Test

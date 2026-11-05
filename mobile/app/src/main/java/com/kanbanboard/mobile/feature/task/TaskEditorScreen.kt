@@ -189,7 +189,7 @@ private fun TaskEditorScreen(
                     Column(Modifier.weight(1f)) {
                         Text(state.assigneeName(), style = MaterialTheme.typography.bodyLarge)
                         Caption(
-                            if (assigned) "нажмите, чтобы сменить" else "свободная — возьмёт любой участник проекта",
+                            if (assigned) "Нажмите, чтобы сменить" else "Свободная — возьмёт любой участник проекта",
                             maxLines = 2,
                         )
                     }

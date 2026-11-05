@@ -47,12 +47,14 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.kanbanboard.mobile.core.designsystem.AppTopBar
+import com.kanbanboard.mobile.core.designsystem.Caption
 import com.kanbanboard.mobile.core.designsystem.BackButton
 import com.kanbanboard.mobile.core.designsystem.EmptyState
 import com.kanbanboard.mobile.core.designsystem.SpecRow
 import com.kanbanboard.mobile.core.designsystem.Tag
 import com.kanbanboard.mobile.core.designsystem.UserAvatar
 import com.kanbanboard.mobile.core.designsystem.ext
+import com.kanbanboard.mobile.core.features.Features
 import com.kanbanboard.mobile.core.model.NewAccount
 import com.kanbanboard.mobile.core.model.StudyGroup
 import com.kanbanboard.mobile.core.model.TeamMember
@@ -95,7 +97,7 @@ fun MembersRouteScreen(onBack: () -> Unit) {
     ) { padding ->
         LazyColumn(
             modifier = Modifier.fillMaxSize().padding(padding),
-            contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = 96.dp),
+            contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = if (state.isCaptain) 96.dp else 16.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             item {
@@ -239,10 +241,18 @@ private fun MemberDialog(
                 if (canManage) {
                     Column(Modifier.padding(top = 8.dp)) {
                         TextButton(onClick = onResetPassword) { Text("Сбросить пароль") }
-                        TextButton(onClick = onToggleCaptain) {
+                        TextButton(onClick = onToggleCaptain, enabled = Features.CHANGE_TEAM_ROLE) {
                             Text(if (member.role == TeamRole.CAPTAIN) "Снять роль капитана" else "Сделать капитаном")
                         }
-                        TextButton(onClick = onDelete) { Text("Удалить аккаунт", color = MaterialTheme.ext.danger) }
+                        TextButton(onClick = onDelete, enabled = Features.DELETE_ACCOUNT) {
+                            Text(
+                                "Удалить аккаунт",
+                                color = if (Features.DELETE_ACCOUNT) MaterialTheme.ext.danger else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f),
+                            )
+                        }
+                        if (!Features.CHANGE_TEAM_ROLE || !Features.DELETE_ACCOUNT) {
+                            Caption(Features.BLOCKED_HINT, modifier = Modifier.padding(start = 12.dp))
+                        }
                     }
                 }
             }

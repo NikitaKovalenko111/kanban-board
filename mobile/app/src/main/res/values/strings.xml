@@ -1,4 +1,4 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">Код в сапоге</string>
+    <!-- app_name задаётся во flavor'ах clean и mock (app/build.gradle.kts). -->
 </resources>

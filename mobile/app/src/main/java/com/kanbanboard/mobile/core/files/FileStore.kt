@@ -28,7 +28,7 @@ class FileStore(context: Context) {
     fun file(fileRef: String): File? {
         val file = File(root, fileRef).canonicalFile
         // Защита от выхода за пределы хранилища через «../» в ссылке.
-        if (!file.path.startsWith(root.canonicalPath) || !file.isFile) return null
+        if (!file.path.startsWith(root.canonicalPath + File.separator) || !file.isFile) return null
         return file
     }
 
@@ -68,6 +68,24 @@ class FileStore(context: Context) {
             throw e
         }
         PickedFile(safeName, copied, "$folder/$safeName")
+    }
+
+    /** Кладёт текстовый файл в хранилище (данные мок-версии); возвращает (ссылка, размер). */
+    fun writeText(name: String, content: String): Pair<String, Long> {
+        val safeName = sanitize(name)
+        val folder = UUID.randomUUID().toString()
+        val target = File(File(root, folder).apply { mkdirs() }, safeName)
+        target.writeText(content)
+        return "$folder/$safeName" to target.length()
+    }
+
+    /** Кэш файла, скачанного с backend через JWT. */
+    suspend fun cacheRemote(name: String, bytes: ByteArray): String = withContext(Dispatchers.IO) {
+        val safeName = sanitize(name)
+        val folder = UUID.randomUUID().toString()
+        val target = File(File(root, folder).apply { mkdirs() }, safeName)
+        target.writeBytes(bytes)
+        "$folder/$safeName"
     }
 
     fun delete(fileRef: String) {

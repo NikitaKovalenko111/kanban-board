@@ -84,7 +84,8 @@ class ProfileViewModel(
     fun setPhoto(uri: Uri) = viewModelScope.launch {
         val previous = state.value.session?.user?.photo
         try {
-            val picked = files.import(uri, maxBytes = 15L * 1024 * 1024)
+            val photoLimit = if (com.kanbanboard.mobile.BuildConfig.BACKEND_BASE_URL.isBlank()) 15L else 5L
+            val picked = files.import(uri, maxBytes = photoLimit * 1024 * 1024)
             val path = files.file(picked.fileRef)?.path ?: return@launch
             team.updateMyPhoto(path)
                 .onSuccess { previous?.let(::deleteLocal) }

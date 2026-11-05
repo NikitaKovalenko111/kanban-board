@@ -39,6 +39,8 @@ enum class LessonsOrigin {
     CACHE,
     /** ИСУ недоступна и кэша нет — пар нет (состояние UNAVAILABLE в БД). */
     UNAVAILABLE,
+    /** ИСУ недоступна и кэша нет — показан пример расписания (только мок-версия). */
+    EXAMPLE,
 }
 
 /** Расписание группы вместе с источником данных (fallback-режим из ТЗ). */
@@ -134,4 +136,11 @@ object ReminderPresets {
         }
         return "за " + parts.joinToString(" ").ifEmpty { "0 мин" }
     }
+
+    /** Отдельная подпись (плашка, тег): с заглавной буквы — «За 15 мин». */
+    fun title(minutes: Int): String = label(minutes).replaceFirstChar { it.uppercase() }
+
+    /** Список через запятую с заглавной только в начале — «За 1 ч, за 15 мин». */
+    fun list(minutes: Collection<Int>): String =
+        minutes.sorted().joinToString(", ") { label(it) }.replaceFirstChar { it.uppercase() }
 }

@@ -33,9 +33,9 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.StateFlow
 
 /*
- * Контракты данных. Сейчас реализованы демо-версии (core/data/demo), сетевые появятся,
- * когда будет OpenAPI. Экраны зависят только от этих интерфейсов.
- * Все мутации возвращают Result: ошибки — AppError с текстом для пользователя.
+ * Контракты данных. Экраны зависят только от этих интерфейсов; реализации выбираются
+ * в AppContainer: автономная demo или сетевая по backend/docs/openapi.yaml.
+ * Все мутации возвращают Result с сообщением об ошибке для пользователя.
  */
 
 interface SessionRepository {
