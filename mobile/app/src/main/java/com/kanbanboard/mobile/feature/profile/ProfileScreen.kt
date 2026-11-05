@@ -110,13 +110,14 @@ fun ProfileRouteScreen(
                 }
             }
             item {
-                // Участники свёрнуты в одну плашку: полный список с поиском — на отдельном экране.
+                // Участники свёрнуты в одну плашку: полный список с поиском — на отдельном экране «Участники».
                 Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)) {
                     MenuRow(
                         Icons.Outlined.Group,
-                        "Участники команды",
-                        "${state.activeMembers.size} в команде «${state.teamName}»",
+                        "Участники",
+                        null,
                         onOpenMembers,
+                        trailingText = "${state.activeMembers.size}",
                     )
                 }
             }
@@ -134,15 +135,26 @@ fun ProfileRouteScreen(
 }
 
 @Composable
-private fun MenuRow(icon: ImageVector, title: String, subtitle: String, onClick: () -> Unit, badge: Int = 0) {
+private fun MenuRow(
+    icon: ImageVector,
+    title: String,
+    subtitle: String?,
+    onClick: () -> Unit,
+    badge: Int = 0,
+    trailingText: String? = null,
+) {
     ListItem(
         headlineContent = { Text(title) },
-        supportingContent = { Text(subtitle) },
+        supportingContent = subtitle?.let { { Text(it) } },
         leadingContent = { Icon(icon, contentDescription = null) },
         trailingContent = {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 if (badge > 0) {
                     Badge { Text("$badge") }
+                    Spacer(Modifier.width(8.dp))
+                }
+                if (trailingText != null) {
+                    Text(trailingText, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     Spacer(Modifier.width(8.dp))
                 }
                 Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null)

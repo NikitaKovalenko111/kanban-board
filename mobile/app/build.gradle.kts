@@ -19,8 +19,8 @@ android {
         applicationId = "com.kanbanboard.mobile"
         minSdk = 29
         targetSdk = 37
-        versionCode = 6
-        versionName = "0.5.1-demo"
+        versionCode = 8
+        versionName = "0.5.3-demo"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
         buildConfigField("String", "ISU_URL_TEMPLATE", "\"$isuUrlTemplate\"")
@@ -34,6 +34,24 @@ android {
         }
     }
 
+    // Две версии приложения, ставятся рядом (у mock свой applicationId и свои данные):
+    //  clean — чистый старт: только тимлид и участник, всё остальное создают пользователи;
+    //  mock  — заполненная команда, проекты, задачи, события и файлы для показа и тестирования.
+    flavorDimensions += "data"
+    productFlavors {
+        create("clean") {
+            dimension = "data"
+            isDefault = true
+            resValue("string", "app_name", "Код в сапоге")
+        }
+        create("mock") {
+            dimension = "data"
+            applicationIdSuffix = ".mock"
+            versionNameSuffix = "-mock"
+            resValue("string", "app_name", "Код в сапоге (мок)")
+        }
+    }
+
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
@@ -42,6 +60,7 @@ android {
     buildFeatures {
         compose = true
         buildConfig = true
+        resValues = true
     }
 }
 

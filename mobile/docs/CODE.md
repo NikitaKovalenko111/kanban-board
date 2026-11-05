@@ -64,6 +64,8 @@ core/
                             SectionHeader, SpecRow, EmptyState, UserAvatar, ColorDot, Hairline
     Pickers.kt              M3-диалоги даты и времени
     Images.kt               rememberLocalImage — загрузка локальных изображений с даунсэмплингом
+  features/
+    Features.kt             переключатели функций, которых нет в вебе (заблокированы до решения команды)
   time/
     Formats.kt              дд.мм.гггг, время, размер файла
 feature/
@@ -87,6 +89,19 @@ feature/
 Ресурсы: `res/values/themes.xml` (окно и splash), `res/drawable/ic_launcher.xml`, `ic_notification.xml`,
 `res/xml/file_paths.xml` (FileProvider для `filesDir/store`).
 
+## Версии сборки (flavors)
+
+```
+app/src/clean/java/.../di/InitialData.kt   стартовые данные clean: DemoSeed (тимлид + участник), примера пар нет
+app/src/mock/java/.../di/InitialData.kt    стартовые данные mock: MockData + пример пар
+app/src/mock/java/.../di/MockData.kt       мок-команда, проекты, задачи, история, события, файлы, уведомления, пример пар
+app/src/testMock/java/.../di/MockDataTest.kt  целостность мок-данных
+```
+
+`AppContainer` вызывает `InitialData.state(...)` только при первом запуске (дальше данные берутся из `DemoStore`)
+и передаёт `InitialData.exampleLessons` в `IsuLessonsSource` как запасной вариант без сети и кэша.
+Остальной код у версий общий. Названия приложений — `resValue("string", "app_name", …)` в `app/build.gradle.kts`.
+
 ## Тесты (`app/src/test`)
 
 | Файл | Что проверяет |
@@ -100,7 +115,9 @@ feature/
 | `core/data/DemoStoreTest.kt` | сохранение и загрузка состояния и входа, повреждённый файл |
 | `core/data/IsuScheduleParserTest.kt` | разбор синтетической страницы расписания |
 
-Запуск: `./gradlew test`.
+Плюс `app/src/testMock/.../di/MockDataTest.kt` — ссылки между мок-сущностями, вход мок-аккаунтов, сохранение, пример пар.
+
+Запуск: `./gradlew test` (тесты прогоняются для обеих версий).
 
 ## Как добавить экран
 
@@ -121,15 +138,14 @@ feature/
 
 ## Расписание ИСУ
 
-Целевая архитектура: парсер ИСУ работает на backend, Android получает готовые пары через REST API. Контракт и распределение ответственности описаны в [ISU_BACKEND.md](ISU_BACKEND.md). Пункты ниже описывают только текущий демо-источник Android.
-
 - `IsuConfig` берёт шаблон адреса и названия групп из `BuildConfig` (свойства Gradle `isuUrlTemplate`, `isuGroup203`, `isuGroup204`).
 - `IsuLessonsSource.lessons()` сразу отдаёт кэш (`filesDir/isu/<группа>.json`), затем не чаще раза в 30 минут
   скачивает страницу (OkHttp), разбирает `IsuScheduleParser` и обновляет кэш. Источник данных — в `LessonsSnapshot.source`:
   `ISU`, `CACHE` (сеть недоступна) или `UNAVAILABLE` (нет ни сети, ни кэша — пар нет) — экран показывает плашку.
 - Парсер не привязан к CSS-классам: ищет заголовки дней (день недели, дата `дд.мм.гггг`) и строки таблиц со временем
   `08:00-09:35` или номером пары, вид занятия, аудиторию и преподавателя «Фамилия И.О.».
-- Проверка реальной разметки и тесты парсера переходят на backend. После подключения API прямой HTML-разбор в сетевом режиме Android не нужен.
+- **Чтобы закрепить парсер на реальной разметке:** сохранить страницу расписания из браузера
+  в `app/src/test/resources/isu_sample.html` и добавить тест в `IsuScheduleParserTest`.
 
 ## Демо-данные и сохранение
 

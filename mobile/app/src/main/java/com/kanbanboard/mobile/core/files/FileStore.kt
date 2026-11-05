@@ -70,6 +70,15 @@ class FileStore(context: Context) {
         PickedFile(safeName, copied, "$folder/$safeName")
     }
 
+    /** Кладёт текстовый файл в хранилище (данные мок-версии); возвращает (ссылка, размер). */
+    fun writeText(name: String, content: String): Pair<String, Long> {
+        val safeName = sanitize(name)
+        val folder = UUID.randomUUID().toString()
+        val target = File(File(root, folder).apply { mkdirs() }, safeName)
+        target.writeText(content)
+        return "$folder/$safeName" to target.length()
+    }
+
     fun delete(fileRef: String) {
         file(fileRef)?.parentFile?.takeIf { it.parentFile?.canonicalPath == root.canonicalPath }?.deleteRecursively()
     }

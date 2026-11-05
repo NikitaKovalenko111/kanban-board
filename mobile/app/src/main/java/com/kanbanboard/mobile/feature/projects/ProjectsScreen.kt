@@ -156,7 +156,7 @@ private fun ProjectsScreen(
         }
         LazyColumn(
             modifier = Modifier.fillMaxSize().padding(padding),
-            contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 96.dp),
+            contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = if (state.canCreate) 96.dp else 16.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             if (state.mine.isNotEmpty()) {

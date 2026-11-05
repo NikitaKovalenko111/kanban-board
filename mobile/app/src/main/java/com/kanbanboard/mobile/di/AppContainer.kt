@@ -13,7 +13,6 @@ import com.kanbanboard.mobile.core.data.demo.DemoBoardRepository
 import com.kanbanboard.mobile.core.data.demo.DemoNotificationRepository
 import com.kanbanboard.mobile.core.data.demo.DemoProjectRepository
 import com.kanbanboard.mobile.core.data.demo.DemoScheduleRepository
-import com.kanbanboard.mobile.core.data.demo.DemoSeed
 import com.kanbanboard.mobile.core.data.demo.DemoSessionRepository
 import com.kanbanboard.mobile.core.data.demo.DemoStore
 import com.kanbanboard.mobile.core.data.demo.DemoTeamRepository
@@ -43,7 +42,8 @@ class AppContainer(context: Context) {
 
     // Демо-сервер сохраняется на устройстве: созданные данные и вход переживают перезапуск.
     private val demoStore = DemoStore(app.filesDir)
-    private val backend = DemoBackend(clock = clock, initial = demoStore.loadState() ?: DemoSeed.create(clock))
+    // Стартовые данные зависят от версии сборки: clean — DemoSeed, mock — MockData (src/<flavor>/.../InitialData.kt).
+    private val backend = DemoBackend(clock = clock, initial = demoStore.loadState() ?: InitialData.state(clock, fileStore))
     private val demoSessions = DemoSessionRepository(backend, appScope, demoStore.loadSession(), demoStore::saveSession)
 
     val settingsRepository: SettingsRepository = DataStoreSettingsRepository(app)
@@ -51,7 +51,7 @@ class AppContainer(context: Context) {
     val teamRepository: TeamRepository = DemoTeamRepository(backend, demoSessions, fileStore)
     val projectRepository: ProjectRepository = DemoProjectRepository(backend, demoSessions, fileStore)
     val boardRepository: BoardRepository = DemoBoardRepository(backend, demoSessions, fileStore)
-    val scheduleRepository: ScheduleRepository = DemoScheduleRepository(backend, demoSessions, IsuLessonsSource(app, clock = clock))
+    val scheduleRepository: ScheduleRepository = DemoScheduleRepository(backend, demoSessions, IsuLessonsSource(app, clock = clock, example = InitialData.exampleLessons))
     val notificationRepository: NotificationRepository = DemoNotificationRepository(backend, demoSessions)
 
     private val reminderSync = ReminderSync(

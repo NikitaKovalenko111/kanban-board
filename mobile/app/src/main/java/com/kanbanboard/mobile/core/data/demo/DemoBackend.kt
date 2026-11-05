@@ -483,33 +483,25 @@ class DemoBackend(
 
     // ---------- Колонки ----------
 
+    /**
+     * Колонки доски: всегда четыре стандартные, меняются только название и цвет.
+     * Добавлять, удалять и переставлять колонки нельзя — в вебе этого нет (решение команды).
+     */
     suspend fun saveColumns(actor: Session, projectId: ProjectId, drafts: List<ColumnDraft>) = mutate { s ->
         if (!TaskPolicy.canManageColumns(actor)) throw AppError.Forbidden("Настраивать доску может только капитан")
         s.project(projectId)
-        if (drafts.any { it.title.isBlank() }) throw AppError.Validation("У каждой колонки должно быть название")
-        if (drafts.size < ColumnKind.MIN_COLUMNS) {
-            throw AppError.Validation("На доске должно быть не меньше ${ColumnKind.MIN_COLUMNS} колонок")
-        }
         val existing = s.columnsOf(projectId)
-        val keptIds = drafts.mapNotNull { it.id }.toSet()
-        val removed = existing.filter { it.id !in keptIds }
-        val blocked = removed.firstOrNull { column -> s.tasks.any { it.columnId == column.id } }
-        if (blocked != null) throw AppError.Validation("В колонке «${blocked.title}» есть задачи — сначала перенесите их")
-        val updated = drafts.mapIndexed { index, draft ->
-            BoardColumn(
-                draft.id ?: ColumnId(newId()), projectId, draft.title.trim(), index,
-                ColumnKind.forPosition(index, drafts.size), draft.color,
-            )
+        if (drafts.map { it.id } != existing.map { it.id }) {
+            throw AppError.Validation("Можно менять только название и цвет колонок")
         }
-        // Если колонка сменила роль, время выполнения задач в ней пересчитывается.
-        val doneIds = updated.filter { it.kind == ColumnKind.DONE }.map { it.id }.toSet()
-        val now = clock.instant()
-        val tasks = s.tasks.map { task ->
-            if (task.projectId != projectId) task
-            else if (task.columnId in doneIds) task.copy(completedAt = task.completedAt ?: now)
-            else task.copy(completedAt = null)
+        if (drafts.any { it.title.isBlank() }) throw AppError.Validation("У каждой колонки должно быть название")
+        if (drafts.any { it.title.trim().length > 40 }) throw AppError.Validation("Название колонки длиннее 40 символов")
+        val byId = drafts.associateBy { it.id }
+        val updated = existing.map { column ->
+            val draft = byId.getValue(column.id)
+            column.copy(title = draft.title.trim(), color = draft.color)
         }
-        s.copy(columns = s.columns.filterNot { it.projectId == projectId } + updated, tasks = tasks) to Unit
+        s.copy(columns = s.columns.filterNot { it.projectId == projectId } + updated) to Unit
     }
 
     companion object {
