@@ -26,6 +26,10 @@ type requestErrorLogs struct {
 
 type requestErrorLogsContextKey struct{}
 
+func (rw *responseWriter) Unwrap() http.ResponseWriter {
+	return rw.ResponseWriter
+}
+
 func (rw *responseWriter) WriteHeader(code int) {
 	if rw.status != 0 {
 		return

@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+
 	"kanban-board/internal/models"
 )
 
@@ -12,137 +13,124 @@ type UsersRepo struct {
 }
 
 func Init(db *sql.DB) *UsersRepo {
-	return &UsersRepo{db: db}
+	return &UsersRepo{
+		db: db,
+	}
 }
 
 // used in auth_service.go
-
-func (r *UsersRepo) CreateUser(ctx context.Context, username string, email string, groupName string, imageURL string, passwordHash string) (string, error) {
+func (r *UsersRepo) CreateUser(ctx context.Context, username, email, groupName, imageURL, passwordHash string) (string, error) {
 	var userID string
 	err := r.db.QueryRowContext(ctx, `
-		INSERT INTO users (user_id, username, email, group_name, image_url, password_hash)
-		VALUES (gen_random_uuid(), $1, $2, $3, $4, $5)
+		WITH selected_group AS (
+			INSERT INTO student_groups (
+				student_group_id,
+				group_code,
+				name
+			)
+			VALUES (gen_random_uuid(), $3, $3)
+			ON CONFLICT (group_code)
+			DO UPDATE SET updated_at = CURRENT_TIMESTAMP
+			RETURNING student_group_id
+		)
+		INSERT INTO users (
+			user_id,
+			username,
+			email,
+			display_name,
+			student_group_id,
+			image_url,
+			password_hash
+		)
+		SELECT
+			gen_random_uuid(),
+			$1,
+			$2,
+			$1,
+			student_group_id,
+			$4,
+			$5
+		FROM selected_group
 		RETURNING user_id
-	 `, username, email, groupName, imageURL, passwordHash).Scan(&userID)
-
+	`, username, email, groupName, imageURL, passwordHash).Scan(&userID)
 	if err != nil {
 		return "", fmt.Errorf("failed to create user: %w", err)
 	}
-
 	return userID, nil
 }
-
-func (r *UsersRepo) GetUserByID(ctx context.Context, userID string) (*models.User, error) {
-	var user models.User
-	err := r.db.QueryRowContext(ctx, `
-		SELECT user_id, username, email, group_name, COALESCE(image_url, ''), created_at
-		FROM users
-		WHERE user_id = $1
-	 `, userID).Scan(&user.UserID, &user.Username, &user.Email, &user.GroupName, &user.ImageURL, &user.CreatedAt)
-
-	if err != nil {
-		return nil, fmt.Errorf("failed to select user by id: %v", err)
-	}
-
-	return &user, nil
-}
-
-func (r *UsersRepo) GetUserByEmail(ctx context.Context, email string) (*models.User, error) {
-	var user models.User
-	err := r.db.QueryRowContext(ctx, `
-		SELECT user_id, username, email, group_name, COALESCE(image_url, ''), created_at
-		FROM users
-		WHERE email = $1
-	 `, email).Scan(&user.UserID, &user.Username, &user.Email, &user.GroupName, &user.ImageURL, &user.CreatedAt)
-
-	if err != nil {
-		return nil, fmt.Errorf("failed to select user by email: %v", err)
-	}
-
-	return &user, nil
-}
-
-func (r *UsersRepo) GetUserByUsername(ctx context.Context, username string) (*models.User, error) {
-	var user models.User
-	err := r.db.QueryRowContext(ctx, `
-		SELECT user_id, username, email, group_name, COALESCE(image_url, ''), created_at
-		FROM users
-		WHERE username = $1
-	 `, username).Scan(&user.UserID, &user.Username, &user.Email, &user.GroupName, &user.ImageURL, &user.CreatedAt)
-
-	if err != nil {
-		return nil, fmt.Errorf("failed to select user by username: %v", err)
-	}
-
-	return &user, nil
-}
-
-// used in auth_service.go
 
 func (r *UsersRepo) GetUserCredentials(ctx context.Context, login string) (*models.UserCredentials, error) {
 	var credentials models.UserCredentials
 	err := r.db.QueryRowContext(ctx, `
-		SELECT user_id, username, email, password_hash
+		SELECT
+			user_id,
+			username,
+			COALESCE(email, ''),
+			password_hash,
+			is_active
 		FROM users
-		WHERE email = $1 OR username = $1
+		WHERE LOWER(COALESCE(email, '')) = LOWER($1)
+			OR LOWER(username) = LOWER($1)
 		LIMIT 1
-	`, login).Scan(&credentials.UserID, &credentials.Username, &credentials.Email, &credentials.PasswordHash)
-
+	`, login).Scan(&credentials.UserID, &credentials.Username, &credentials.Email, &credentials.PasswordHash, &credentials.IsActive)
 	if err != nil {
 		return nil, fmt.Errorf("failed to select user credentials: %w", err)
 	}
-
 	return &credentials, nil
 }
 
-func (r *UsersRepo) GetUsersByGroupName(ctx context.Context, groupName string) ([]models.User, error) {
-	var users []models.User
-	rows, err := r.db.QueryContext(ctx, `
-		SELECT user_id, username, email, group_name, COALESCE(image_url, ''), created_at
+func (r *UsersRepo) GetPasswordHash(ctx context.Context, userID string) (string, error) {
+	var passwordHash string
+	err := r.db.QueryRowContext(ctx, `
+		SELECT password_hash
 		FROM users
-		WHERE group_name = $1
-	 `, groupName)
-
-	if err != nil {
-		return nil, fmt.Errorf("failed to select users by group name: %v", err)
-	}
-	defer rows.Close()
-
-	for rows.Next() {
-		var user models.User
-		if err := rows.Scan(&user.UserID, &user.Username, &user.Email, &user.GroupName, &user.ImageURL, &user.CreatedAt); err != nil {
-			return nil, fmt.Errorf("failed to scan user by group name: %v", err)
-		}
-		users = append(users, user)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("failed to iterate users by group name: %v", err)
-	}
-
-	return users, nil
+		WHERE user_id = $1 AND is_active = TRUE
+	`, userID).Scan(&passwordHash)
+	return passwordHash, err
 }
 
-func (r *UsersRepo) UpdateUser(ctx context.Context, userID string, username string, groupName string, imageURL string) error {
-	_, err := r.db.ExecContext(ctx, `
+func (r *UsersRepo) ChangePassword(ctx context.Context, userID, passwordHash string) error {
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	result, err := tx.ExecContext(ctx, `
 		UPDATE users
-		SET username = $1, group_name = $2, image_url = $3
-		WHERE user_id = $4
-	 `, username, groupName, imageURL, userID)
-
+		SET password_hash = $1, updated_at = CURRENT_TIMESTAMP
+		WHERE user_id = $2 AND is_active = TRUE
+	`, passwordHash, userID)
 	if err != nil {
-		return fmt.Errorf("failed to update user: %v", err)
+		return err
 	}
-	return nil
+	count, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if count == 0 {
+		return sql.ErrNoRows
+	}
+	if _, err := tx.ExecContext(ctx, `
+		UPDATE sessions
+		SET revoked_at = CURRENT_TIMESTAMP
+		WHERE user_id = $1 AND revoked_at IS NULL
+	`, userID); err != nil {
+		return err
+	}
+
+	return tx.Commit()
 }
 
-func (r *UsersRepo) DeleteUser(ctx context.Context, userID string) error {
-	_, err := r.db.ExecContext(ctx, `
-		DELETE FROM users
+func (r *UsersRepo) IsUserActive(ctx context.Context, userID string) (bool, error) {
+	var active bool
+	err := r.db.QueryRowContext(ctx, `
+		SELECT is_active
+		FROM users
 		WHERE user_id = $1
-	 `, userID)
-
+	`, userID).Scan(&active)
 	if err != nil {
-		return fmt.Errorf("failed to delete user: %v", err)
+		return false, err
 	}
-	return nil
+
+	return active, nil
 }

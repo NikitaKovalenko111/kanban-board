@@ -21,6 +21,39 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 )
 
+const createUserQuery = `
+	WITH selected_group AS (
+		INSERT INTO student_groups (
+			student_group_id,
+			group_code,
+			name
+		)
+		VALUES (gen_random_uuid(), $3, $3)
+		ON CONFLICT (group_code)
+		DO UPDATE SET updated_at = CURRENT_TIMESTAMP
+		RETURNING student_group_id
+	)
+	INSERT INTO users (
+		user_id,
+		username,
+		email,
+		display_name,
+		student_group_id,
+		image_url,
+		password_hash
+	)
+	SELECT
+		gen_random_uuid(),
+		$1,
+		$2,
+		$1,
+		student_group_id,
+		$4,
+		$5
+	FROM selected_group
+	RETURNING user_id
+`
+
 func TestRegisterReturnsConflictForExistingUsernameOrEmail(t *testing.T) {
 	tests := []struct {
 		name            string
@@ -31,13 +64,13 @@ func TestRegisterReturnsConflictForExistingUsernameOrEmail(t *testing.T) {
 		{
 			name:            "username already exists",
 			constraintName:  "users_username_idx",
-			expectedCode:    "username_taken",
+			expectedCode:    "USERNAME_TAKEN",
 			expectedMessage: "Username is already in use",
 		},
 		{
 			name:            "email already exists",
 			constraintName:  "users_email_idx",
-			expectedCode:    "email_taken",
+			expectedCode:    "EMAIL_TAKEN",
 			expectedMessage: "Email is already in use",
 		},
 	}
@@ -55,11 +88,7 @@ func TestRegisterReturnsConflictForExistingUsernameOrEmail(t *testing.T) {
 				}
 			}()
 
-			mock.ExpectQuery(regexp.QuoteMeta(`
-				INSERT INTO users (user_id, username, email, group_name, image_url, password_hash)
-				VALUES (gen_random_uuid(), $1, $2, $3, $4, $5)
-				RETURNING user_id
-			`)).
+			mock.ExpectQuery(regexp.QuoteMeta(createUserQuery)).
 				WithArgs("student.one", "student@example.com", "ТОП-203Б", "", sqlmock.AnyArg()).
 				WillReturnError(&pgconn.PgError{
 					Code:           "23505",
@@ -94,11 +123,11 @@ func TestRegisterReturnsConflictForExistingUsernameOrEmail(t *testing.T) {
 			if err := json.NewDecoder(recorder.Body).Decode(&response); err != nil {
 				t.Fatalf("decode response: %v", err)
 			}
-			if response.Error != test.expectedCode {
-				t.Fatalf("response error = %q, want %q", response.Error, test.expectedCode)
+			if response.Error.Code != test.expectedCode {
+				t.Fatalf("response error = %q, want %q", response.Error.Code, test.expectedCode)
 			}
-			if response.Message != test.expectedMessage {
-				t.Fatalf("response message = %q, want %q", response.Message, test.expectedMessage)
+			if response.Error.Message != test.expectedMessage {
+				t.Fatalf("response message = %q, want %q", response.Error.Message, test.expectedMessage)
 			}
 
 			logs := logOutput.String()

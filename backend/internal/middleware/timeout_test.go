@@ -31,3 +31,20 @@ func TestTimeoutAddsDeadlineAndCancelsContext(t *testing.T) {
 		t.Fatal("request context was not canceled after handler completed")
 	}
 }
+
+func TestTimeoutExceptLeavesStreamingRequestWithoutDeadline(t *testing.T) {
+	handler := TimeoutExcept(time.Second, "/api/v1/notifications/stream")(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if _, ok := r.Context().Deadline(); ok {
+			t.Fatal("streaming request context must not have a middleware deadline")
+		}
+		w.WriteHeader(http.StatusNoContent)
+	}))
+
+	recorder := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodGet, "/api/v1/notifications/stream", nil)
+	handler.ServeHTTP(recorder, request)
+
+	if recorder.Code != http.StatusNoContent {
+		t.Fatalf("response status = %d, want %d", recorder.Code, http.StatusNoContent)
+	}
+}

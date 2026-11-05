@@ -1,18 +1,18 @@
-log_level: "dev"
+log_level: dev
 http_server:
-    http_address: ":3005"
+    http_address: :3005
     http_timeout: 4s
     http_idle_timeout: 60s
 jwt:
-    jwt_access_secret: "aaaaaaaaaaaaaaaaa"
-    jwt_refresh_secret: "rrrrrrrrrrrrrrrrr"
-    access_token_ttl: "1m"
-    refresh_token_ttl: "1h"
-    session_cleanup_interval: "30m"
+    jwt_access_secret: aaaaaaaaaaaaaaaaa
+    jwt_refresh_secret: rrrrrrrrrrrrrrrrr
+    access_token_ttl: 1m
+    refresh_token_ttl: 1h
+    session_cleanup_interval: 30m
 postgres:
-  db_host: "localhost"
-  db_user: "postgres"
+  db_host: localhost
+  db_user: postgres
   db_port: 1234
-  db_pass: "pass"
-  db_name: "database"
-  ssl_mode: "disable"
+  db_pass: pass
+  db_name: database
+  ssl_mode: disable

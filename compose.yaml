@@ -1,50 +1,89 @@
 name: kanban-board
 
 services:
-  postgres:
-    image: postgres:17-alpine
-    restart: unless-stopped
-    environment:
-      POSTGRES_DB: ${POSTGRES_DB:-kanban}
-      POSTGRES_USER: ${POSTGRES_USER:-kanban}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U \"$$POSTGRES_USER\" -d \"$$POSTGRES_DB\""]
-      interval: 5s
-      timeout: 3s
-      retries: 10
-      start_period: 10s
+    postgres:
+        image: postgres:17-alpine
+        restart: unless-stopped
+        environment:
+            POSTGRES_DB: ${POSTGRES_DB:-kanban}
+            POSTGRES_USER: ${POSTGRES_USER:-kanban}
+            POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+        volumes:
+            - postgres_data:/var/lib/postgresql/data
+        healthcheck:
+            test:
+                [
+                    "CMD-SHELL",
+                    'pg_isready -U "$$POSTGRES_USER" -d "$$POSTGRES_DB"',
+                ]
+            interval: 5s
+            timeout: 3s
+            retries: 10
+            start_period: 10s
 
-  backend:
-    build:
-      context: ./backend
-    restart: unless-stopped
-    environment:
-      log_level: prod
-      http_address: :3005
-      timeout: 4s
-      idle_timeout: 60s
-      db_host: postgres
-      db_port: "5432"
-      db_user: ${POSTGRES_USER:-kanban}
-      db_pass: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
-      db_name: ${POSTGRES_DB:-kanban}
-      ssl_mode: disable
-    depends_on:
-      postgres:
-        condition: service_healthy
+    minio:
+        # Community build; upstream MinIO no longer publishes container images.
+        image: pgsty/minio:RELEASE.2026-08-04T00-00-00Z@sha256:b6bfe7239bfc83fb90d31612d9704d86039dd714f7904b3f1ad68f211e602372
+        restart: unless-stopped
+        command: server /data --console-address ":9001"
+        environment:
+            MINIO_ROOT_USER: ${MINIO_ROOT_USER:?Set MINIO_ROOT_USER in .env}
+            MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?Set MINIO_ROOT_PASSWORD in .env}
+        volumes:
+            - minio_data:/data
+        ports:
+            - "127.0.0.1:${MINIO_CONSOLE_PORT:-9001}:9001"
+        healthcheck:
+            test: ["CMD", "curl", "--fail", "--silent", "--show-error", "http://127.0.0.1:9000/minio/health/ready"]
+            interval: 5s
+            timeout: 3s
+            retries: 10
+            start_period: 10s
 
-  frontend:
-    build:
-      context: ./client
-    restart: unless-stopped
-    ports:
-      - "${HTTP_PORT:-8080}:80"
-    depends_on:
-      backend:
-        condition: service_healthy
+    backend:
+        build:
+            context: ./backend
+        restart: unless-stopped
+        environment:
+            log_level: prod
+            http_address: :3005
+            timeout: 4s
+            idle_timeout: 60s
+            db_host: postgres
+            db_port: "5432"
+            db_user: ${POSTGRES_USER:-kanban}
+            db_pass: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+            db_name: ${POSTGRES_DB:-kanban}
+            ssl_mode: disable
+            minio_enabled: "true"
+            minio_endpoint: minio:9000
+            minio_access_key: ${MINIO_ROOT_USER:?Set MINIO_ROOT_USER in .env}
+            minio_secret_key: ${MINIO_ROOT_PASSWORD:?Set MINIO_ROOT_PASSWORD in .env}
+            minio_bucket: ${MINIO_BUCKET:-kanban-attachments}
+            minio_use_ssl: "false"
+        # Override the old image healthcheck for the current API prefix.
+        healthcheck:
+            test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:3005/api/v1/system/health"]
+            interval: 10s
+            timeout: 3s
+            retries: 5
+            start_period: 10s
+        depends_on:
+            postgres:
+                condition: service_healthy
+            minio:
+                condition: service_healthy
+
+    frontend:
+        build:
+            context: ./client
+        restart: unless-stopped
+        ports:
+            - "${HTTP_PORT:-8080}:80"
+        depends_on:
+            backend:
+                condition: service_healthy
 
 volumes:
-  postgres_data:
+    postgres_data:
+    minio_data:
