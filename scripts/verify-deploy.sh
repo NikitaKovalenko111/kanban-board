@@ -17,7 +17,7 @@ state_dir=$(git rev-parse --git-path kanban-deploy-state)
   echo 'Expected SHA was not recorded as successfully deployed' >&2; exit 1;
 }
 docker compose config --quiet
-for service in postgres backend frontend; do
+for service in postgres minio backend frontend; do
   container=$(docker compose ps -q "$service")
   [[ -n "$container" ]] || { echo "Missing container: $service" >&2; exit 1; }
   status=$(docker inspect --format '{{.State.Status}}/{{.State.Health.Status}}' "$container")
