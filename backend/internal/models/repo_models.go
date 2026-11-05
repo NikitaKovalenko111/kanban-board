@@ -2,13 +2,26 @@ package models
 
 import "time"
 
+type StudentGroup struct {
+	StudentGroupID string    `json:"id"`
+	GroupCode      string    `json:"groupCode"`
+	Name           string    `json:"name"`
+	CreatedAt      time.Time `json:"createdAt"`
+	UpdatedAt      time.Time `json:"updatedAt"`
+}
+
 type User struct {
-	UserID    string
-	Username  string
-	Email     string
-	GroupName string
-	ImageURL  string
-	CreatedAt time.Time
+	UserID         string
+	Username       string
+	Email          string
+	DisplayName    string
+	Position       string
+	StudentGroupID *string
+	GroupName      string
+	ImageURL       string
+	IsActive       bool
+	CreatedAt      time.Time
+	UpdatedAt      time.Time
 }
 
 type UserCredentials struct {
@@ -16,84 +29,180 @@ type UserCredentials struct {
 	Username     string
 	Email        string
 	PasswordHash string
+	IsActive     bool
 }
 
 type Session struct {
-	SessionID        string
-	UserID           string
-	RefreshTokenHash string
-	ExpiresAt        time.Time
-	CreatedAt        time.Time
-	RevokedAt        *time.Time
+	SessionID, UserID, RefreshTokenHash string
+	ExpiresAt, CreatedAt                time.Time
+	RevokedAt                           *time.Time
 }
 
-type Team struct {
-	TeamID    string
-	Name      string
-	CreatedAt time.Time
+type Membership struct {
+	ProjectID string    `json:"projectId"`
+	UserID    string    `json:"userId"`
+	Role      string    `json:"role"`
+	Status    string    `json:"status"`
+	JoinedAt  time.Time `json:"joinedAt"`
 }
 
-type TeamMember struct {
-	TeamID   string
-	UserID   string
-	Role     string
-	JoinedAt time.Time
+type Profile struct {
+	ID              string    `json:"id"`
+	FullName        string    `json:"fullName"`
+	Username        string    `json:"username"`
+	StudentGroup    string    `json:"studentGroup"`
+	ImageURL        *string   `json:"imageUrl"`
+	Role            string    `json:"role"`
+	SchedulePrivacy string    `json:"schedulePrivacy"`
+	JoinedAt        time.Time `json:"joinedAt"`
+	Active          bool      `json:"active"`
+	Contact         *string   `json:"contact,omitempty"`
 }
 
 type Project struct {
-	ProjectID   string
-	TeamID      string
-	Name        string
-	Description string
-	CreatedAt   time.Time
+	ID          string          `json:"id"`
+	Name        string          `json:"name"`
+	Description string          `json:"description"`
+	Members     []ProjectMember `json:"members"`
+	Sources     []ProjectSource `json:"sources"`
 }
 
-type Board struct {
-	BoardID   string
-	ProjectID string
-	Name      string
+type ProjectMember struct {
+	UserID string `json:"userId"`
+	Role   string `json:"role"`
+}
+
+type FileInfo struct {
+	ID          string `json:"id"`
+	Name        string `json:"name"`
+	SizeBytes   int64  `json:"sizeBytes"`
+	MimeType    string `json:"mimeType"`
+	DownloadURL string `json:"downloadUrl"`
+}
+
+type ProjectSource struct {
+	ID      string    `json:"id"`
+	Kind    string    `json:"kind"`
+	Title   string    `json:"title"`
+	URL     *string   `json:"url"`
+	File    *FileInfo `json:"file"`
+	AddedBy *string   `json:"addedBy"`
+	AddedAt time.Time `json:"addedAt"`
 }
 
 type BoardColumn struct {
-	ColumnID string
-	BoardID  string
-	Name     string
-	Position int
+	ID        string `json:"id"`
+	ProjectID string `json:"projectId"`
+	Title     string `json:"title"`
+	Position  int    `json:"position"`
+	Kind      string `json:"kind"`
+	Color     string `json:"color"`
 }
 
 type Task struct {
-	TaskID          string
-	ColumnID        string
-	CreatedByUserID string
-	Title           string
-	Description     string
-	Priority        string
-	Position        int
-	DueDate         *time.Time
-	CreatedAt       time.Time
-	UpdatedAt       time.Time
+	ID          string        `json:"id"`
+	ProjectID   string        `json:"projectId"`
+	ColumnID    string        `json:"columnId"`
+	Position    int           `json:"position"`
+	Title       string        `json:"title"`
+	Description string        `json:"description"`
+	Priority    string        `json:"priority"`
+	AssigneeID  *string       `json:"assigneeId"`
+	CreatedBy   string        `json:"createdBy"`
+	CreatedAt   time.Time     `json:"createdAt"`
+	DueAt       *time.Time    `json:"dueAt"`
+	CompletedAt *time.Time    `json:"completedAt"`
+	Attachments []Attachment  `json:"attachments,omitempty"`
+	Comments    []Comment     `json:"comments,omitempty"`
+	History     []TaskHistory `json:"history,omitempty"`
 }
 
-type TaskAssignee struct {
-	TaskID string
-	UserID string
+type Board struct {
+	ID        string        `json:"boardId"`
+	ProjectID string        `json:"projectId"`
+	Name      string        `json:"name"`
+	Columns   []BoardColumn `json:"columns"`
+	Tasks     []Task        `json:"tasks"`
+}
+
+type TaskHistory struct {
+	ID         string    `json:"id"`
+	Action     string    `json:"action"`
+	ActorID    *string   `json:"actorId"`
+	At         time.Time `json:"at"`
+	FromColumn string    `json:"fromColumn,omitempty"`
+	ToColumn   string    `json:"toColumn,omitempty"`
+	Comment    string    `json:"comment,omitempty"`
 }
 
 type Comment struct {
-	CommentID    string
-	TaskID       string
-	AuthorUserID string
-	Content      string
-	CreatedAt    time.Time
+	ID         string     `json:"id"`
+	TaskID     string     `json:"-"`
+	AuthorID   string     `json:"authorId"`
+	AuthorName string     `json:"-"`
+	Text       string     `json:"text"`
+	CreatedAt  time.Time  `json:"createdAt"`
+	UpdatedAt  *time.Time `json:"-"`
 }
 
 type Attachment struct {
-	AttachmentID     string
-	TaskID           string
-	UploadedByUserID string
-	FileName         string
-	StorageKey       string
-	MimeType         string
-	FileSize         int64
-	CreatedAt        time.Time
+	ID         string    `json:"id"`
+	Kind       string    `json:"kind"`
+	UploadedBy string    `json:"uploadedBy"`
+	UploadedAt time.Time `json:"uploadedAt"`
+	File       FileInfo  `json:"file"`
+	TaskID     string    `json:"-"`
+	StorageKey string    `json:"-"`
+}
+
+type Lesson struct {
+	ID      string `json:"id"`
+	Group   string `json:"group"`
+	Date    string `json:"date"`
+	Start   string `json:"start"`
+	End     string `json:"end"`
+	Title   string `json:"title"`
+	Room    string `json:"room"`
+	Teacher string `json:"teacher"`
+	Kind    string `json:"kind"`
+}
+
+type Schedule struct {
+	Lessons   []Lesson   `json:"lessons"`
+	UpdatedAt *time.Time `json:"updatedAt"`
+	Source    string     `json:"source"`
+}
+
+type EventType struct {
+	ID               string  `json:"id"`
+	Title            string  `json:"title"`
+	Color            string  `json:"color"`
+	OwnerID          *string `json:"ownerId"`
+	DefaultReminders []int   `json:"defaultReminders"`
+}
+
+type Event struct {
+	ID          string     `json:"id"`
+	OwnerID     string     `json:"ownerId"`
+	Title       string     `json:"title"`
+	Description string     `json:"description,omitempty"`
+	Location    string     `json:"location,omitempty"`
+	StartsAt    time.Time  `json:"startsAt"`
+	EndsAt      *time.Time `json:"endsAt"`
+	Visibility  string     `json:"visibility"`
+	Group       *string    `json:"group"`
+	TypeID      *string    `json:"typeId,omitempty"`
+	Masked      bool       `json:"masked"`
+	Partial     bool       `json:"partial"`
+}
+
+type Notification struct {
+	ID      string    `json:"id"`
+	Kind    string    `json:"kind"`
+	Title   string    `json:"title"`
+	Text    string    `json:"text"`
+	At      time.Time `json:"at"`
+	Read    bool      `json:"read"`
+	TaskID  *string   `json:"taskId"`
+	EventID *string   `json:"eventId"`
 }

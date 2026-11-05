@@ -4,43 +4,41 @@ import (
 	"kanban-board/internal/storage"
 	attachment_repo "kanban-board/internal/storage/repositories/attachment"
 	board_repo "kanban-board/internal/storage/repositories/board"
-	board_column_repo "kanban-board/internal/storage/repositories/board_column"
 	comment_repo "kanban-board/internal/storage/repositories/comment"
+	event_repo "kanban-board/internal/storage/repositories/event"
+	profile_repo "kanban-board/internal/storage/repositories/profile"
 	project_repo "kanban-board/internal/storage/repositories/project"
+	schedule_repo "kanban-board/internal/storage/repositories/schedule"
 	session_repo "kanban-board/internal/storage/repositories/session"
 	task_repo "kanban-board/internal/storage/repositories/task"
-	task_assignee_repo "kanban-board/internal/storage/repositories/task_assignee"
-	team_repo "kanban-board/internal/storage/repositories/team"
-	team_member_repo "kanban-board/internal/storage/repositories/team_member"
-	users_repository "kanban-board/internal/storage/repositories/user"
+	users_repo "kanban-board/internal/storage/repositories/user"
 )
 
 type Repositories struct {
-	UsersRepo        *users_repository.UsersRepo
-	TeamRepo         *team_repo.TeamRepo
-	TeamMemberRepo   *team_member_repo.TeamMemberRepo
-	ProjectRepo      *project_repo.ProjectRepo
-	BoardRepo        *board_repo.BoardRepo
-	BoardColumnRepo  *board_column_repo.BoardColumnRepo
-	TaskRepo         *task_repo.TaskRepo
-	SessionRepo      *session_repo.SessionRepo
-	TaskAssigneeRepo *task_assignee_repo.TaskAssigneeRepo
-	CommentRepo      *comment_repo.CommentRepo
-	AttachmentRepo   *attachment_repo.AttachmentRepo
+	Users       *users_repo.UsersRepo
+	Sessions    *session_repo.SessionRepo
+	Profile     *profile_repo.Repository
+	Projects    *project_repo.Repository
+	Boards      *board_repo.Repository
+	Tasks       *task_repo.Repository
+	Comments    *comment_repo.Repository
+	Attachments *attachment_repo.Repository
+	Schedule    *schedule_repo.Repository
+	Events      *event_repo.Repository
 }
 
-func Init(storage *storage.Storage) *Repositories {
+func Init(appStorage *storage.Storage) *Repositories {
+	db := appStorage.Db
 	return &Repositories{
-		UsersRepo:        users_repository.Init(storage.Db),
-		TeamRepo:         team_repo.Init(storage.Db),
-		TeamMemberRepo:   team_member_repo.Init(storage.Db),
-		ProjectRepo:      project_repo.Init(storage.Db),
-		BoardRepo:        board_repo.Init(storage.Db),
-		BoardColumnRepo:  board_column_repo.Init(storage.Db),
-		TaskRepo:         task_repo.Init(storage.Db),
-		SessionRepo:      session_repo.Init(storage.Db),
-		TaskAssigneeRepo: task_assignee_repo.Init(storage.Db),
-		CommentRepo:      comment_repo.Init(storage.Db),
-		AttachmentRepo:   attachment_repo.Init(storage.Db),
+		Users:       users_repo.Init(db),
+		Sessions:    session_repo.Init(db),
+		Profile:     profile_repo.Init(db),
+		Projects:    project_repo.Init(db),
+		Boards:      board_repo.Init(db),
+		Tasks:       task_repo.Init(db),
+		Comments:    comment_repo.Init(db),
+		Attachments: attachment_repo.Init(db),
+		Schedule:    schedule_repo.Init(db),
+		Events:      event_repo.Init(db),
 	}
 }

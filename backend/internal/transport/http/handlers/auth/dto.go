@@ -1,14 +1,17 @@
 package auth_handler
 
+import "kanban-board/internal/models"
+
 type RegisterRequest struct {
-	Username  string `json:"username"`
-	Email     string `json:"email"`
-	Password  string `json:"password"`
-	GroupName string `json:"group_name"`
+	Username        string `json:"username"`
+	Email           string `json:"email"`
+	Password        string `json:"password"`
+	GroupName       string `json:"studentGroup"`
+	LegacyGroupName string `json:"group_name"`
 }
 
 type RegisterResponse struct {
-	UserID  string `json:"user_id"`
+	UserID  string `json:"userId"`
 	Message string `json:"message"`
 }
 
@@ -18,16 +21,23 @@ type LoginRequest struct {
 }
 
 type TokenResponse struct {
-	UserID       string `json:"user_id"`
-	AccessToken  string `json:"access_token"`
-	RefreshToken string `json:"refresh_token"`
-	TokenType    string `json:"token_type"`
+	AccessToken  string          `json:"accessToken"`
+	RefreshToken string          `json:"refreshToken"`
+	ExpiresIn    int64           `json:"expiresIn"`
+	User         *models.Profile `json:"user,omitempty"`
 }
 
 type RefreshRequest struct {
-	RefreshToken string `json:"refresh_token"`
+	RefreshToken       string `json:"refreshToken"`
+	LegacyRefreshToken string `json:"refresh_token"`
 }
 
 type LogoutRequest struct {
-	RefreshToken string `json:"refresh_token"`
+	RefreshToken       string `json:"refreshToken"`
+	LegacyRefreshToken string `json:"refresh_token"`
+}
+
+type ChangePasswordRequest struct {
+	CurrentPassword string `json:"currentPassword"`
+	NewPassword     string `json:"newPassword"`
 }

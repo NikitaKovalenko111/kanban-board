@@ -27,6 +27,39 @@ const (
 	testRefreshSecret = "test-refresh-secret"
 )
 
+const createUserQuery = `
+	WITH selected_group AS (
+		INSERT INTO student_groups (
+			student_group_id,
+			group_code,
+			name
+		)
+		VALUES (gen_random_uuid(), $3, $3)
+		ON CONFLICT (group_code)
+		DO UPDATE SET updated_at = CURRENT_TIMESTAMP
+		RETURNING student_group_id
+	)
+	INSERT INTO users (
+		user_id,
+		username,
+		email,
+		display_name,
+		student_group_id,
+		image_url,
+		password_hash
+	)
+	SELECT
+		gen_random_uuid(),
+		$1,
+		$2,
+		$1,
+		student_group_id,
+		$4,
+		$5
+	FROM selected_group
+	RETURNING user_id
+`
+
 type stringCapture struct {
 	value string
 }
@@ -60,11 +93,7 @@ func TestRegisterUserSuccess(t *testing.T) {
 	defer closeDB()
 
 	passwordHash := &stringCapture{}
-	mock.ExpectQuery(regexp.QuoteMeta(`
-		INSERT INTO users (user_id, username, email, group_name, image_url, password_hash)
-		VALUES (gen_random_uuid(), $1, $2, $3, $4, $5)
-		RETURNING user_id
-	`)).
+	mock.ExpectQuery(regexp.QuoteMeta(createUserQuery)).
 		WithArgs(testUsername, testEmail, testGroupName, "", passwordHash).
 		WillReturnRows(sqlmock.NewRows([]string{"user_id"}).AddRow(testUserID))
 
@@ -135,11 +164,7 @@ func TestRegisterUserReturnsConflictError(t *testing.T) {
 			service, mock, closeDB := newTestService(t)
 			defer closeDB()
 
-			mock.ExpectQuery(regexp.QuoteMeta(`
-				INSERT INTO users (user_id, username, email, group_name, image_url, password_hash)
-				VALUES (gen_random_uuid(), $1, $2, $3, $4, $5)
-				RETURNING user_id
-			`)).
+			mock.ExpectQuery(regexp.QuoteMeta(createUserQuery)).
 				WithArgs(testUsername, testEmail, testGroupName, "", sqlmock.AnyArg()).
 				WillReturnError(&pgconn.PgError{
 					Code:           "23505",
@@ -176,20 +201,31 @@ func TestLoginUserSuccessWithUsernameOrEmail(t *testing.T) {
 			defer closeDB()
 
 			mock.ExpectQuery(regexp.QuoteMeta(`
-				SELECT user_id, username, email, password_hash
+				SELECT
+					user_id,
+					username,
+					COALESCE(email, ''),
+					password_hash,
+					is_active
 				FROM users
-				WHERE email = $1 OR username = $1
+				WHERE LOWER(COALESCE(email, '')) = LOWER($1)
+					OR LOWER(username) = LOWER($1)
 				LIMIT 1
 			`)).
 				WithArgs(login).
 				WillReturnRows(sqlmock.NewRows(
-					[]string{"user_id", "username", "email", "password_hash"},
-				).AddRow(testUserID, testUsername, testEmail, passwordHash))
+					[]string{"user_id", "username", "email", "password_hash", "is_active"},
+				).AddRow(testUserID, testUsername, testEmail, passwordHash, true))
 
 			refreshTokenHash := &stringCapture{}
 			refreshExpiresAt := &timeCapture{}
 			mock.ExpectExec(regexp.QuoteMeta(`
-				INSERT INTO sessions (session_id, user_id, refresh_token_hash, expires_at)
+				INSERT INTO sessions (
+					session_id,
+					user_id,
+					refresh_token_hash,
+					expires_at
+				)
 				VALUES (gen_random_uuid(), $1, $2, $3)
 			`)).
 				WithArgs(testUserID, refreshTokenHash, refreshExpiresAt).
@@ -244,15 +280,21 @@ func TestLoginUserRejectsWrongPassword(t *testing.T) {
 	}
 
 	mock.ExpectQuery(regexp.QuoteMeta(`
-		SELECT user_id, username, email, password_hash
+		SELECT
+			user_id,
+			username,
+			COALESCE(email, ''),
+			password_hash,
+			is_active
 		FROM users
-		WHERE email = $1 OR username = $1
+		WHERE LOWER(COALESCE(email, '')) = LOWER($1)
+			OR LOWER(username) = LOWER($1)
 		LIMIT 1
 	`)).
 		WithArgs(testUsername).
 		WillReturnRows(sqlmock.NewRows(
-			[]string{"user_id", "username", "email", "password_hash"},
-		).AddRow(testUserID, testUsername, testEmail, passwordHash))
+			[]string{"user_id", "username", "email", "password_hash", "is_active"},
+		).AddRow(testUserID, testUsername, testEmail, passwordHash, true))
 
 	userID, accessToken, refreshToken, err := service.LoginUser(
 		context.Background(),
@@ -280,7 +322,13 @@ func TestRefreshTokensRotatesSession(t *testing.T) {
 	currentTokenHash := pkg.HashToken(currentRefreshToken)
 
 	mock.ExpectQuery(regexp.QuoteMeta(`
-		SELECT session_id, user_id, refresh_token_hash, expires_at, created_at, revoked_at
+		SELECT
+			session_id,
+			user_id,
+			refresh_token_hash,
+			expires_at,
+			created_at,
+			revoked_at
 		FROM sessions
 		WHERE refresh_token_hash = $1
 			AND revoked_at IS NULL
@@ -302,7 +350,9 @@ func TestRefreshTokensRotatesSession(t *testing.T) {
 	newExpiresAt := &timeCapture{}
 	mock.ExpectExec(regexp.QuoteMeta(`
 		UPDATE sessions
-		SET refresh_token_hash = $1, expires_at = $2
+		SET
+			refresh_token_hash = $1,
+			expires_at = $2
 		WHERE refresh_token_hash = $3
 			AND revoked_at IS NULL
 			AND expires_at > CURRENT_TIMESTAMP

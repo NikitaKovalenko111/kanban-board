@@ -1,114 +1,156 @@
-package board
+package board_repo
 
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
+
 	"kanban-board/internal/models"
+	repositorycommon "kanban-board/internal/storage/repositories/common"
 )
 
-type BoardRepo struct {
-	sql *sql.DB
+type Repository struct {
+	db *sql.DB
 }
 
-func Init(sql *sql.DB) *BoardRepo {
-	return &BoardRepo{
-		sql: sql,
+func Init(db *sql.DB) *Repository {
+	return &Repository{db: db}
+}
+
+func (r *Repository) ListColumns(ctx context.Context, userID, projectID string) ([]models.BoardColumn, error) {
+	if err := repositorycommon.RequireMember(ctx, r.db, userID, projectID); err != nil {
+		return nil, err
 	}
+	return listColumns(ctx, r.db, projectID)
 }
 
-func (r *BoardRepo) CreateBoard(ctx context.Context, projectID string, name string) (string, error) {
-	var boardID string
-	err := r.sql.QueryRowContext(ctx, `
-		INSERT INTO boards (board_id, project_id, name)
-		VALUES (gen_random_uuid(), $1, $2)
-		RETURNING board_id
-	`, projectID, name).Scan(&boardID)
-
-	if err != nil {
-		return "", fmt.Errorf("failed to create board: %v", err)
-	}
-
-	return boardID, nil
+type columnQueryer interface {
+	QueryContext(context.Context, string, ...any) (*sql.Rows, error)
 }
 
-func (r *BoardRepo) GetBoardByID(ctx context.Context, boardID string) (*models.Board, error) {
-	var board models.Board
-	err := r.sql.QueryRowContext(ctx, `
-		SELECT board_id, project_id, name
-		FROM boards
-		WHERE board_id = $1
-	`, boardID).Scan(&board.BoardID, &board.ProjectID, &board.Name)
-
-	if err != nil {
-		return nil, fmt.Errorf("failed to get board by id: %v", err)
-	}
-
-	return &board, nil
-}
-
-func (r *BoardRepo) GetBoardByName(ctx context.Context, name string) (*models.Board, error) {
-	var board models.Board
-	err := r.sql.QueryRowContext(ctx, `
-		SELECT board_id, project_id, name
-		FROM boards
-		WHERE name = $1
-	`, name).Scan(&board.BoardID, &board.ProjectID, &board.Name)
-
-	if err != nil {
-		return nil, fmt.Errorf("failed to get board by name: %v", err)
-	}
-	return &board, nil
-}
-
-func (r *BoardRepo) GetBoardsByProjectID(ctx context.Context, projectID string) ([]models.Board, error) {
-	rows, err := r.sql.QueryContext(ctx, `
-		SELECT board_id, project_id, name
-		FROM boards
-		WHERE project_id = $1
-		ORDER BY name
+func listColumns(ctx context.Context, queryer columnQueryer, projectID string) ([]models.BoardColumn, error) {
+	rows, err := queryer.QueryContext(ctx, `
+		SELECT bc.column_id, b.project_id, bc.name, bc.position, bc.kind, bc.color
+		FROM board_columns bc
+		JOIN boards b ON b.board_id = bc.board_id
+		WHERE b.project_id = $1
+		ORDER BY bc.position
 	`, projectID)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get boards by project id: %v", err)
+		return nil, err
 	}
 	defer rows.Close()
-
-	var boards []models.Board
+	columns := make([]models.BoardColumn, 0)
 	for rows.Next() {
-		var board models.Board
-		if err := rows.Scan(&board.BoardID, &board.ProjectID, &board.Name); err != nil {
-			return nil, fmt.Errorf("failed to scan board: %v", err)
+		var column models.BoardColumn
+		if err := rows.Scan(&column.ID, &column.ProjectID, &column.Title, &column.Position, &column.Kind, &column.Color); err != nil {
+			return nil, err
 		}
-		boards = append(boards, board)
+		columns = append(columns, column)
 	}
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("failed to iterate boards: %v", err)
-	}
-
-	return boards, nil
+	return columns, rows.Err()
 }
 
-func (r *BoardRepo) UpdateBoard(ctx context.Context, boardID string, projectID string, name string) error {
-	_, err := r.sql.ExecContext(ctx, `
-		UPDATE boards
-		SET project_id = $1, name = $2
-		WHERE board_id = $3
-	`, projectID, name, boardID)
+func (r *Repository) ReplaceColumns(ctx context.Context, userID, projectID string, columns []models.BoardColumn) ([]models.BoardColumn, error) {
+	if err := repositorycommon.RequireCaptain(ctx, r.db, userID); err != nil {
+		return nil, err
+	}
+	tx, err := r.db.BeginTx(ctx, nil)
 	if err != nil {
-		return fmt.Errorf("failed to update board: %v", err)
+		return nil, err
+	}
+	defer tx.Rollback()
+
+	var boardID string
+	if err := tx.QueryRowContext(ctx, `SELECT board_id FROM boards WHERE project_id = $1`, projectID).Scan(&boardID); errors.Is(err, sql.ErrNoRows) {
+		return nil, repositorycommon.ErrNotFound
+	} else if err != nil {
+		return nil, err
+	}
+	if _, err := tx.ExecContext(ctx, `
+		UPDATE board_columns SET position = position + 10000 WHERE board_id = $1
+	`, boardID); err != nil {
+		return nil, err
 	}
 
-	return nil
-}
-
-func (r *BoardRepo) DeleteBoard(ctx context.Context, boardID string) error {
-	_, err := r.sql.ExecContext(ctx, `
-		DELETE FROM boards
-		WHERE board_id = $1
-	`, boardID)
-	if err != nil {
-		return fmt.Errorf("failed to delete board: %v", err)
+	kept := make(map[string]struct{}, len(columns))
+	for index := range columns {
+		kind := "IN_PROGRESS"
+		switch index {
+		case 0:
+			kind = "BACKLOG"
+		case len(columns) - 2:
+			kind = "REVIEW"
+		case len(columns) - 1:
+			kind = "DONE"
+		}
+		column := &columns[index]
+		if column.ID == "" {
+			if err := tx.QueryRowContext(ctx, `
+				INSERT INTO board_columns (column_id, board_id, code, name, kind, color, position)
+				VALUES (gen_random_uuid(), $1, 'COLUMN_' || gen_random_uuid()::text, $2, $3, $4, $5)
+				RETURNING column_id
+			`, boardID, column.Title, kind, column.Color, index).Scan(&column.ID); err != nil {
+				return nil, err
+			}
+		} else {
+			result, err := tx.ExecContext(ctx, `
+				UPDATE board_columns
+				SET name = $1, kind = $2, color = $3, position = $4
+				WHERE column_id = $5 AND board_id = $6
+			`, column.Title, kind, column.Color, index, column.ID, boardID)
+			if err != nil {
+				return nil, err
+			}
+			if err := repositorycommon.RequireAffected(result); err != nil {
+				return nil, err
+			}
+		}
+		kept[column.ID] = struct{}{}
 	}
 
-	return nil
+	rows, err := tx.QueryContext(ctx, `SELECT column_id, name FROM board_columns WHERE board_id = $1`, boardID)
+	if err != nil {
+		return nil, err
+	}
+	type existingColumn struct{ id, name string }
+	existing := make([]existingColumn, 0)
+	for rows.Next() {
+		var column existingColumn
+		if err := rows.Scan(&column.id, &column.name); err != nil {
+			rows.Close()
+			return nil, err
+		}
+		existing = append(existing, column)
+	}
+	rows.Close()
+	for _, column := range existing {
+		if _, exists := kept[column.id]; exists {
+			continue
+		}
+		var taskCount int
+		if err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM tasks WHERE column_id = $1`, column.id).Scan(&taskCount); err != nil {
+			return nil, err
+		}
+		if taskCount > 0 {
+			return nil, fmt.Errorf("%w: В колонке %q есть задачи — сначала перенесите их", repositorycommon.ErrConflict, column.name)
+		}
+		if _, err := tx.ExecContext(ctx, `DELETE FROM board_columns WHERE column_id = $1`, column.id); err != nil {
+			return nil, err
+		}
+	}
+	if _, err := tx.ExecContext(ctx, `
+		UPDATE tasks t
+		SET completed_at = CASE WHEN bc.kind = 'DONE' THEN COALESCE(t.completed_at, CURRENT_TIMESTAMP) ELSE NULL END
+		FROM board_columns bc
+		WHERE t.column_id = bc.column_id AND bc.board_id = $1
+	`, boardID); err != nil {
+		return nil, err
+	}
+	if err := tx.Commit(); err != nil {
+		return nil, err
+	}
+
+	return r.ListColumns(ctx, userID, projectID)
 }
