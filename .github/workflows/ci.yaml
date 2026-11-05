@@ -11,6 +11,21 @@ on:
       - main
 
 jobs:
+  infrastructure:
+    runs-on: ubuntu-latest
+    env:
+      POSTGRES_PASSWORD: ci-config-check-only
+      MINIO_ROOT_USER: ci-storage
+      MINIO_ROOT_PASSWORD: ci-config-check-only
+    steps:
+      - uses: actions/checkout@v7
+      - name: Validate Compose configuration
+        run: docker compose config --quiet
+      - name: Check deployment scripts
+        run: |
+          bash -n scripts/deploy.sh scripts/verify-deploy.sh scripts/test-deploy.sh
+          bash scripts/test-deploy.sh
+
   backend:
     runs-on: ubuntu-latest
 
