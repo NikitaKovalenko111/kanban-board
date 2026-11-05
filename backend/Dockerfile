@@ -10,6 +10,8 @@ COPY --from=build /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/ca-certifica
 RUN addgroup -S app && adduser -S -G app app
 WORKDIR /app
 COPY --from=build /out/kanban-board /app/kanban-board
+COPY --from=build /src/config /app/config
+RUN chown -R app:app /app
 USER app
 EXPOSE 3005
 HEALTHCHECK --interval=10s --timeout=3s --start-period=10s --retries=5 CMD wget -q -O /dev/null http://127.0.0.1:3005/system/health || exit 1

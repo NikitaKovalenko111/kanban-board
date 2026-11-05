@@ -1,50 +1,54 @@
 name: kanban-board
 
 services:
-  postgres:
-    image: postgres:17-alpine
-    restart: unless-stopped
-    environment:
-      POSTGRES_DB: ${POSTGRES_DB:-kanban}
-      POSTGRES_USER: ${POSTGRES_USER:-kanban}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U \"$$POSTGRES_USER\" -d \"$$POSTGRES_DB\""]
-      interval: 5s
-      timeout: 3s
-      retries: 10
-      start_period: 10s
+    postgres:
+        image: postgres:17-alpine
+        restart: unless-stopped
+        environment:
+            POSTGRES_DB: ${POSTGRES_DB:-kanban}
+            POSTGRES_USER: ${POSTGRES_USER:-kanban}
+            POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+        volumes:
+            - postgres_data:/var/lib/postgresql/data
+        healthcheck:
+            test:
+                [
+                    "CMD-SHELL",
+                    'pg_isready -U "$$POSTGRES_USER" -d "$$POSTGRES_DB"',
+                ]
+            interval: 5s
+            timeout: 3s
+            retries: 10
+            start_period: 10s
 
-  backend:
-    build:
-      context: ./backend
-    restart: unless-stopped
-    environment:
-      log_level: prod
-      http_address: :3005
-      timeout: 4s
-      idle_timeout: 60s
-      db_host: postgres
-      db_port: "5432"
-      db_user: ${POSTGRES_USER:-kanban}
-      db_pass: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
-      db_name: ${POSTGRES_DB:-kanban}
-      ssl_mode: disable
-    depends_on:
-      postgres:
-        condition: service_healthy
+    backend:
+        build:
+            context: ./backend
+        restart: unless-stopped
+        environment:
+            log_level: prod
+            http_address: :3005
+            timeout: 4s
+            idle_timeout: 60s
+            db_host: postgres
+            db_port: "5432"
+            db_user: ${POSTGRES_USER:-kanban}
+            db_pass: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+            db_name: ${POSTGRES_DB:-kanban}
+            ssl_mode: disable
+        depends_on:
+            postgres:
+                condition: service_healthy
 
-  frontend:
-    build:
-      context: ./client
-    restart: unless-stopped
-    ports:
-      - "${HTTP_PORT:-8080}:80"
-    depends_on:
-      backend:
-        condition: service_healthy
+    frontend:
+        build:
+            context: ./client
+        restart: unless-stopped
+        ports:
+            - "${HTTP_PORT:-8080}:80"
+        depends_on:
+            backend:
+                condition: service_healthy
 
 volumes:
-  postgres_data:
+    postgres_data:
