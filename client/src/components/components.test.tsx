@@ -34,6 +34,17 @@ function renderModal(currentTask: TaskType | null = null) {
 }
 
 describe('основные компоненты доски', () => {
+  it.each(['working', 'checking', 'done'] as const)('показывает приоритет без редактирования в статусе %s', (taskStatus) => {
+    renderModal({ ...task, taskStatus, priority: 'high' })
+    expect(screen.queryByRole('combobox', { name: 'Приоритет' })).not.toBeInTheDocument()
+    expect(screen.getByText('Высокий')).toBeInTheDocument()
+  })
+  it('позволяет капитану менять приоритет ожидающей задачи', async () => {
+    const dispatch = renderModal({ ...task, taskStatus: 'waiting' })
+    await userEvent.click(screen.getByRole('combobox', { name: 'Приоритет' }))
+    await userEvent.click(screen.getByRole('option', { name: 'Высокий' }))
+    expect(dispatch).toHaveBeenCalledWith({ type: 'tasks/updateTaskPriorityRequest', payload: { taskId: task.taskId, priority: 'high' } })
+  })
   it('передаёт выбранного исполнителя при создании задачи', async () => {
     const dispatch = renderModal()
     await userEvent.type(screen.getByLabelText('Название задачи'), 'Задача')
@@ -84,8 +95,14 @@ describe('основные компоненты доски', () => {
     const actor = userEvent.setup()
     await actor.type(screen.getByLabelText('Название задачи'), 'Новая задача')
     await actor.type(screen.getByLabelText('Описание / ТЗ'), 'Описание')
+    await actor.click(screen.getByRole('combobox', { name: 'Приоритет' }))
+    await actor.click(screen.getByRole('option', { name: 'Высокий' }))
+    await actor.click(screen.getByRole('button', { name: 'Добавить ссылку' }))
+    await actor.type(screen.getByLabelText('Ссылка'), 'https://example.com/spec')
+    await actor.type(screen.getByLabelText('Название ссылки'), 'ТЗ по ссылке')
+    await actor.click(screen.getByRole('button', { name: 'Прикрепить ссылку' }))
     await actor.click(screen.getByRole('button', { name: 'Создать задачу' }))
-    expect(dispatch).toHaveBeenCalledWith(createTaskRequest({ projectId: project.id, taskName: 'Новая задача', taskDesc: 'Описание', taskDeadline: undefined, attachments: [] }))
+    expect(dispatch).toHaveBeenCalledWith(createTaskRequest({ projectId: project.id, taskName: 'Новая задача', taskDesc: 'Описание', priority: 'high', taskDeadline: undefined, attachments: [expect.objectContaining({ url: 'https://example.com/spec', name: 'ТЗ по ссылке' })] }))
   })
 
   it('разрешает отправку на проверку после прикрепления результата', async () => {

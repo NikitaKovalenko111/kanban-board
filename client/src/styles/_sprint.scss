@@ -18,7 +18,6 @@
   --color-primary-dark: #8094ff;
 }
 .workspace-nav .search { margin-left: auto; }
-.project-nav-manage + .search { margin-left: 12px; }
 .search {
   min-height: 44px; gap: 10px; color: var(--color-muted);
   svg { flex: 0 0 auto; width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.8; }

@@ -1,3 +1,4 @@
+import { priorityLabels } from '../../utils/taskPriority'
 import Icon from '../Icon/Icon'
 import type { JSX } from 'react'
 import type React from 'react'
@@ -15,6 +16,7 @@ const Task: React.FC<PropsType> = ({ task, onClick, showProject }): JSX.Element 
             {showProject && <span className="task__project"><i style={{ background: project?.color ?? '#aab1be' }} />{project?.name ?? 'Неизвестный проект'}</span>}
             <h4 className="task__name">{task.taskName}</h4>
             <p className="task__desc">{task.taskDesc}</p>
+            <div className="task__labels"><span className={`task-priority task-priority--${task.priority ?? 'medium'}`}>Приоритет: {priorityLabels[task.priority ?? 'medium']}</span></div>
             {task.revisionComment && <span className="task__revision"><Icon name="arrow-left" /> На доработке</span>}
             <div className="task__footer">
               <span className="task__assignee" title={task.assignee}>{task.assignee.split(' ').map((part) => part[0]).join('')}</span>

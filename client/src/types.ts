@@ -5,7 +5,8 @@ export type StudyGroup = '203' | '204' | 'both'
 export type ReminderScenario = 'none' | 'at-start' | '15-min' | '1-hour' | '1-day'
 export interface EventReminders { reminderMode: 'type' | 'custom'; reminderMinutes: number[] }
 export type EventPrivacy = 'hidden' | 'busy' | 'title' | 'details'
-export type EventCategory = 'class' | 'team' | 'group' | 'personal' | 'deadline'
+export type EventCategory = 'team' | 'group' | 'personal'
+export type TaskPriority = 'low' | 'medium' | 'high'
 
 export interface Project {
   id: string
@@ -37,7 +38,7 @@ export interface AddProjectSourcesPayload {
 
 export interface ScheduleEvent {
   id: number
-  projectId: string
+  projectId?: string
   title: string
   description: string
   startsAt: string
@@ -58,6 +59,7 @@ export interface ScheduleEvent {
 export type NewScheduleEvent = Omit<ScheduleEvent, 'id'>
 
 export interface Attachment {
+  url?: string
   id: string
   name: string
   size: number
@@ -86,6 +88,7 @@ export interface Task {
   taskName: string
   taskDesc: string
   taskStatus: TaskStatus
+  priority?: TaskPriority
   taskDeadline?: string
   attachments: Attachment[]
   resultAttachments: Attachment[]
@@ -102,6 +105,7 @@ export interface User {
   id: number
   name: string
   login: string
+  studentGroup?: StudyGroup
   role: UserRole
   position: string
   projectRoles: Record<string, string>
@@ -124,7 +128,10 @@ export interface TeamMember extends User {
   joinedAt: string
 }
 
+export interface AccountSettings { login: string; studentGroup?: StudyGroup }
+
 export interface NewTeamMember {
+  studentGroup?: StudyGroup
   name: string
   login: string
   password: string
@@ -133,7 +140,7 @@ export interface NewTeamMember {
   projectRoles: Record<string, string>
 }
 
-export type NewTask = Pick<Task, 'projectId' | 'taskName' | 'taskDesc' | 'taskDeadline' | 'attachments'> & { assigneeId?: number }
+export type NewTask = Pick<Task, 'projectId' | 'taskName' | 'taskDesc' | 'taskDeadline' | 'attachments'> & { assigneeId?: number; priority?: TaskPriority }
 
 export interface TaskAssignment {
   taskId: number

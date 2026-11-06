@@ -40,7 +40,7 @@ const WorkspaceNav = () => {
   if (!showSwitcher && !showSearch) return null
   return <div className="workspace-nav">
     <div className="container workspace-nav__container">
-      {showSwitcher && <div className={`project-switcher ${projectsOpen ? 'is-open' : ''}`} ref={switcherRef}>
+      {showSwitcher && <div className="workspace-nav__project"><div className={`project-switcher ${projectsOpen ? 'is-open' : ''}`} ref={switcherRef}>
         <button className="project-switcher__trigger" type="button" onClick={() => setProjectsOpen((value) => !value)} disabled={loading} aria-haspopup="listbox" aria-expanded={projectsOpen}>
           <span className={`project-switcher__dot ${allProjectsSelected ? 'project-switcher__dot--all' : ''}`} style={{ background: allProjectsSelected ? undefined : activeProject?.color ?? '#aab1be' }} />
           <span className="project-switcher__copy"><strong>{loading ? 'Загрузка…' : allProjectsSelected ? 'Все проекты' : activeProject?.name ?? 'Выберите проект'}</strong></span>
@@ -62,8 +62,9 @@ const WorkspaceNav = () => {
           </div>
           <Link className="project-menu__manage" to="/projects" onClick={() => setProjectsOpen(false)}><Icon name={user.role === 'lead' ? 'plus' : 'arrow-right'} /> {user.role === 'lead' ? 'Управление проектами' : 'Все проекты'}</Link>
         </div>}
+      </div>
+      {user.role === 'lead' && activeProject && pathname === '/' && <Link className="project-nav-manage" to={`/projects/${activeProject.id}/manage`} title="Управление проектом" aria-label="Управление проектом"><Icon name="settings" /></Link>}
       </div>}
-      {user.role === 'lead' && activeProject && pathname === '/' && <Link className="project-nav-manage" to={`/projects/${activeProject.id}/manage`}>Управление проектом</Link>}
       {showSearch && <SearchField value={params.get('q') ?? ''} onChange={(value) => setParams((previous) => { const next = new URLSearchParams(previous); if (value) next.set('q', value); else next.delete('q'); return next }, { replace: true })} placeholder={pathname === '/' ? 'Поиск по задачам' : 'Поиск по истории'} />}
     </div>
   </div>

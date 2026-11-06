@@ -1,10 +1,12 @@
+import { createLinkAttachment } from '../utils/attachmentLinks'
+import { validatePriority } from '../utils/taskPriority'
 import axios, { type AxiosRequestConfig, type AxiosResponse } from 'axios'
 import { loadFile, saveFile } from './fileStorage'
-import { visibleSchedule } from '../utils/schedule'
+import { eventCategory, visibleSchedule } from '../utils/schedule'
 import { loadEventTypes } from '../utils/eventTypes'
 import { eventReminderMinutes, validateReminderMinutes } from '../utils/reminders'
 import { validateTaskTransition } from '../utils/taskPermissions'
-import type { EventPrivacy, EventReminders, TaskStatusUpdate } from '../types'
+import type { AccountSettings, TaskPriority, EventPrivacy, EventReminders, TaskStatusUpdate } from '../types'
 import type { AddProjectSourcesPayload, AddTaskCommentPayload, Attachment, LoginCredentials, NewProject, NewScheduleEvent, NewTask, NewTeamMember, Project, ProjectSource, ScheduleEvent, Task, TaskComment, TaskHistoryEvent, TaskStatus, TeamMember, TeamSettings, User } from '../types'
 
 interface Account extends TeamMember { password: string }
@@ -68,6 +70,16 @@ let tasks: Task[] = taskSeeds.map((task) => {
   return { ...normalized, assigneeId: accounts.find((account) => account.name === normalized.assignee)?.id, history: createInitialHistory(normalized), comments }
 })
 
+try {
+  const saved = JSON.parse(localStorage.getItem('mock-account-settings') ?? '{}') as Record<string, AccountSettings>
+  accounts = accounts.map(account => {
+    const settings = saved[account.id]
+    return settings && typeof settings.login === 'string' && /^[a-z0-9._-]+$/.test(settings.login)
+      ? { ...account, login: settings.login, studentGroup: settings.studentGroup === '203' || settings.studentGroup === '204' ? settings.studentGroup : undefined }
+      : account
+  })
+} catch { /* Ignore malformed local settings. */ }
+
 accounts = accounts.map((account) => ({ ...account, eventPrivacy: (localStorage.getItem(`event-privacy-${account.id}`) as EventPrivacy | null) ?? 'busy' }))
 
 const client = axios.create({ baseURL: import.meta.env.VITE_API_URL || '/mock-api', withCredentials: true })
@@ -102,6 +114,7 @@ projects = projects.map((project) => ({ ...project, sources: project.sources.map
 tasks = tasks.map((task) => ({ ...task, attachments: task.attachments.map((file) => seedAttachment(file, task.taskName + '\n' + task.taskDesc)), resultAttachments: task.resultAttachments.map((file) => seedAttachment(file, 'Результат: ' + task.taskName)) }))
 const validateFiles = async (files: Attachment[]) => {
   for (const file of files) {
+    if (file.url) { createLinkAttachment(file.url, file.name); continue }
     const blob = seedFiles.get(file.id) ?? await loadFile(file.id)
     if (blob.size !== file.size) throw new Error('Данные файла повреждены. Загрузите файл повторно')
   }
@@ -218,14 +231,16 @@ if (!import.meta.env.VITE_API_URL) client.defaults.adapter = async (config) => {
   }
   if (config.url?.startsWith('/schedule/') && config.method === 'get') {
     const projectId = config.url.split('/').pop()
-    return response(config, visibleSchedule(scheduleEvents.filter((event) => projectId === 'all' || event.projectId === projectId).map((event) => ({ ...event, ...(event.reminderMode ? { reminderMinutes: eventReminderMinutes(event, loadEventTypes()) } : {}) })), currentActor(), accounts))
+    return response(config, visibleSchedule(scheduleEvents.filter((event) => eventCategory(event) === 'personal' || projectId === 'all' || event.projectId === projectId).map((event) => ({ ...event, ...(event.reminderMode ? { reminderMinutes: eventReminderMinutes(event, loadEventTypes()) } : {}) })), currentActor(), accounts))
   }
   if (config.url === '/schedule' && config.method === 'post') {
     const actor = currentActor()
     const payload = JSON.parse(config.data as string) as NewScheduleEvent
     if (payload.reminderMode && !['type', 'custom'].includes(payload.reminderMode)) throw new Error('Неизвестный режим напоминаний')
     if (payload.reminderMinutes) payload.reminderMinutes = validateReminderMinutes(payload.reminderMinutes)
-    const event: ScheduleEvent = { ...payload, author: actor.name, ownerId: actor.id, id: Date.now() }
+    if (payload.category && !['team', 'group', 'personal'].includes(payload.category)) throw new Error('Выберите категорию события')
+    if (payload.category !== 'personal' && !payload.projectId) throw new Error('Выберите проект события')
+    const event: ScheduleEvent = { ...payload, projectId: payload.category === 'personal' ? undefined : payload.projectId, author: actor.name, ownerId: actor.id, id: Date.now() }
     scheduleEvents = [...scheduleEvents, event]
     return response(config, { ...event }, 201)
   }
@@ -252,6 +267,25 @@ if (!import.meta.env.VITE_API_URL) client.defaults.adapter = async (config) => {
     if (!account.active) throw new Error('Аккаунт заблокирован. Обратитесь к тимлиду')
     return response(config, publicUser(account))
   }
+  if (config.method === 'patch' && config.url?.match(/^\/team\/members\/\d+\/account$/)) {
+    const actor = currentActor()
+    const id = Number(config.url.split('/')[3])
+    if (actor.id !== id && actor.role !== 'lead') throw new Error('Изменять чужой аккаунт может только капитан')
+    const previous = accounts.find(account => account.id === id)
+    if (!previous) throw new Error('Участник не найден')
+    const payload = JSON.parse(config.data as string) as AccountSettings
+    const login = payload.login.trim().toLowerCase()
+    if (!/^[a-z0-9._-]+$/.test(login)) throw new Error('Логин может содержать латинские буквы, цифры, точку, дефис и подчёркивание')
+    if (accounts.some(account => account.id !== id && account.login === login)) throw new Error('Такой логин уже занят')
+    if (payload.studentGroup && !['203', '204'].includes(payload.studentGroup)) throw new Error('Выберите учебную группу')
+    const updated = { ...previous, login, studentGroup: payload.studentGroup }
+    accounts = accounts.map(account => account.id === id ? updated : account)
+    const avatar = localStorage.getItem(`mock-avatar-${previous.login}`)
+    if (avatar && login !== previous.login) { localStorage.setItem(`mock-avatar-${login}`, avatar); localStorage.removeItem(`mock-avatar-${previous.login}`) }
+    localStorage.setItem('mock-account-settings', JSON.stringify(Object.fromEntries(accounts.map(account => [account.id, { login: account.login, studentGroup: account.studentGroup }]))))
+    if (actor.id === id) localStorage.setItem('mock-session', JSON.stringify(publicUser(updated)))
+    return response(config, publicMember(updated))
+  }
   if (config.url === '/team' && config.method === 'get') return response(config, { settings: { ...teamSettings }, members: accounts.map(publicMember) })
   if (config.url === '/team' && config.method === 'patch') {
     requireLead()
@@ -263,6 +297,7 @@ if (!import.meta.env.VITE_API_URL) client.defaults.adapter = async (config) => {
     const payload = JSON.parse(config.data as string) as NewTeamMember
     if (!payload.name.trim() || !/^[a-z0-9._-]+$/.test(payload.login.trim().toLowerCase()) || payload.password.length < 6 || !['lead', 'member'].includes(payload.role)) throw new Error('Проверьте имя, логин и пароль (от 6 символов)')
     if (accounts.some((item) => item.login === payload.login.trim().toLowerCase())) throw new Error('Такой логин уже занят')
+    if (payload.studentGroup && !['203', '204'].includes(payload.studentGroup)) throw new Error('Выберите учебную группу')
     const account: Account = { ...payload, login: payload.login.trim().toLowerCase(), id: Date.now(), active: true, joinedAt: new Date().toISOString().slice(0, 10) }
     accounts = [...accounts, account]
     return response(config, publicMember(account), 201)
@@ -277,6 +312,28 @@ if (!import.meta.env.VITE_API_URL) client.defaults.adapter = async (config) => {
     if (!account) throw new Error('Участник не найден')
     return response(config, publicMember(account))
   }
+  if (config.method === 'patch' && config.url?.match(/^\/tasks\/\d+\/priority$/)) {
+    requireLead()
+    const id = Number(config.url.split('/')[2])
+    const previous = tasks.find(task => task.taskId === id)
+    if (!previous) throw new Error('Задача не найдена')
+    if (previous.taskStatus !== 'waiting') throw new Error('Приоритет можно менять только у задач в ожидании')
+    const priority = validatePriority(JSON.parse(config.data as string).priority)
+    const updated = { ...previous, priority }
+    tasks = tasks.map(task => task.taskId === id ? updated : task)
+    return response(config, cloneTask(updated))
+  }
+  if (config.method === 'post' && config.url?.match(/^\/tasks\/\d+\/sources$/)) {
+    requireLead()
+    const id = Number(config.url.split('/')[2])
+    const previous = tasks.find(task => task.taskId === id)
+    if (!previous) throw new Error('Задача не найдена')
+    const files = JSON.parse(config.data as string) as Attachment[]
+    await validateFiles(files)
+    const updated = { ...previous, attachments: [...previous.attachments, ...files] }
+    tasks = tasks.map(task => task.taskId === id ? updated : task)
+    return response(config, cloneTask(updated))
+  }
   if (config.url === '/tasks' && config.method === 'get') return response(config, tasks.map(cloneTask))
   if (config.url === '/tasks' && config.method === 'post') {
     requireLead()
@@ -284,7 +341,7 @@ if (!import.meta.env.VITE_API_URL) client.defaults.adapter = async (config) => {
     const assignee = payload.assigneeId === undefined ? undefined : accounts.find((account) => account.id === payload.assigneeId && account.active)
     if (payload.assigneeId !== undefined && !assignee) throw new Error('Выберите активного участника')
     await validateFiles(payload.attachments)
-    const task: Task = { ...payload, resultAttachments: [], history: [], comments: [], taskId: Date.now(), taskStatus: 'waiting', assignee: assignee?.name ?? 'Не назначен', assigneeId: assignee?.id, createdAt: new Date().toISOString().slice(0, 10) }
+    const task: Task = { ...payload, priority: validatePriority(payload.priority), resultAttachments: [], history: [], comments: [], taskId: Date.now(), taskStatus: 'waiting', assignee: assignee?.name ?? 'Не назначен', assigneeId: assignee?.id, createdAt: new Date().toISOString().slice(0, 10) }
     tasks = [task, ...tasks]
     return response(config, cloneTask(task), 201)
   }
@@ -359,6 +416,9 @@ export const mockApi = {
     return (await client.post<Attachment>('/attachments', form)).data
   },
   resetPassword: async (id: number) => (await client.post<{ password: string }>(`/team/members/${id}/password`)).data,
+  updateAccount: async (id: number, settings: AccountSettings) => (await client.patch<TeamMember>(`/team/members/${id}/account`, settings)).data,
+  updateTaskPriority: async (id: number, priority: TaskPriority) => (await client.patch<Task>(`/tasks/${id}/priority`, { priority })).data,
+  addTaskSources: async (id: number, files: Attachment[]) => (await client.post<Task>(`/tasks/${id}/sources`, files)).data,
   changePassword: async (payload: { currentPassword: string; newPassword: string }) => (await client.post<{ success: boolean }>('/users/me/password', payload)).data,
   updatePrivacy: async (eventPrivacy: EventPrivacy) => (await client.patch<User>('/users/me', { eventPrivacy })).data,
   getProjects: async () => (await client.get<Project[]>('/projects')).data,

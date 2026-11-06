@@ -1,5 +1,5 @@
 import Icon from '../../components/Icon/Icon'
-import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
+import { useEffect, useId, useMemo, useRef, useState, type FormEvent } from 'react'
 import FormModal from '../../components/FormModal/FormModal'
 import { useAppDispatch, useAppSelector } from '../../store/hooks'
 import { createScheduleEventRequest, loadScheduleRequest, updateEventRemindersRequest } from '../../store/slices/scheduleSlice'
@@ -25,6 +25,8 @@ const SchedulePage = () => {
   const activeProjectId = useProjectSelection('schedule')
   const { items: events, loading, saving, error } = useAppSelector((state) => state.schedule)
   const [showForm, setShowForm] = useState(false)
+  const [filtersOpen, setFiltersOpen] = useState(false)
+  const filtersId = useId()
   const [query, setQuery] = useState('')
   const [viewMode, setViewMode] = useState<'day' | 'week'>('week')
   const [layout, setLayout] = useState<'columns' | 'rows'>('columns')
@@ -85,8 +87,8 @@ const SchedulePage = () => {
     const personal = eventCategory(event) === 'personal'
     const group = scope.startsWith('group:') ? scope.slice(6) : 'both'
     const owner = members.find((member) => member.id === selectedOwnerId) ?? user
-    const matchesOwner = personal ? event.ownerId === selectedOwnerId : !!owner.projectRoles[event.projectId] || owner.role === 'lead'
-    return (activeProjectId === 'all' || event.projectId === activeProjectId)
+    const matchesOwner = personal ? event.ownerId === selectedOwnerId : !!(event.projectId && owner.projectRoles[event.projectId]) || owner.role === 'lead'
+    return (personal || activeProjectId === 'all' || event.projectId === activeProjectId)
       && (categoryFilter === 'all' || eventCategory(event) === categoryFilter)
       && (scope.startsWith('group:') ? !personal && (!event.group || group === 'both' || event.group === 'both' || event.group === group) : matchesOwner)
       && `${event.title} ${event.description} ${projectName}`.toLowerCase().includes(query.toLowerCase())
@@ -120,11 +122,11 @@ const SchedulePage = () => {
   const submit = (event: FormEvent) => {
     event.preventDefault()
     const selectedType = eventTypes.find((item) => item.id === type)
-    if (!selectedType) return
+    if (!selectedType || (category !== 'personal' && !eventProjectId)) return
     let reminderMinutes: number[]
     try { reminderMinutes = validateReminderMinutes(reminders.reminderMode === 'type' ? selectedDefaults : reminders.reminderMinutes) } catch (reason) { setReminderError((reason as Error).message); return }
     dispatch(createScheduleEventRequest({
-      projectId: eventProjectId, title: title.trim(), description: description.trim(),
+      ...(category === 'personal' ? {} : { projectId: eventProjectId }), title: title.trim(), description: description.trim(),
       startsAt: `${date}T${time}:00`, endsAt: endTime ? `${date}T${endTime}:00` : undefined,
       type, typeLabel: selectedType.label, typeColor: selectedType.color,
       reminder: 'none', ...reminders, reminderMinutes, category, ownerId: user.id, location: location.trim() || undefined, author: user.name,
@@ -138,6 +140,8 @@ const SchedulePage = () => {
       <h1>Расписание</h1>
       {<button className="button" onClick={() => { setDate(selectedDate); setReminderEvent(null); setReminderError(''); setReminders({ reminderMode: 'type', reminderMinutes: eventTypes.find((item) => item.id === type)?.reminderMinutes ?? [] }); setCategory(user.role === 'lead' ? 'team' : 'personal'); setShowForm(true) }}><Icon name="plus" /> Добавить событие</button>}
     </div>
+    {slider.mobile && <button type="button" className="schedule-filters-toggle" aria-expanded={filtersOpen} aria-controls={filtersId} onClick={() => setFiltersOpen(open => !open)}><span>Фильтры и настройки</span><Icon name="arrow-down" /></button>}
+    <div id={filtersId} className="schedule-options" hidden={slider.mobile && !filtersOpen}>
     <section className="schedule-controls">
       <div className="schedule-period">
         <button onClick={() => movePeriod(-1)} aria-label="Предыдущий период"><Icon name="arrow-left" /></button>
@@ -160,12 +164,13 @@ const SchedulePage = () => {
     <div className="schedule-toolbar">
       <select aria-label="Расписание участника или группы" value={scope} onChange={(event) => setScope(event.target.value)}>
         <option value="mine">Моё расписание</option>
-        <optgroup label="Участники">{members.filter((member) => member.active && member.id !== user.id).map((member) => <option value={`user:${member.id}`} key={member.id}>{member.name}</option>)}</optgroup>
         <optgroup label="Учебные группы"><option value="group:203">Группа 203</option><option value="group:204">Группа 204</option><option value="group:both">Обе группы</option></optgroup>
+        <optgroup label="Участники">{members.filter((member) => member.active && member.id !== user.id).map((member) => <option value={`user:${member.id}`} key={member.id}>{member.name}</option>)}</optgroup>
       </select>
       <select aria-label="Категория событий" value={categoryFilter} onChange={(event) => setCategoryFilter(event.target.value as EventCategory | 'all')}>
-        <option value="all">Все</option><option value="class">Только пары</option><option value="team">Командные</option><option value="group">Групповые</option><option value="personal">Личные</option><option value="deadline">Контрольные точки</option>
+        <option value="all">Все</option><option value="team">Командные</option><option value="group">Групповые</option><option value="personal">Личные</option>
       </select>
+    </div>
     </div>
     {(visibleMode === 'day' || layout === 'rows') && <nav className="schedule-days" aria-label="Выбор дня недели">
       {weekDays.map((day) => <button key={day} className={day === selectedDate ? 'is-active' : ''} aria-pressed={day === selectedDate} onClick={() => { setSelectedDate(day); if (visibleMode === 'week' && layout === 'rows') document.getElementById(`schedule-day-${day}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' }) }}>
@@ -186,7 +191,7 @@ const SchedulePage = () => {
               <time dateTime={event.startsAt}>{formatTime(event.startsAt)}{event.endsAt && <small>— {formatTime(event.endsAt)}</small>}</time>
               <span><span className="agenda-item__labels">
                 <small style={{ color: eventType?.color ?? event.typeColor }}>{eventType?.label ?? event.typeLabel}</small>
-                <small className="agenda-item__project"><i style={{ background: project?.color }} />{project?.name ?? 'Проект'}</small>
+                {eventCategory(event) !== 'personal' && <small className="agenda-item__project"><i style={{ background: project?.color }} />{project?.name ?? 'Проект'}</small>}
                 {event.group && eventCategory(event) !== 'personal' && <small className="agenda-item__group">{event.group === 'both' ? 'Группы 203 и 204' : `Группа ${event.group}`}</small>}
               </span><strong>{event.title}</strong><p>{event.description}</p>{reminderButton(event)}</span>
               {event.location && <em>{event.location}</em>}
@@ -197,7 +202,7 @@ const SchedulePage = () => {
                 <span className="schedule-event__type" style={{ color: eventType?.color ?? event.typeColor }}>{eventType?.label ?? event.typeLabel}</span>
                 <h3>{event.title}</h3><p>{event.description}</p>
                 {event.location && <span>{event.location}</span>}
-                <span className="schedule-event__project"><i style={{ background: project?.color }} />{project?.name ?? 'Проект'}</span>
+                {eventCategory(event) !== 'personal' && <span className="schedule-event__project"><i style={{ background: project?.color }} />{project?.name ?? 'Проект'}</span>}
                 {event.group && eventCategory(event) !== 'personal' && <small>{event.group === 'both' ? 'Группы 203 и 204' : `Группа ${event.group}`}</small>}
                 {reminderButton(event)}
               </div>
@@ -212,17 +217,17 @@ const SchedulePage = () => {
       <label>Название<input value={title} onChange={(event) => setTitle(event.target.value)} required /></label>
       <label>Описание<textarea value={description} onChange={(event) => setDescription(event.target.value)} required /></label>
       <div className="schedule-form__grid">
-        <label>Проект<select value={eventProjectId} onChange={(event) => setEventProjectId(event.target.value)} required>{projects.map((project) => <option value={project.id} key={project.id}>{project.name}</option>)}</select></label>
+        {category !== 'personal' && <label>Проект<select value={eventProjectId} onChange={(event) => setEventProjectId(event.target.value)} required>{projects.map((project) => <option value={project.id} key={project.id}>{project.name}</option>)}</select></label>}
         <label>Дата<input type="date" value={date} onChange={(event) => setDate(event.target.value)} required /></label>
         <label>Начало<input type="time" value={time} onChange={(event) => setTime(event.target.value)} required /></label>
         <label><span>Окончание <small>(необязательно)</small></span><input type="time" value={endTime} onChange={(event) => setEndTime(event.target.value)} min={time} /></label>
-        <label>Категория<select value={category} onChange={(event) => setCategory(event.target.value as EventCategory)}><option value="personal">Личные</option><option value="class">Пары</option><option value="team">Командные</option><option value="group">Групповые</option><option value="deadline">Контрольные точки</option></select></label>
+        <label>Категория<select value={category} onChange={(event) => setCategory(event.target.value as EventCategory)}><option value="personal">Личные</option><option value="team">Командные</option><option value="group">Групповые</option></select></label>
         <label>Тип<select value={type} onChange={(event) => setType(event.target.value)} required>{eventTypes.map((item) => <option value={item.id} key={item.id}>{item.label}</option>)}</select></label>
         <label>Место<input value={location} onChange={(event) => setLocation(event.target.value)} placeholder="Необязательно" /></label>
       </div>
       <EventReminderEditor value={reminders} defaults={selectedDefaults} onChange={setReminders} />
       {reminderError && <p className="error-banner" role="alert">{reminderError}</p>}
-      <button className="button" disabled={saving || !eventProjectId || !type}>Добавить</button>
+      <button className="button" disabled={saving || (category !== 'personal' && !eventProjectId) || !type}>Добавить</button>
     </form>
   </FormModal>}
   {reminderEvent && <FormModal title="Напоминания события" onClose={() => setReminderEvent(null)}><form className="management-form" onSubmit={submitReminders}><h3>{reminderEvent.title}</h3><EventReminderEditor value={reminders} defaults={selectedDefaults} onChange={setReminders} />{(reminderError || error) && <p className="error-banner" role="alert">{reminderError || error}</p>}<button className="button" disabled={saving}>Сохранить</button></form></FormModal>}</main>

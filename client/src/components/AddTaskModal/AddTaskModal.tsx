@@ -1,3 +1,6 @@
+import LinkAttachment from '../LinkAttachment/LinkAttachment'
+import PrioritySelect from '../PrioritySelect/PrioritySelect'
+import { priorityLabels } from '../../utils/taskPriority'
 import Icon from '../Icon/Icon'
 import { useCallback, useEffect, useRef, useState, type FormEvent, type JSX } from 'react'
 import { createPortal } from 'react-dom'
@@ -7,9 +10,9 @@ import SearchField from '../SearchField/SearchField'
 import { isAssignedTo } from '../../utils/taskPermissions'
 import { useProjectSelection } from '../../store/useProjectSelection'
 import { useAppDispatch, useAppSelector } from '../../store/hooks'
-import { addTaskCommentRequest, assignTaskRequest, createTaskRequest, updateTaskStatusRequest } from '../../store/slices/tasksSlice'
+import { updateTaskPriorityRequest, addTaskCommentRequest, assignTaskRequest, createTaskRequest, updateTaskStatusRequest } from '../../store/slices/tasksSlice'
 import { loadTeamRequest } from '../../store/slices/teamSlice'
-import type { Attachment, Task, TaskStatus } from '../../types'
+import type { Attachment, Task, TaskPriority, TaskStatus } from '../../types'
 
 type PropsType = { task: Task | null; onClose: () => void }
 const statusLabels: Record<TaskStatus, string> = { waiting: 'Ожидание', working: 'В работе', checking: 'На проверке', done: 'Выполнено' }
@@ -32,6 +35,7 @@ const AddTaskModal: React.FC<PropsType> = ({ task, onClose }): JSX.Element => {
     const [name, setName] = useState('')
     const [description, setDescription] = useState('')
     const [deadline, setDeadline] = useState('')
+    const [priority, setPriority] = useState<TaskPriority>('medium')
     const [attachments, setAttachments] = useState<Attachment[]>([])
     const [resultAttachments, setResultAttachments] = useState<Attachment[]>(task?.resultAttachments ?? [])
     const [revision, setRevision] = useState('')
@@ -69,7 +73,7 @@ const AddTaskModal: React.FC<PropsType> = ({ task, onClose }): JSX.Element => {
 
     const submit = (event: FormEvent) => {
       event.preventDefault()
-      dispatch(createTaskRequest({ projectId: activeProjectId, taskName: name, taskDesc: description, taskDeadline: deadline || undefined, attachments, ...(assigneeValue ? { assigneeId: Number(assigneeValue) } : {}) }))
+      dispatch(createTaskRequest({ projectId: activeProjectId, taskName: name, taskDesc: description, priority, taskDeadline: deadline || undefined, attachments, ...(assigneeValue ? { assigneeId: Number(assigneeValue) } : {}) }))
       setSubmitted(true)
     }
 
@@ -121,14 +125,15 @@ const AddTaskModal: React.FC<PropsType> = ({ task, onClose }): JSX.Element => {
                 {task ? (
                   <div className="task-details">
                     <div className="task-details__status"><span>Статус</span><strong>{statusLabels[task.taskStatus]}</strong></div>
+                    <section>{user.role === 'lead' && task.taskStatus === 'waiting' ? <PrioritySelect value={task.priority ?? 'medium'} disabled={saving} compactLabel onChange={priority => dispatch(updateTaskPriorityRequest({ taskId: task.taskId, priority }))} /> : <><span className="eyebrow">Приоритет</span><p>{priorityLabels[task.priority ?? 'medium']}</p></>}</section>
                     <section><span className="eyebrow">Описание / ТЗ</span><p>{task.taskDesc}</p></section>
                     {task.revisionComment && <section className="task-details__notice"><span className="eyebrow">Комментарий к доработке</span><p>{task.revisionComment}</p></section>}
                     <div className="task-details__grid"><section><span className="eyebrow">Исполнитель</span><p>{task.assignee}</p></section><section><span className="eyebrow">Дедлайн</span><p>{task.taskDeadline ? new Date(task.taskDeadline).toLocaleDateString('ru-RU') : 'Не указан'}</p></section></div>
                     {user.role === 'lead' && (task.taskStatus === 'waiting' || task.taskStatus === 'working') && <section className="task-assignment">{assigneeSelect}<button type="button" className="button button--secondary" disabled={saving || teamLoading || assigneeValue === (currentAssignee === undefined ? '' : String(currentAssignee))} onClick={() => dispatch(assignTaskRequest({ taskId: task.taskId, assigneeId: assigneeValue ? Number(assigneeValue) : null }))}>Сохранить исполнителя</button></section>}
-                    <section><span className="eyebrow">Исходники</span>{task.attachments.length ? task.attachments.map((file) => <button type="button" className="file-row" key={file.id} onClick={() => void downloadFile(file)}><Icon name="arrow-down" /> <span>{file.name}</span><small>{Math.ceil(file.size / 1024)} КБ</small></button>) : <p className="muted">Нет вложений</p>}</section>
-                    {task.taskStatus === 'working' && canSubmitTask && <section className="work-result"><span className="eyebrow">Результат работы</span><p className="muted">Перед отправкой на проверку прикрепите выполненную работу.</p><label className="file-upload"><Icon name="plus" /> Прикрепить результат<input type="file" multiple onChange={(event) => void handleUpload(event.target.files, true)} /></label>{resultAttachments.map((file) => <button type="button" className="file-row" key={file.id} onClick={() => void downloadFile(file)}><Icon name="arrow-down" /> <span>{file.name}</span><small>{Math.ceil(file.size / 1024)} КБ</small></button>)}</section>}
+                    <section><span className="eyebrow">Исходники</span>{task.attachments.length ? task.attachments.map((file) => <button type="button" className="file-row" key={file.id} onClick={() => void downloadFile(file)}><Icon name="arrow-down" /> <span>{file.name}</span><small>{file.url ? 'Ссылка ↗' : `${Math.ceil(file.size / 1024)} КБ`}</small></button>) : <p className="muted">Нет вложений</p>}</section>
+                    {task.taskStatus === 'working' && canSubmitTask && <section className="work-result"><span className="eyebrow">Результат работы</span><p className="muted">Перед отправкой на проверку прикрепите файл или ссылку на выполненную работу.</p><div className="attachment-actions"><label className="file-upload"><Icon name="plus" /> Прикрепить результат<input type="file" multiple onChange={(event) => void handleUpload(event.target.files, true)} /></label><LinkAttachment disabled={saving || uploading} onAdd={link => setResultAttachments(current => [...current, link])} /></div>{resultAttachments.map((file) => <button type="button" className="file-row" key={file.id} onClick={() => void downloadFile(file)}><Icon name="arrow-down" /> <span>{file.name}</span><small>{file.url ? 'Ссылка ↗' : `${Math.ceil(file.size / 1024)} КБ`}</small></button>)}</section>}
                     {task.taskStatus === 'working' && !canSubmitTask && <section className="task-details__notice"><span className="eyebrow">Результат работы</span><p>Задача назначена другому участнику</p></section>}
-                    {(task.taskStatus === 'checking' || task.taskStatus === 'done') && <section><span className="eyebrow">Результат работы</span>{task.resultAttachments.map((file) => <button type="button" className="file-row" key={file.id} onClick={() => void downloadFile(file)}><Icon name="arrow-down" /> <span>{file.name}</span><small>{Math.ceil(file.size / 1024)} КБ</small></button>)}</section>}
+                    {(task.taskStatus === 'checking' || task.taskStatus === 'done') && <section><span className="eyebrow">Результат работы</span>{task.resultAttachments.map((file) => <button type="button" className="file-row" key={file.id} onClick={() => void downloadFile(file)}><Icon name="arrow-down" /> <span>{file.name}</span><small>{file.url ? 'Ссылка ↗' : `${Math.ceil(file.size / 1024)} КБ`}</small></button>)}</section>}
                     <div className="task-details__actions">
                       {task.taskStatus === 'waiting' && <button className="button" disabled={!canTakeTask} title={!canTakeTask ? `Задача назначена: ${task.assignee}` : undefined} onClick={() => move('working')}>{canTakeTask ? (task.assignee !== 'Не назначен' && !isAssignedTo(task, user) ? 'Переназначить на себя и взять в работу' : 'Взять в работу') : 'Назначена другому участнику'}</button>}
                       {task.taskStatus === 'working' && canSubmitTask && <button className="button" disabled={!resultAttachments.length || saving || uploading} onClick={() => move('checking', resultAttachments)}>Отправить на проверку</button>}
@@ -162,9 +167,11 @@ const AddTaskModal: React.FC<PropsType> = ({ task, onClose }): JSX.Element => {
                         Дедлайн <small>необязательно</small>
                         <input value={deadline} onChange={(event) => setDeadline(event.target.value)} type="date" />
                     </label>
+                    <PrioritySelect value={priority} onChange={setPriority} />
                     {user.role === 'lead' && assigneeSelect}
-                    <label className="file-upload"><Icon name="plus" /> Прикрепить исходники<input type="file" multiple onChange={(event) => void handleUpload(event.target.files, false)} /></label>
-                    {attachments.map((file) => <div className="file-row" key={file.id}>▱ <span>{file.name}</span><small>{Math.ceil(file.size / 1024)} КБ</small></div>)}
+                    <div className="attachment-actions"><label className="file-upload"><Icon name="plus" /> Прикрепить исходники<input type="file" multiple onChange={(event) => void handleUpload(event.target.files, false)} /></label>
+                    <LinkAttachment disabled={saving || uploading} onAdd={link => setAttachments(current => [...current, link])} /></div>
+                    {attachments.map((file) => <div className="file-row" key={file.id}>▱ <span>{file.name}</span><small>{file.url ? 'Ссылка ↗' : `${Math.ceil(file.size / 1024)} КБ`}</small></div>)}
                     <div className="add-task-modal__footer"><button type="button" className="button button--secondary" onClick={close}>Отмена</button><button type="submit" className="button" disabled={saving || uploading}>{uploading ? 'Загрузка файлов…' : saving ? 'Создаём…' : 'Создать задачу'}</button></div>
                 </form>
                 )}

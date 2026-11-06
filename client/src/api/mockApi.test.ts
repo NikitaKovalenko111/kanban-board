@@ -1,5 +1,6 @@
 import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest'
 import type { mockApi as Api } from './mockApi'
+import { createLinkAttachment } from '../utils/attachmentLinks'
 import { scheduleEvent } from '../test/fixtures'
 
 let api: typeof Api
@@ -34,6 +35,65 @@ const readText = (blob: Blob) => new Promise<string>((resolve, reject) => {
 })
 
 describe('mockApi', () => {
+  it('создаёт личное событие без проекта и возвращает его при переключении проектов', async () => {
+    const event = await request(api.createScheduleEvent({ ...scheduleEvent, projectId: undefined, category: 'personal' }))
+    expect(event.projectId).toBeUndefined()
+    for (const id of ['all', 'ai-hackathon', 'internal-portal']) {
+      expect(await request(api.getSchedule(id))).toContainEqual(event)
+    }
+  })
+  it('сбрасывает случайно переданный проект у личного события', async () => {
+    const event = await request(api.createScheduleEvent({ ...scheduleEvent, projectId: 'ai-hackathon', category: 'personal' }))
+    expect(event.projectId).toBeUndefined()
+  })
+  it.each(['team', 'group'] as const)('требует проект для категории %s', async category => {
+    await expect(request(api.createScheduleEvent({ ...scheduleEvent, projectId: undefined, category }))).rejects.toThrow('Выберите проект события')
+  })
+  it.each([102, 103, 104])('отклоняет изменение приоритета уже взятой задачи #%s', async (id) => {
+    const before = (await request(api.getTasks())).find(task => task.taskId === id)!
+    await expect(request(api.updateTaskPriority(id, 'high'))).rejects.toThrow('только у задач в ожидании')
+    const after = (await request(api.getTasks())).find(task => task.taskId === id)!
+    expect(after.priority).toBe(before.priority)
+  })
+  it('капитан изменяет логин и группу участника, сохраняя имя и пароль', async () => {
+    const changed = await request(api.updateAccount(2, { login: 'maria.new', studentGroup: '204' }))
+    expect(changed).toMatchObject({ id: 2, login: 'maria.new', studentGroup: '204', name: 'Мария Волкова' })
+    expect(await request(api.login({ login: 'maria.new', password: 'member123' }))).toMatchObject({ id: 2, studentGroup: '204' })
+    await expect(request(api.login({ login: 'maria', password: 'member123' }))).rejects.toThrow('Неверный логин')
+    expect(JSON.parse(localStorage.getItem('mock-account-settings')!)['2']).toEqual({ login: 'maria.new', studentGroup: '204' })
+  })
+  it('не допускает повторяющийся логин и редактирование чужого аккаунта участником', async () => {
+    await expect(request(api.updateAccount(2, { login: 'alexey' }))).rejects.toThrow('занят')
+    await signIn('maria')
+    await expect(request(api.updateAccount(3, { login: 'changed' }))).rejects.toThrow('только капитан')
+    expect(await request(api.updateAccount(2, { login: 'my-login', studentGroup: '203' }))).toMatchObject({ login: 'my-login' })
+    expect(JSON.parse(localStorage.getItem('mock-session')!).login).toBe('my-login')
+  })
+  it('сохраняет и меняет приоритет задачи, ограничивая изменение капитаном', async () => {
+    const created = await request(api.createTask({ projectId: 'ai-hackathon', taskName: 'Приоритет', taskDesc: '', attachments: [], priority: 'high' }))
+    expect(created.priority).toBe('high')
+    expect((await request(api.updateTaskPriority(created.taskId, 'low'))).priority).toBe('low')
+    await signIn('maria')
+    await expect(request(api.updateTaskPriority(created.taskId, 'high'))).rejects.toThrow('только капитану')
+  })
+  it('сохраняет ссылки проекта, исходники задачи и ссылку на результат при сдаче', async () => {
+    const link = createLinkAttachment('https://example.com/work', 'Макет')
+    const project = await request(api.addProjectSources({ projectId: 'ai-hackathon', files: [link], author: 'Капитан' }))
+    expect(project.sources).toContainEqual(expect.objectContaining({ url: link.url, name: 'Макет' }))
+    const created = await request(api.createTask({ projectId: project.id, taskName: 'По ссылке', taskDesc: '', attachments: [link], assigneeId: 2 }))
+    expect((await request(api.addTaskSources(created.taskId, [createLinkAttachment('https://example.com/spec')]))).attachments).toHaveLength(2)
+    await signIn('maria')
+    await request(api.updateTaskStatus(created.taskId, 'working', 'Мария'))
+    const submitted = await request(api.updateTaskStatus(created.taskId, 'checking', 'Мария', undefined, [link]))
+    expect(submitted.resultAttachments[0].url).toBe(link.url)
+    expect(submitted.attachments[0].url).toBe(link.url)
+  })
+  it('не обрезает несколько напоминаний события при сохранении и загрузке', async () => {
+    const event = await request(api.createScheduleEvent({ ...scheduleEvent, projectId: 'ai-hackathon', reminderMode: 'custom', reminderMinutes: [0, 30, 90] }))
+    expect((await request(api.getSchedule('all'))).find(item => item.id === event.id)?.reminderMinutes).toEqual([0, 30, 90])
+    expect((await request(api.updateEventReminders(event.id, { reminderMode: 'custom', reminderMinutes: [60, 1440] }))).reminderMinutes).toEqual([60, 1440])
+  })
+
   it('событие наследует интервалы типа, индивидуальные напоминания не меняют тип', async () => {
     localStorage.setItem('event-types', JSON.stringify([{ id: scheduleEvent.type, label: 'Встреча', color: '#123456', reminderMinutes: [30] }]))
     const event = await request(api.createScheduleEvent({ ...scheduleEvent, projectId: 'ai-hackathon', reminderMode: 'type', reminderMinutes: [30] }))
@@ -55,7 +115,7 @@ describe('mockApi', () => {
     expect(hidden.reminderMinutes).toEqual([])
   })
 
-  it.each(['team', 'group', 'class', 'deadline', 'personal'] as const)('участник может создать событие категории %s', async (category) => {
+  it.each(['team', 'group', 'personal'] as const)('участник может создать событие категории %s', async (category) => {
     const actor = await signIn('maria')
     const created = await request(api.createScheduleEvent({ ...scheduleEvent, category, ownerId: 1, author: 'Поддельный автор' }))
     expect(created).toMatchObject({ category, ownerId: actor.id, author: actor.name })
