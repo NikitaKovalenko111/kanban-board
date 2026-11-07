@@ -1,3 +1,4 @@
+import AccountSettingsForm from '../../components/AccountSettingsForm/AccountSettingsForm'
 import Icon from '../../components/Icon/Icon'
 import { useEffect, useState, type FormEvent } from 'react'
 import { useSearchParams } from 'react-router-dom'
@@ -8,7 +9,7 @@ import { mockApi } from '../../api/mockApi'
 import { useAppDispatch, useAppSelector } from '../../store/hooks'
 import { useProjectSelection } from '../../store/useProjectSelection'
 import { createMemberRequest, loadTeamRequest, toggleMemberRequest } from '../../store/slices/teamSlice'
-import type { UserRole } from '../../types'
+import type { StudyGroup, UserRole } from '../../types'
 
 const createPassword = () => 'team-' + crypto.randomUUID().slice(0, 12)
 
@@ -25,6 +26,7 @@ const TeamPage = () => {
   const [submitted, setSubmitted] = useState(false)
   const [name, setName] = useState('')
   const [login, setLogin] = useState('')
+  const [studentGroup, setStudentGroup] = useState<StudyGroup | ''>('')
   const [projectId, setProjectId] = useState('')
   const [projectRole, setProjectRole] = useState('')
   const [password, setPassword] = useState(createPassword)
@@ -38,7 +40,7 @@ const TeamPage = () => {
   useEffect(() => {
     if (submitted && !saving && !error) {
       setShowCreate(false); setSubmitted(false)
-      setName(''); setLogin(''); setProjectRole(''); setPassword(createPassword()); setRole('member')
+      setName(''); setLogin(''); setStudentGroup(''); setProjectRole(''); setPassword(createPassword()); setRole('member')
     }
   }, [submitted, saving, error])
   const visibleMembers = members.filter((member) => (activeProjectId === 'all' || !!member.projectRoles[activeProjectId]) && `${member.name} ${member.login} ${Object.values(member.projectRoles).join(' ')}`.toLowerCase().includes(search.toLowerCase()))
@@ -46,7 +48,7 @@ const TeamPage = () => {
   const createMember = (event: FormEvent) => {
     event.preventDefault()
     if (!canManage) return
-    dispatch(createMemberRequest({ name: name.trim(), login, password, position: '', projectRoles: projectId ? { [projectId]: projectRole.trim() || 'Участник' } : {}, role }))
+    dispatch(createMemberRequest({ name: name.trim(), login, studentGroup: studentGroup || undefined, password, position: '', projectRoles: projectId ? { [projectId]: projectRole.trim() || 'Участник' } : {}, role }))
     setSubmitted(true)
   }
   const openMember = (id: number) => {
@@ -77,7 +79,7 @@ const TeamPage = () => {
   {selected && <FormModal title={selected.name} onClose={() => setParams({})}>
     <div className="member-dialog">
       <UserAvatar user={selected.id === currentUser.id ? currentUser : selected} size="large" />
-      <p>@{selected.login}</p><p>{selected.role === 'lead' ? 'Капитан' : 'Участник'} · {selected.active ? 'Активен' : 'Заблокирован'}</p>
+      <p>@{selected.login}</p><p>{selected.studentGroup ? `Группа ${selected.studentGroup}` : 'Группа не указана'}</p>{canManage && <AccountSettingsForm key={selected.id} user={selected} />}<p>{selected.role === 'lead' ? 'Капитан' : 'Участник'} · {selected.active ? 'Активен' : 'Заблокирован'}</p>
       <dl>{projects.filter((project) => selected.projectRoles[project.id]).map((project) => <div key={project.id}><dt>{project.name}</dt><dd>{selected.projectRoles[project.id]}</dd></div>)}</dl>
       {(error || actionError) && <div className="error-banner" role="alert">{actionError || error}</div>}
       {canManage && selected.id !== currentUser.id && <div className="task-details__actions">
@@ -91,6 +93,7 @@ const TeamPage = () => {
     <form className="management-form" onSubmit={createMember}>
       <label>Имя и фамилия<input value={name} onChange={(event) => setName(event.target.value)} required /></label>
       <label>Логин<input autoComplete="off" value={login} onChange={(event) => setLogin(event.target.value.toLowerCase())} pattern="[a-z0-9._-]+" required /></label>
+      <label>Учебная группа<select value={studentGroup} onChange={event => setStudentGroup(event.target.value as StudyGroup | '')}><option value="">Не указана</option><option value="203">203</option><option value="204">204</option></select></label>
       <label>Статус<select value={role} onChange={(event) => setRole(event.target.value as UserRole)}><option value="member">Участник</option><option value="lead">Капитан</option></select></label>
       <label>Проект<select value={projectId} onChange={(event) => setProjectId(event.target.value)}><option value="">Без проекта</option>{projects.map((project) => <option key={project.id} value={project.id}>{project.name}</option>)}</select></label>
       {projectId && <label>Роль в проекте<input value={projectRole} onChange={(event) => setProjectRole(event.target.value)} required /></label>}

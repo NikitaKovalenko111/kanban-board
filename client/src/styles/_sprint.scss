@@ -15,10 +15,10 @@
   --color-muted: #b4bfd1;
   --color-border: #3d495e;
   --color-primary: #98a7ff;
+  --color-on-primary: #141820;
   --color-primary-dark: #8094ff;
 }
 .workspace-nav .search { margin-left: auto; }
-.project-nav-manage + .search { margin-left: 12px; }
 .search {
   min-height: 44px; gap: 10px; color: var(--color-muted);
   svg { flex: 0 0 auto; width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.8; }

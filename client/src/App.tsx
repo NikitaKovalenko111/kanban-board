@@ -22,6 +22,7 @@ function App() {
   const user = useAppSelector((state) => state.auth.user)
   useEffect(() => { document.documentElement.dataset.theme = localStorage.getItem('theme') ?? 'light' }, [])
   const [menuOpen, setMenuOpen] = useState(false)
+  useEffect(() => { setMenuOpen(false) }, [user?.id])
 
   if (!user) {
     return <Routes><Route path="*" element={<LoginPage />} /></Routes>
