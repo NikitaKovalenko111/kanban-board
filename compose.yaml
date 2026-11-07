@@ -53,7 +53,7 @@ services:
             context: ./backend
         restart: unless-stopped
         environment:
-            log_level: prod
+            log_level: info
             http_address: :3005
             timeout: 4s
             idle_timeout: 60s
