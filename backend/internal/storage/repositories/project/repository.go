@@ -23,11 +23,27 @@ func (r *Repository) ListProjects(ctx context.Context, userID string) ([]models.
 		return nil, err
 	}
 	rows, err := r.db.QueryContext(ctx, `
-		SELECT project_id, name, COALESCE(description, '')
-		FROM projects
-		WHERE is_archived = FALSE
-		ORDER BY name
-	`)
+		SELECT
+			p.project_id,
+			p.name,
+			CASE WHEN access.can_view_board THEN COALESCE(p.description, '') ELSE '' END,
+			access.can_view_board
+		FROM projects p
+		CROSS JOIN LATERAL (
+			SELECT EXISTS(
+				SELECT 1
+				FROM users u
+				LEFT JOIN project_members pm
+					ON pm.project_id = p.project_id
+					AND pm.user_id = u.user_id
+				WHERE u.user_id = $1
+					AND u.is_active = TRUE
+					AND (u.system_role = 'CAPTAIN' OR pm.status = 'ACTIVE')
+			) AS can_view_board
+		) access
+		WHERE p.is_archived = FALSE
+		ORDER BY p.name
+	`, userID)
 	if err != nil {
 		return nil, err
 	}
@@ -36,11 +52,18 @@ func (r *Repository) ListProjects(ctx context.Context, userID string) ([]models.
 	projects := make([]models.Project, 0)
 	for rows.Next() {
 		var project models.Project
-		if err := rows.Scan(&project.ID, &project.Name, &project.Description); err != nil {
+		if err := rows.Scan(
+			&project.ID,
+			&project.Name,
+			&project.Description,
+			&project.CanViewBoard,
+		); err != nil {
 			return nil, err
 		}
-		if err := r.fillProject(ctx, &project); err != nil {
-			return nil, err
+		if project.CanViewBoard {
+			if err := r.fillProject(ctx, &project); err != nil {
+				return nil, err
+			}
 		}
 		projects = append(projects, project)
 	}
@@ -49,7 +72,7 @@ func (r *Repository) ListProjects(ctx context.Context, userID string) ([]models.
 }
 
 func (r *Repository) GetProject(ctx context.Context, userID, projectID string) (*models.Project, error) {
-	if err := requireActiveUser(ctx, r.db, userID); err != nil {
+	if err := repositorycommon.RequireMember(ctx, r.db, userID, projectID); err != nil {
 		return nil, err
 	}
 	var project models.Project
@@ -67,6 +90,7 @@ func (r *Repository) GetProject(ctx context.Context, userID, projectID string) (
 	if err := r.fillProject(ctx, &project); err != nil {
 		return nil, err
 	}
+	project.CanViewBoard = true
 
 	return &project, nil
 }

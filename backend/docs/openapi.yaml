@@ -259,6 +259,7 @@ paths:
     get:
       tags: [Projects]
       summary: Получить проекты
+      description: Все проекты. Для недоступного проекта возвращаются только id, name и canViewBoard=false.
       responses:
         '200':
           description: Проекты
@@ -368,25 +369,6 @@ paths:
           content:
             application/json:
               schema: {type: array, items: {$ref: '#/components/schemas/BoardColumn'}}
-    put:
-      tags: [Columns]
-      summary: Заменить все колонки
-      description: Минимум четыре. Сервер вычисляет position и kind.
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: array
-              minItems: 4
-              items: {$ref: '#/components/schemas/ColumnInput'}
-      responses:
-        '200':
-          description: Обновлённые колонки
-          content:
-            application/json:
-              schema: {type: array, items: {$ref: '#/components/schemas/BoardColumn'}}
-        '409': {$ref: '#/components/responses/Conflict'}
   /api/v1/projects/{projectId}/tasks:
     parameters: [{$ref: '#/components/parameters/ProjectId'}]
     get:
@@ -411,6 +393,17 @@ paths:
           description: Задача
           content: {application/json: {schema: {$ref: '#/components/schemas/Task'}}}
         '403': {$ref: '#/components/responses/Forbidden'}
+  /api/v1/tasks:
+    get:
+      tags: [Tasks]
+      summary: Получить все свои задачи
+      description: Возвращает назначенные текущему пользователю задачи во всех проектах, включая выполненные.
+      responses:
+        '200':
+          description: Задачи текущего пользователя
+          content:
+            application/json:
+              schema: {type: array, items: {$ref: '#/components/schemas/Task'}}
   /api/v1/tasks/{taskId}:
     parameters: [{$ref: '#/components/parameters/TaskId'}]
     get:
@@ -633,9 +626,10 @@ paths:
     get:
       tags: [Events]
       summary: Получить события расписания
+      description: Можно запросить расписание любого активного пользователя. Закрытые личные события не возвращаются, остальные маскируются согласно schedulePrivacy владельца.
       parameters:
         - {in: query, name: personId, schema: {type: string, format: uuid}}
-        - {in: query, name: groups, schema: {type: string}, description: Группы через запятую}
+        - {in: query, name: groups, schema: {type: string}, deprecated: true, description: Игнорируется; группа определяется по personId}
         - {$ref: '#/components/parameters/FromDate'}
         - {$ref: '#/components/parameters/ToDate'}
       responses:
@@ -1052,13 +1046,14 @@ components:
         members: {type: array, items: {$ref: '#/components/schemas/ProjectMember'}}
     Project:
       type: object
-      required: [id, name, description, members, sources]
+      required: [id, name, canViewBoard]
       properties:
         id: {type: string, format: uuid}
         name: {type: string}
-        description: {type: string}
-        members: {type: array, items: {$ref: '#/components/schemas/ProjectMember'}}
-        sources: {type: array, items: {$ref: '#/components/schemas/ProjectSource'}}
+        canViewBoard: {type: boolean}
+        description: {type: string, description: Отсутствует, если canViewBoard=false}
+        members: {type: array, description: Отсутствует, если canViewBoard=false, items: {$ref: '#/components/schemas/ProjectMember'}}
+        sources: {type: array, description: Отсутствует, если canViewBoard=false, items: {$ref: '#/components/schemas/ProjectSource'}}
     FileInfo:
       type: object
       required: [id, name, sizeBytes, mimeType, downloadUrl]
@@ -1079,13 +1074,6 @@ components:
         file: {allOf: [{$ref: '#/components/schemas/FileInfo'}], nullable: true}
         addedBy: {type: string, format: uuid, nullable: true}
         addedAt: {type: string, format: date-time}
-    ColumnInput:
-      type: object
-      required: [title, color]
-      properties:
-        id: {type: string, format: uuid, nullable: true}
-        title: {type: string, minLength: 1}
-        color: {type: string, pattern: '^#[0-9A-Fa-f]{6}$'}
     BoardColumn:
       type: object
       required: [id, projectId, title, position, kind, color]
@@ -1255,15 +1243,21 @@ components:
     Notification:
       type: object
       required: [id, kind, title, text, at, read]
+      description: Ровно одно из полей taskId, eventId или lessonId присутствует в ответе.
+      oneOf:
+        - required: [taskId]
+        - required: [eventId]
+        - required: [lessonId]
       properties:
         id: {type: string, format: uuid}
-        kind: {type: string, enum: [COMMENT, RETURNED, STATUS, EVENT]}
+        kind: {type: string, enum: [COMMENT, RETURNED, STATUS, EVENT, LESSON]}
         title: {type: string}
         text: {type: string}
         at: {type: string, format: date-time}
         read: {type: boolean}
-        taskId: {type: string, format: uuid, nullable: true}
-        eventId: {type: string, format: uuid, nullable: true}
+        taskId: {type: string, format: uuid}
+        eventId: {type: string, format: uuid}
+        lessonId: {type: string, format: uuid}
       example:
         id: 550e8400-e29b-41d4-a716-446655440000
         kind: COMMENT

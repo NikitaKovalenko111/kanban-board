@@ -23,10 +23,12 @@ type FCM struct {
 }
 
 type ScheduleSync struct {
-	Enabled     bool          `yaml:"enabled"`
-	SourceURL   string        `yaml:"source_url"`
-	Interval    time.Duration `yaml:"interval"`
-	HTTPTimeout time.Duration `yaml:"http_timeout"`
+	Enabled       bool          `yaml:"enabled"`
+	SourceURL     string        `yaml:"source_url"`
+	SemesterID    int           `yaml:"semester_id"`
+	SemesterStart string        `yaml:"semester_start"`
+	Interval      time.Duration `yaml:"interval"`
+	HTTPTimeout   time.Duration `yaml:"http_timeout"`
 }
 
 func loadIntegrations(cfg *Config) error {
@@ -55,18 +57,26 @@ func loadIntegrations(cfg *Config) error {
 		return err
 	}
 	stringValues := map[string]*string{
-		"minio_endpoint":           &cfg.MinIO.Endpoint,
-		"minio_access_key":         &cfg.MinIO.AccessKey,
-		"minio_secret_key":         &cfg.MinIO.SecretKey,
-		"minio_bucket":             &cfg.MinIO.Bucket,
-		"fcm_credentials_file":     &cfg.FCM.CredentialsFile,
-		"fcm_project_id":           &cfg.FCM.ProjectID,
-		"schedule_sync_source_url": &cfg.ScheduleSync.SourceURL,
+		"minio_endpoint":               &cfg.MinIO.Endpoint,
+		"minio_access_key":             &cfg.MinIO.AccessKey,
+		"minio_secret_key":             &cfg.MinIO.SecretKey,
+		"minio_bucket":                 &cfg.MinIO.Bucket,
+		"fcm_credentials_file":         &cfg.FCM.CredentialsFile,
+		"fcm_project_id":               &cfg.FCM.ProjectID,
+		"schedule_sync_source_url":     &cfg.ScheduleSync.SourceURL,
+		"schedule_sync_semester_start": &cfg.ScheduleSync.SemesterStart,
 	}
 	for name, destination := range stringValues {
 		if value := os.Getenv(name); value != "" {
 			*destination = value
 		}
+	}
+	if value := os.Getenv("schedule_sync_semester_id"); value != "" {
+		semesterID, err := strconv.Atoi(value)
+		if err != nil {
+			return fmt.Errorf("invalid schedule_sync_semester_id: %w", err)
+		}
+		cfg.ScheduleSync.SemesterID = semesterID
 	}
 	for name, destination := range map[string]*time.Duration{
 		"schedule_sync_interval":     &cfg.ScheduleSync.Interval,
@@ -90,8 +100,17 @@ func validateIntegrations(cfg *Config) error {
 	if cfg.FCM.Enabled && cfg.FCM.CredentialsFile == "" {
 		return fmt.Errorf("fcm credentials_file is required when enabled")
 	}
-	if cfg.ScheduleSync.Enabled && (cfg.ScheduleSync.SourceURL == "" || cfg.ScheduleSync.Interval <= 0 || cfg.ScheduleSync.HTTPTimeout <= 0) {
-		return fmt.Errorf("schedule source_url and positive intervals are required when enabled")
+	if cfg.ScheduleSync.Enabled && (cfg.ScheduleSync.SourceURL == "" ||
+		cfg.ScheduleSync.SemesterID <= 0 ||
+		cfg.ScheduleSync.SemesterStart == "" ||
+		cfg.ScheduleSync.Interval <= 0 ||
+		cfg.ScheduleSync.HTTPTimeout <= 0) {
+		return fmt.Errorf("schedule source_url, semester_id, semester_start, and positive intervals are required when enabled")
+	}
+	if cfg.ScheduleSync.SemesterStart != "" {
+		if _, err := time.Parse("2006-01-02", cfg.ScheduleSync.SemesterStart); err != nil {
+			return fmt.Errorf("schedule semester_start must use YYYY-MM-DD: %w", err)
+		}
 	}
 	return nil
 }

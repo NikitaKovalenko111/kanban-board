@@ -157,6 +157,13 @@ func (s *Service) ListAssigned(ctx context.Context, userID, requestedUserID stri
 	return s.repo.ListAssigned(ctx, userID, requestedUserID)
 }
 
+func (s *Service) ListUserTasks(ctx context.Context, userID string) ([]Task, error) {
+	if err := servicecommon.ValidateUUID(userID); err != nil {
+		return nil, err
+	}
+	return s.repo.ListUserTasks(ctx, userID)
+}
+
 func validateTaskData(title, priority string) error {
 	if strings.TrimSpace(title) == "" {
 		return servicecommon.InvalidInput("title is required")

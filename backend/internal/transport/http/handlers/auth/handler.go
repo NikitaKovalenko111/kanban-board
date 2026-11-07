@@ -35,8 +35,8 @@ func (h *AuthHandler) StartPublic(mux *http.ServeMux) {
 }
 
 func (h *AuthHandler) StartProtected(mux *http.ServeMux) {
-	mux.HandleFunc("POST /auth/logout", h.Logout)
-	mux.HandleFunc("POST /auth/change-password", h.ChangePassword)
+	mux.HandleFunc("POST /logout", h.Logout)
+	mux.HandleFunc("POST /change-password", h.ChangePassword)
 }
 
 func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {

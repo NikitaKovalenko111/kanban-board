@@ -1,46 +1,54 @@
 package schedule_service
 
 import (
-	"strings"
 	"testing"
+	"time"
 )
 
-func TestParseScheduleHTML(t *testing.T) {
-	html := `
-		<table>
-			<tbody>
-				<tr>
-					<td>04.11.2026</td>
-					<td>09:40</td>
-					<td>11:10</td>
-					<td>Базы данных</td>
-					<td>Р-210</td>
-					<td>Иванов И. И.</td>
-					<td>Лабораторная</td>
-				</tr>
-			</tbody>
-		</table>
-	`
-
-	lessons, err := parseScheduleHTML(strings.NewReader(html), "РИ-230950")
-	if err != nil {
-		t.Fatalf("parse schedule: %v", err)
+func TestConvertUUSTLessons(t *testing.T) {
+	location := yekaterinburgLocation()
+	semesterStart := time.Date(2026, time.August, 31, 0, 0, 0, 0, location)
+	items := []uustLesson{
+		{
+			ScheduleID:        249603,
+			Weeks:             []string{"2", "3"},
+			Subject:           "Математический анализ",
+			Weekday:           5,
+			RoomTitleShort:    "1-409",
+			Type:              "Лекция",
+			TeacherFullName:   "Кужаев Арсен Фанилевич",
+			ScheduleTimeTitle: "08:00-09:20",
+		},
 	}
-	if len(lessons) != 1 {
-		t.Fatalf("expected one lesson, got %d", len(lessons))
+
+	lessons, err := convertUUSTLessons(items, semesterStart)
+	if err != nil {
+		t.Fatalf("convert schedule: %v", err)
+	}
+	if len(lessons) != 2 {
+		t.Fatalf("expected two lesson occurrences, got %d", len(lessons))
 	}
 
 	lesson := lessons[0]
-	if lesson.Title != "Базы данных" || lesson.Kind != "LAB" {
+	if lesson.ExternalID != "uust:249603:2" {
+		t.Fatalf("unexpected external ID: %s", lesson.ExternalID)
+	}
+	if lesson.Title != "Математический анализ" || lesson.Kind != "LECTURE" {
 		t.Fatalf("unexpected lesson: %+v", lesson)
 	}
-	if lesson.Room != "Р-210" || lesson.Teacher != "Иванов И. И." {
+	if lesson.Room != "1-409" || lesson.Teacher != "Кужаев Арсен Фанилевич" {
 		t.Fatalf("unexpected lesson details: %+v", lesson)
 	}
-	if lesson.StartsAt.Format("2006-01-02 15:04") != "2026-11-04 09:40" {
+	if lesson.StartsAt.Format("2006-01-02 15:04") != "2026-09-11 08:00" {
 		t.Fatalf("unexpected start time: %s", lesson.StartsAt)
 	}
-	if lesson.EndsAt.Format("2006-01-02 15:04") != "2026-11-04 11:10" {
+	if lesson.EndsAt.Format("2006-01-02 15:04") != "2026-09-11 09:20" {
 		t.Fatalf("unexpected end time: %s", lesson.EndsAt)
+	}
+}
+
+func TestNormalizeGroupCode(t *testing.T) {
+	if got := normalizeGroupCode(" топ-204б "); got != "ТОП-204Б" {
+		t.Fatalf("normalizeGroupCode() = %q", got)
 	}
 }

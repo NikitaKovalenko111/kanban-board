@@ -25,6 +25,7 @@ func Init(service *task_service.Service, objects ...objectstorage.Storage) *Hand
 }
 
 func (h *Handler) Start(mux *http.ServeMux) {
+	mux.HandleFunc("GET /tasks", h.listMyTasks)
 	mux.HandleFunc("GET /projects/{projectId}/tasks", h.listTasks)
 	mux.HandleFunc("POST /projects/{projectId}/tasks", h.createTask)
 	mux.HandleFunc("GET /tasks/completed", h.listCompleted)
@@ -35,6 +36,19 @@ func (h *Handler) Start(mux *http.ServeMux) {
 	mux.HandleFunc("POST /tasks/{taskId}/take", h.takeTask)
 	mux.HandleFunc("POST /tasks/{taskId}/move", h.moveTask)
 	mux.HandleFunc("POST /tasks/{taskId}/assign-to-me", h.assignToMe)
+}
+
+func (h *Handler) listMyTasks(w http.ResponseWriter, r *http.Request) {
+	userID, ok := handlercommon.UserID(r)
+	if !ok {
+		return
+	}
+	tasks, err := h.service.ListUserTasks(r.Context(), userID)
+	if err != nil {
+		handlercommon.WriteError(w, r, err)
+		return
+	}
+	pkg.WriteJSON(w, http.StatusOK, tasks)
 }
 
 type createTaskRequest struct {
