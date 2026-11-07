@@ -21,6 +21,19 @@ func Init(service *schedule_service.Service) *Handler {
 func (h *Handler) Start(mux *http.ServeMux) {
 	mux.HandleFunc("GET /student-groups", h.listStudentGroups)
 	mux.HandleFunc("GET /schedule/lessons", h.listLessons)
+	mux.HandleFunc("GET /schedule/lessons/{lessonId}", h.getLesson)
+}
+
+func (h *Handler) getLesson(w http.ResponseWriter, r *http.Request) {
+	if _, ok := handlercommon.UserID(r); !ok {
+		return
+	}
+	lesson, err := h.service.GetLesson(r.Context(), r.PathValue("lessonId"))
+	if err != nil {
+		handlercommon.WriteError(w, r, err)
+		return
+	}
+	pkg.WriteJSON(w, http.StatusOK, lesson)
 }
 
 func (h *Handler) listStudentGroups(w http.ResponseWriter, r *http.Request) {

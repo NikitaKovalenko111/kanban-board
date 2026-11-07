@@ -18,6 +18,56 @@ func Init(db *sql.DB) *Repository {
 }
 
 func (r *Repository) AddAttachment(ctx context.Context, userID, taskID, kind, fileName, storageKey, mimeType string, size int64) (*models.Attachment, error) {
+	if err := r.requireAddPermission(ctx, userID, taskID, kind); err != nil {
+		return nil, err
+	}
+
+	var attachment models.Attachment
+	err := r.db.QueryRowContext(ctx, `
+		INSERT INTO attachments (
+			attachment_id, task_id, uploaded_by_user_id, attachment_type,
+			content_kind, title, file_name, storage_key, mime_type, file_size
+		)
+		VALUES (gen_random_uuid(), $1, $2, $3, 'FILE', $4, $4, $5, $6, $7)
+		RETURNING attachment_id, task_id, uploaded_by_user_id, attachment_type, content_kind, title, created_at
+	`, taskID, userID, kind, fileName, storageKey, mimeType, size).Scan(
+		&attachment.ID, &attachment.TaskID, &attachment.UploadedBy, &attachment.Kind,
+		&attachment.ContentKind, &attachment.Title, &attachment.UploadedAt,
+	)
+	if err != nil {
+		return nil, err
+	}
+	attachment.StorageKey = storageKey
+	attachment.File = &models.FileInfo{
+		ID: attachment.ID, Name: fileName, SizeBytes: size, MimeType: mimeType,
+		DownloadURL: "/api/v1/files/" + attachment.ID,
+	}
+	return &attachment, nil
+}
+
+func (r *Repository) AddLinkAttachment(ctx context.Context, userID, taskID, kind, title, linkURL string) (*models.Attachment, error) {
+	if err := r.requireAddPermission(ctx, userID, taskID, kind); err != nil {
+		return nil, err
+	}
+	var attachment models.Attachment
+	err := r.db.QueryRowContext(ctx, `
+		INSERT INTO attachments (
+			attachment_id, task_id, uploaded_by_user_id, attachment_type,
+			content_kind, title, link_url
+		)
+		VALUES (gen_random_uuid(), $1, $2, $3, 'LINK', $4, $5)
+		RETURNING attachment_id, task_id, uploaded_by_user_id, attachment_type, content_kind, title, link_url, created_at
+	`, taskID, userID, kind, title, linkURL).Scan(
+		&attachment.ID, &attachment.TaskID, &attachment.UploadedBy, &attachment.Kind,
+		&attachment.ContentKind, &attachment.Title, &attachment.URL, &attachment.UploadedAt,
+	)
+	if err != nil {
+		return nil, err
+	}
+	return &attachment, nil
+}
+
+func (r *Repository) requireAddPermission(ctx context.Context, userID, taskID, kind string) error {
 	var systemRole, columnKind string
 	var assigned bool
 	err := r.db.QueryRowContext(ctx, `
@@ -29,55 +79,39 @@ func (r *Repository) AddAttachment(ctx context.Context, userID, taskID, kind, fi
 		WHERE t.task_id = $1
 	`, taskID, userID).Scan(&systemRole, &columnKind, &assigned)
 	if errors.Is(err, sql.ErrNoRows) {
-		return nil, repositorycommon.ErrNotFound
+		return repositorycommon.ErrNotFound
 	}
 	if err != nil {
-		return nil, err
+		return err
 	}
 	allowed := kind == "SOURCE" && systemRole == "CAPTAIN"
 	allowed = allowed || kind == "RESULT" && assigned && (columnKind == "IN_PROGRESS" || columnKind == "REVIEW")
 	if !allowed {
-		return nil, repositorycommon.ErrForbidden
+		return repositorycommon.ErrForbidden
 	}
-
-	var attachment models.Attachment
-	err = r.db.QueryRowContext(ctx, `
-		INSERT INTO attachments (
-			attachment_id, task_id, uploaded_by_user_id, attachment_type,
-			file_name, storage_key, mime_type, file_size
-		)
-		VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7)
-		RETURNING attachment_id, task_id, uploaded_by_user_id, attachment_type, created_at
-	`, taskID, userID, kind, fileName, storageKey, mimeType, size).Scan(
-		&attachment.ID, &attachment.TaskID, &attachment.UploadedBy, &attachment.Kind, &attachment.UploadedAt,
-	)
-	if err != nil {
-		return nil, err
-	}
-	attachment.StorageKey = storageKey
-	attachment.File = models.FileInfo{
-		ID: attachment.ID, Name: fileName, SizeBytes: size, MimeType: mimeType,
-		DownloadURL: "/api/v1/files/" + attachment.ID,
-	}
-	return &attachment, nil
+	return nil
 }
 
 func (r *Repository) GetAttachment(ctx context.Context, userID, attachmentID string) (*models.Attachment, error) {
 	var attachment models.Attachment
 	var projectID string
-	err := r.db.QueryRowContext(ctx, `
+	row := r.db.QueryRowContext(ctx, `
 		SELECT
 			a.attachment_id, a.task_id, a.uploaded_by_user_id, a.attachment_type,
-			a.file_name, a.storage_key, a.mime_type, a.file_size, a.created_at, b.project_id
+			a.content_kind, a.title, a.link_url, a.file_name, a.storage_key,
+			a.mime_type, a.file_size, a.created_at, b.project_id
 		FROM attachments a
 		JOIN tasks t ON t.task_id = a.task_id
 		JOIN board_columns bc ON bc.column_id = t.column_id
 		JOIN boards b ON b.board_id = bc.board_id
 		WHERE a.attachment_id = $1
-	`, attachmentID).Scan(
+	`, attachmentID)
+	var linkURL, fileName, storageKey, mimeType sql.NullString
+	var fileSize sql.NullInt64
+	err := row.Scan(
 		&attachment.ID, &attachment.TaskID, &attachment.UploadedBy, &attachment.Kind,
-		&attachment.File.Name, &attachment.StorageKey, &attachment.File.MimeType,
-		&attachment.File.SizeBytes, &attachment.UploadedAt, &projectID,
+		&attachment.ContentKind, &attachment.Title, &linkURL, &fileName, &storageKey,
+		&mimeType, &fileSize, &attachment.UploadedAt, &projectID,
 	)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, repositorycommon.ErrNotFound
@@ -88,8 +122,16 @@ func (r *Repository) GetAttachment(ctx context.Context, userID, attachmentID str
 	if err := repositorycommon.RequireMember(ctx, r.db, userID, projectID); err != nil {
 		return nil, err
 	}
-	attachment.File.ID = attachment.ID
-	attachment.File.DownloadURL = "/api/v1/files/" + attachment.ID
+	if linkURL.Valid {
+		attachment.URL = &linkURL.String
+	}
+	if attachment.ContentKind == "FILE" {
+		attachment.StorageKey = storageKey.String
+		attachment.File = &models.FileInfo{
+			ID: attachment.ID, Name: fileName.String, SizeBytes: fileSize.Int64,
+			MimeType: mimeType.String, DownloadURL: "/api/v1/files/" + attachment.ID,
+		}
+	}
 	return &attachment, nil
 }
 

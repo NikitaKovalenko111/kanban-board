@@ -89,7 +89,19 @@ func (s *Service) DeleteEventType(ctx context.Context, userID, eventTypeID strin
 	return s.repo.DeleteEventType(ctx, userID, eventTypeID)
 }
 
-func (s *Service) ListEvents(ctx context.Context, userID, personID string, groups []string, from, to time.Time) ([]models.Event, error) {
+func (s *Service) ListEvents(ctx context.Context, userID, personID, group string, from, to time.Time) ([]models.Event, error) {
+	if personID != "" && group != "" {
+		return nil, servicecommon.InvalidInput("personId and group cannot be used together")
+	}
+	if group != "" {
+		if err := servicecommon.ValidateUUID(userID); err != nil {
+			return nil, err
+		}
+		if !to.After(from) {
+			return nil, servicecommon.InvalidInput("to must be after from")
+		}
+		return s.repo.ListGroupEvents(ctx, userID, group, from, to)
+	}
 	if personID == "" {
 		personID = userID
 	}
@@ -99,7 +111,7 @@ func (s *Service) ListEvents(ctx context.Context, userID, personID string, group
 	if !to.After(from) {
 		return nil, servicecommon.InvalidInput("to must be after from")
 	}
-	return s.repo.ListEvents(ctx, userID, personID, groups, from, to)
+	return s.repo.ListEvents(ctx, userID, personID, from, to)
 }
 
 func (s *Service) GetEvent(ctx context.Context, userID, eventID string) (*models.Event, error) {
@@ -116,6 +128,7 @@ func (s *Service) CreateEvent(
 	endsAt *time.Time,
 	visibility, group string,
 	typeID *string,
+	projectID *string,
 	reminders []int,
 ) (*models.Event, error) {
 	if err := servicecommon.ValidateUUID(userID); err != nil {
@@ -126,13 +139,21 @@ func (s *Service) CreateEvent(
 			return nil, err
 		}
 	}
+	if projectID != nil {
+		if err := servicecommon.ValidateUUID(*projectID); err != nil {
+			return nil, err
+		}
+		if visibility != "TEAM" {
+			return nil, servicecommon.InvalidInput("projectId is allowed only for TEAM events")
+		}
+	}
 	if err := validateEventData(title, location, startsAt, endsAt, visibility, group); err != nil {
 		return nil, err
 	}
 	if err := validateReminders(reminders); err != nil {
 		return nil, err
 	}
-	eventID, err := s.repo.CreateEvent(ctx, userID, title, description, location, startsAt, endsAt, visibility, group, typeID, reminders)
+	eventID, err := s.repo.CreateEvent(ctx, userID, title, description, location, startsAt, endsAt, visibility, group, typeID, projectID, reminders)
 	if err != nil {
 		return nil, err
 	}
@@ -149,6 +170,8 @@ func (s *Service) UpdateEvent(
 	visibility, group *string,
 	typeID *string,
 	typeProvided bool,
+	projectID *string,
+	projectProvided bool,
 ) (*models.Event, error) {
 	if err := servicecommon.ValidateUUID(userID, eventID); err != nil {
 		return nil, err
@@ -156,6 +179,17 @@ func (s *Service) UpdateEvent(
 	if typeID != nil {
 		if err := servicecommon.ValidateUUID(*typeID); err != nil {
 			return nil, err
+		}
+	}
+	if projectID != nil {
+		if err := servicecommon.ValidateUUID(*projectID); err != nil {
+			return nil, err
+		}
+		if visibility != nil && *visibility != "TEAM" {
+			return nil, servicecommon.InvalidInput("projectId is allowed only for TEAM events")
+		}
+		if visibility == nil {
+			return nil, servicecommon.InvalidInput("visibility=TEAM is required when setting projectId")
 		}
 	}
 	if title != nil && (strings.TrimSpace(*title) == "" || utf8.RuneCountInString(*title) > 200) {
@@ -172,7 +206,7 @@ func (s *Service) UpdateEvent(
 			return nil, servicecommon.InvalidInput("group is required when visibility changes to GROUP")
 		}
 	}
-	if err := s.repo.UpdateEvent(ctx, userID, eventID, title, description, location, startsAt, endsAt, endsAtProvided, visibility, group, typeID, typeProvided); err != nil {
+	if err := s.repo.UpdateEvent(ctx, userID, eventID, title, description, location, startsAt, endsAt, endsAtProvided, visibility, group, typeID, typeProvided, projectID, projectProvided); err != nil {
 		return nil, err
 	}
 	return s.repo.GetEvent(ctx, userID, eventID)
@@ -203,6 +237,16 @@ func (s *Service) PutReminders(ctx context.Context, userID, itemKey string, remi
 		return err
 	}
 	return s.repo.PutReminders(ctx, userID, itemKey, reminders)
+}
+
+func (s *Service) DeleteReminderOverride(ctx context.Context, userID, itemKey string) error {
+	if err := servicecommon.ValidateUUID(userID); err != nil {
+		return err
+	}
+	if !strings.HasPrefix(itemKey, "event:") && !strings.HasPrefix(itemKey, "lesson:") {
+		return servicecommon.InvalidInput("itemKey must start with event: or lesson:")
+	}
+	return s.repo.DeleteReminderOverride(ctx, userID, itemKey)
 }
 
 func validateType(title, color string, reminders []int) error {

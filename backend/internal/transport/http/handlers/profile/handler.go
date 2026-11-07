@@ -37,6 +37,7 @@ func (h *Handler) Start(mux *http.ServeMux) {
 	mux.HandleFunc("GET /users", h.listUsers)
 	mux.HandleFunc("POST /users", h.createUser)
 	mux.HandleFunc("GET /users/{userId}", h.getUser)
+	mux.HandleFunc("PATCH /users/{userId}", h.updateUser)
 	mux.HandleFunc("GET /users/{userId}/photo", h.getPhoto)
 	mux.HandleFunc("PATCH /users/{userId}/status", h.updateStatus)
 	mux.HandleFunc("POST /users/{userId}/reset-password", h.resetPassword)
@@ -45,10 +46,16 @@ func (h *Handler) Start(mux *http.ServeMux) {
 }
 
 type profileRequest struct {
+	Username        *string `json:"username"`
 	FullName        *string `json:"fullName"`
 	StudentGroup    *string `json:"studentGroup"`
 	StudyGroup      *string `json:"studyGroup"`
 	SchedulePrivacy *string `json:"schedulePrivacy"`
+}
+
+type updateUserRequest struct {
+	Username     *string `json:"username"`
+	StudentGroup *string `json:"studentGroup"`
 }
 
 type createUserRequest struct {
@@ -106,7 +113,26 @@ func (h *Handler) updateMe(w http.ResponseWriter, r *http.Request) {
 	if studentGroup == nil {
 		studentGroup = request.StudyGroup
 	}
-	profile, err := h.service.UpdateProfile(r.Context(), userID, request.FullName, studentGroup, request.SchedulePrivacy)
+	profile, err := h.service.UpdateProfile(r.Context(), userID, request.Username, request.FullName, studentGroup, request.SchedulePrivacy)
+	if err != nil {
+		handlercommon.WriteError(w, r, err)
+		return
+	}
+	pkg.WriteJSON(w, http.StatusOK, profile)
+}
+
+func (h *Handler) updateUser(w http.ResponseWriter, r *http.Request) {
+	actorID, ok := handlercommon.UserID(r)
+	if !ok {
+		return
+	}
+	var request updateUserRequest
+	if !handlercommon.Decode(w, r, &request) {
+		return
+	}
+	profile, err := h.service.UpdateUser(
+		r.Context(), actorID, r.PathValue("userId"), request.Username, request.StudentGroup,
+	)
 	if err != nil {
 		handlercommon.WriteError(w, r, err)
 		return

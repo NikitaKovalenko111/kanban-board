@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"kanban-board/internal/models"
+	servicecommon "kanban-board/internal/services/common"
 	schedule_repo "kanban-board/internal/storage/repositories/schedule"
 )
 
@@ -28,4 +29,11 @@ func (s *Service) ListLessons(ctx context.Context, group string, from, to time.T
 	}
 
 	return s.repo.ListLessons(ctx, group, from, to)
+}
+
+func (s *Service) GetLesson(ctx context.Context, lessonID string) (*models.Lesson, error) {
+	if err := servicecommon.ValidateUUID(lessonID); err != nil {
+		return nil, err
+	}
+	return s.repo.GetLesson(ctx, lessonID)
 }

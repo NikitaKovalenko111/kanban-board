@@ -28,6 +28,9 @@ func (s *Storage) Migrate() error {
 		{version: 4, name: "notification events", run: createNotificationEvents},
 		{version: 5, name: "notification targets", run: migrateNotificationTargets},
 		{version: 6, name: "fixed board columns", run: migrateFixedBoardColumns},
+		{version: 7, name: "frontend integration contracts", run: migrateFrontendIntegrationContracts},
+		{version: 8, name: "stable lesson reminder keys", run: migrateStableLessonReminderKeys},
+		{version: 9, name: "task link attachments", run: migrateTaskLinkAttachments},
 	}
 	for _, item := range migrations {
 		var applied bool
@@ -45,6 +48,104 @@ func (s *Storage) Migrate() error {
 		}
 	}
 	return nil
+}
+
+func migrateTaskLinkAttachments(storage *Storage) error {
+	_, err := storage.Db.Exec(`
+		ALTER TABLE attachments
+			ADD COLUMN IF NOT EXISTS content_kind VARCHAR NOT NULL DEFAULT 'FILE',
+			ADD COLUMN IF NOT EXISTS title VARCHAR,
+			ADD COLUMN IF NOT EXISTS link_url VARCHAR;
+
+		UPDATE attachments SET title = file_name WHERE title IS NULL;
+
+		ALTER TABLE attachments
+			ALTER COLUMN title SET NOT NULL,
+			ALTER COLUMN file_name DROP NOT NULL,
+			ALTER COLUMN storage_key DROP NOT NULL,
+			ALTER COLUMN mime_type DROP NOT NULL,
+			ALTER COLUMN file_size DROP NOT NULL;
+
+		ALTER TABLE attachments DROP CONSTRAINT IF EXISTS attachments_content_kind_check;
+		ALTER TABLE attachments
+			ADD CONSTRAINT attachments_content_kind_check
+			CHECK (content_kind IN ('FILE', 'LINK'));
+
+		ALTER TABLE attachments DROP CONSTRAINT IF EXISTS attachments_content_check;
+		ALTER TABLE attachments
+			ADD CONSTRAINT attachments_content_check CHECK (
+				(content_kind = 'FILE' AND file_name IS NOT NULL AND storage_key IS NOT NULL AND mime_type IS NOT NULL AND file_size IS NOT NULL AND link_url IS NULL) OR
+				(content_kind = 'LINK' AND link_url IS NOT NULL AND file_name IS NULL AND storage_key IS NULL AND mime_type IS NULL AND file_size IS NULL)
+			);
+	`)
+	return err
+}
+
+func migrateStableLessonReminderKeys(storage *Storage) error {
+	_, err := storage.Db.Exec(`
+		INSERT INTO user_reminders (user_id, item_key, minutes_before)
+		SELECT
+			reminders.user_id,
+			'lesson:' || lessons.lesson_id::text,
+			reminders.minutes_before
+		FROM user_reminders reminders
+		JOIN lessons
+			ON lessons.external_id IS NOT NULL
+			AND reminders.item_key = 'lesson:' || lessons.external_id
+		ON CONFLICT DO NOTHING;
+
+		DELETE FROM user_reminders reminders
+		USING lessons
+		WHERE lessons.external_id IS NOT NULL
+			AND reminders.item_key = 'lesson:' || lessons.external_id;
+
+		INSERT INTO reminder_overrides (user_id, item_key, enabled)
+		SELECT
+			overrides.user_id,
+			'lesson:' || lessons.lesson_id::text,
+			overrides.enabled
+		FROM reminder_overrides overrides
+		JOIN lessons
+			ON lessons.external_id IS NOT NULL
+			AND overrides.item_key = 'lesson:' || lessons.external_id
+		ON CONFLICT (user_id, item_key) DO NOTHING;
+
+		DELETE FROM reminder_overrides overrides
+		USING lessons
+		WHERE lessons.external_id IS NOT NULL
+			AND overrides.item_key = 'lesson:' || lessons.external_id;
+
+		INSERT INTO reminder_overrides (user_id, item_key, enabled)
+		SELECT DISTINCT user_id, item_key, TRUE
+		FROM user_reminders
+		ON CONFLICT (user_id, item_key) DO NOTHING;
+	`)
+	return err
+}
+
+func migrateFrontendIntegrationContracts(storage *Storage) error {
+	_, err := storage.Db.Exec(`
+		ALTER TABLE projects
+			ADD COLUMN IF NOT EXISTS color VARCHAR NOT NULL DEFAULT '#6576DF';
+
+		CREATE TABLE IF NOT EXISTS reminder_overrides (
+			user_id UUID NOT NULL REFERENCES users (user_id) ON DELETE CASCADE,
+			item_key VARCHAR NOT NULL,
+			enabled BOOLEAN NOT NULL,
+			updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+			PRIMARY KEY (user_id, item_key)
+		);
+
+		INSERT INTO reminder_overrides (user_id, item_key, enabled)
+		SELECT DISTINCT user_id, item_key, TRUE
+		FROM user_reminders
+		ON CONFLICT (user_id, item_key) DO NOTHING;
+
+		CREATE UNIQUE INDEX IF NOT EXISTS lessons_group_external_uidx
+			ON lessons (student_group_id, external_id)
+			WHERE external_id IS NOT NULL;
+	`)
+	return err
 }
 
 func migrateNotificationTargets(storage *Storage) error {

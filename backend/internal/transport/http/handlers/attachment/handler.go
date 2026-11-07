@@ -35,8 +35,34 @@ func Init(service *attachment_service.Service, projects *project_service.Service
 
 func (h *Handler) Start(mux *http.ServeMux) {
 	mux.HandleFunc("POST /tasks/{taskId}/attachments", h.uploadAttachment)
+	mux.HandleFunc("POST /tasks/{taskId}/attachments/links", h.addLinkAttachment)
 	mux.HandleFunc("DELETE /tasks/{taskId}/attachments/{attachmentId}", h.deleteAttachment)
 	mux.HandleFunc("GET /files/{fileId}", h.downloadFile)
+}
+
+type linkAttachmentRequest struct {
+	Kind  string `json:"kind"`
+	Title string `json:"title"`
+	URL   string `json:"url"`
+}
+
+func (h *Handler) addLinkAttachment(w http.ResponseWriter, r *http.Request) {
+	userID, ok := handlercommon.UserID(r)
+	if !ok {
+		return
+	}
+	var request linkAttachmentRequest
+	if !handlercommon.Decode(w, r, &request) {
+		return
+	}
+	attachment, err := h.service.AddLinkAttachment(
+		r.Context(), userID, r.PathValue("taskId"), request.Kind, request.Title, request.URL,
+	)
+	if err != nil {
+		handlercommon.WriteError(w, r, err)
+		return
+	}
+	pkg.WriteJSON(w, http.StatusCreated, attachment)
 }
 
 func (h *Handler) uploadAttachment(w http.ResponseWriter, r *http.Request) {
@@ -87,6 +113,10 @@ func (h *Handler) downloadFile(w http.ResponseWriter, r *http.Request) {
 	fileID := r.PathValue("fileId")
 	attachment, err := h.service.GetAttachment(r.Context(), userID, fileID)
 	if err == nil {
+		if attachment.File == nil {
+			pkg.WriteError(w, http.StatusNotFound, "NOT_FOUND", "Файл не найден")
+			return
+		}
 		h.serveFile(w, r, attachment.StorageKey, attachment.File.Name, attachment.File.MimeType)
 		return
 	}
@@ -127,6 +157,8 @@ func (h *Handler) deleteAttachment(w http.ResponseWriter, r *http.Request) {
 		handlercommon.WriteError(w, r, err)
 		return
 	}
-	_ = h.objects.Delete(r.Context(), attachment.StorageKey)
+	if attachment.StorageKey != "" {
+		_ = h.objects.Delete(r.Context(), attachment.StorageKey)
+	}
 	pkg.WriteEmpty(w, http.StatusNoContent)
 }
