@@ -26,20 +26,29 @@ const makeStore = (member = false) => configureStore({
 const Location = () => <output data-testid="location">{useLocation().pathname}</output>
 
 describe('регрессии навигации и ролей', () => {
-  it('не читает уведомления при открытии списка и поддерживает явное прочтение', async () => {
+  it('читает уведомление только после перехода по нему', async () => {
     vi.spyOn(mockApi, 'getSchedule').mockResolvedValue([])
-    const store = makeStore()
-    render(<Provider store={store}><MemoryRouter><Sidebar open={false} onClose={vi.fn()} /></MemoryRouter></Provider>)
+    render(<Provider store={makeStore()}><MemoryRouter><Sidebar open={false} onClose={vi.fn()} /><Location /></MemoryRouter></Provider>)
     const button = screen.getByRole('button', { name: /Уведомления/ })
-    expect(within(button).getByText('1')).toBeInTheDocument()
     await userEvent.click(button)
     expect(within(button).getByText('1')).toBeInTheDocument()
-    expect(screen.getByRole('dialog', { name: 'Уведомления' })).toBeInTheDocument()
-    await userEvent.click(screen.getByRole('button', { name: 'Прочитать все' }))
+    expect(localStorage.getItem(`notification-reads-${user.id}`)).toBeNull()
+    await userEvent.click(screen.getByRole('button', { name: 'Открыть' }))
+    expect(screen.getByTestId('location')).toHaveTextContent('/')
     expect(within(button).queryByText('1')).not.toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: 'Прочитано' })).not.toBeInTheDocument()
     expect(JSON.parse(localStorage.getItem(`notification-reads-${user.id}`)!)).toContain('new-comment')
     await waitFor(() => expect(mockApi.getSchedule).toHaveBeenCalled())
+  })
+
+  it('позволяет прочитать все уведомления отдельной кнопкой', async () => {
+    vi.spyOn(mockApi, 'getSchedule').mockResolvedValue([])
+    render(<Provider store={makeStore()}><MemoryRouter><Sidebar open={false} onClose={vi.fn()} /></MemoryRouter></Provider>)
+    const button = screen.getByRole('button', { name: /Уведомления/ })
+    await userEvent.click(button)
+    await userEvent.click(screen.getByRole('button', { name: 'Прочитать все' }))
+    expect(within(button).queryByText('1')).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Прочитать все' })).toBeDisabled()
+    expect(screen.getByRole('dialog', { name: 'Уведомления' })).toBeInTheDocument()
   })
 
   it('открывает собственный профиль нажатием на имя и аватар', async () => {

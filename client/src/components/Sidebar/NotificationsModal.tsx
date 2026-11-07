@@ -5,7 +5,7 @@ interface Props { items: NotificationItem[]; readIds: string[]; error?: string; 
 
 const NotificationsModal = ({ items, readIds, error, onClose, onOpen, onReadAll, reading }: Props) => <FormModal title="Уведомления" className="notifications-modal" onClose={onClose}>
   {error && <p className="error-banner" role="alert">{error}</p>}
-  {onReadAll && <div className="notifications-toolbar"><button type="button" className="text-button" disabled={reading || items.every(item => readIds.includes(item.id))} onClick={onReadAll}>Прочитать все</button></div>}
+  {onReadAll && <div className="notifications-toolbar"><button type="button" className="text-button notifications-read-all" disabled={reading || items.every(item => readIds.includes(item.id))} onClick={onReadAll}>Прочитать все</button></div>}
   <div className="notifications-list">{items.length ? items.map((item) => <article className={readIds.includes(item.id) ? 'is-read' : ''} key={item.id}>
     <div><strong>{item.title}</strong><time>{new Date(item.createdAt).toLocaleString('ru-RU', { dateStyle: 'short', timeStyle: 'short' })}</time></div>
     <p>{item.text}</p>

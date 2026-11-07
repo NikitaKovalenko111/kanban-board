@@ -15,8 +15,9 @@ function setup(access: boolean, sources = false) {
     auth: { user, loading: false, error: null },
     projects: { items: [{ ...project, canViewBoard: access }], activeProjectId: project.id, selections: { projects: project.id }, loading: false, saving: false, error: null },
   } })
+  const dispatch = vi.spyOn(store, 'dispatch')
   render(<Provider store={store}><MemoryRouter initialEntries={[sources ? '/projects?tab=sources' : '/projects']}><ProjectsPage /></MemoryRouter></Provider>)
-  return store
+  return { store, dispatch }
 }
 it('показывает недоступный проект без действий над его доской и источниками', () => {
   setup(false)
@@ -31,11 +32,10 @@ it('не показывает загрузку файлов и ссылок пр
   expect(screen.queryByRole('button', { name: 'Добавить ссылку' })).not.toBeInTheDocument()
 })
 it('отправляет HTTP-ссылку проекта из отдельного диалога', async () => {
-  const store = setup(true, true)
-  const dispatch = vi.spyOn(store, 'dispatch')
+  const { dispatch } = setup(true, true)
   await userEvent.click(screen.getByRole('button', { name: 'Добавить ссылку' }))
-  await userEvent.type(screen.getByRole('textbox', { name: 'Название' }), 'Документация')
+  await userEvent.type(screen.getByRole('textbox', { name: 'Название ссылки' }), 'Документация')
   await userEvent.type(screen.getByRole('textbox', { name: 'Ссылка' }), 'https://example.com/docs')
-  await userEvent.click(within(screen.getByRole('dialog', { name: 'Добавить ссылку' })).getByRole('button', { name: 'Добавить ссылку' }))
+  await userEvent.click(within(screen.getByRole('dialog', { name: 'Добавить ссылку' })).getByRole('button', { name: 'Прикрепить ссылку' }))
   expect(dispatch).toHaveBeenCalledWith(expect.objectContaining({ type: 'projects/addProjectSourcesRequest', payload: expect.objectContaining({ files: [expect.objectContaining({ name: 'Документация', url: 'https://example.com/docs' })] }) }))
 })

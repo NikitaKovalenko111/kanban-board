@@ -15,13 +15,22 @@ const WorkspaceNav = () => {
   const tab = projectTab(pathname)
   const activeProjectId = useProjectSelection(tab ?? '')
   const showSwitcher = !(isBackendMode && pathname === '/schedule') && !!tab && (pathname !== '/projects' || params.get('tab') === 'sources')
-  const showSearch = pathname === '/' || pathname === '/history'
+  const [mobile, setMobile] = useState(() => window.matchMedia?.('(max-width: 760px)')?.matches ?? false)
+  const showSearch = pathname === '/' || (pathname === '/history' && !mobile)
   const { items, loading } = useAppSelector((state) => state.projects)
   const user = useAppSelector((state) => state.auth.user)!
   const activeProject = items.find((project) => project.id === activeProjectId)
   const allProjectsSelected = activeProjectId === 'all'
   const [projectsOpen, setProjectsOpen] = useState(false)
   const switcherRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    const media = window.matchMedia?.('(max-width: 760px)')
+    if (!media) return
+    const resize = () => setMobile(media.matches)
+    media.addEventListener('change', resize)
+    return () => media.removeEventListener('change', resize)
+  }, [])
 
   useEffect(() => { if (!items.length) dispatch(loadProjectsRequest()) }, [dispatch, items.length])
   useEffect(() => {
@@ -41,7 +50,7 @@ const WorkspaceNav = () => {
   if (!showSwitcher && !showSearch) return null
   return <div className="workspace-nav">
     <div className="container workspace-nav__container">
-      {showSwitcher && <div className={`project-switcher ${projectsOpen ? 'is-open' : ''}`} ref={switcherRef}>
+      {showSwitcher && <div className="workspace-nav__project"><div className={`project-switcher ${projectsOpen ? 'is-open' : ''}`} ref={switcherRef}>
         <button className="project-switcher__trigger" type="button" onClick={() => setProjectsOpen((value) => !value)} disabled={loading} aria-haspopup="listbox" aria-expanded={projectsOpen}>
           <span className={`project-switcher__dot ${allProjectsSelected ? 'project-switcher__dot--all' : ''}`} style={{ background: allProjectsSelected ? undefined : activeProject?.color ?? '#aab1be' }} />
           <span className="project-switcher__copy"><strong>{loading ? 'Загрузка…' : allProjectsSelected ? 'Все проекты' : activeProject?.name ?? 'Выберите проект'}</strong></span>
@@ -57,14 +66,15 @@ const WorkspaceNav = () => {
             </button>
             {items.map((project) => <button type="button" role="option" aria-selected={project.id === activeProjectId} className={project.id === activeProjectId ? 'is-active' : ''} key={project.id} onClick={() => selectProject(project.id)}>
               <span className="project-menu__color" style={{ background: project.color }} />
-              <span><strong>{project.name}</strong><small>{project.canViewBoard === false ? 'Нет доступа к проекту' : project.description || 'Без описания'}</small></span>
+              <span><strong title={project.name}>{project.name}</strong><small>{project.canViewBoard === false ? 'Нет доступа к проекту' : project.description || 'Без описания'}</small></span>
               {project.id === activeProjectId && <svg viewBox="0 0 20 20" aria-hidden="true"><path d="m5 10 3 3 7-7" /></svg>}
             </button>)}
           </div>
           <Link className="project-menu__manage" to="/projects" onClick={() => setProjectsOpen(false)}><Icon name={user.role === 'lead' ? 'plus' : 'arrow-right'} /> {user.role === 'lead' ? 'Управление проектами' : 'Все проекты'}</Link>
         </div>}
+      </div>
+      {user.role === 'lead' && activeProject && activeProject.canViewBoard !== false && pathname === '/' && <Link className="project-nav-manage" to={`/projects/${activeProject.id}/manage`} title="Управление проектом" aria-label="Управление проектом"><Icon name="settings" /></Link>}
       </div>}
-      {user.role === 'lead' && activeProject && activeProject.canViewBoard !== false && pathname === '/' && <Link className="project-nav-manage" to={`/projects/${activeProject.id}/manage`}>Управление проектом</Link>}
       {showSearch && <SearchField value={params.get('q') ?? ''} onChange={(value) => setParams((previous) => { const next = new URLSearchParams(previous); if (value) next.set('q', value); else next.delete('q'); return next }, { replace: true })} placeholder={pathname === '/' ? 'Поиск по задачам' : 'Поиск по истории'} />}
     </div>
   </div>

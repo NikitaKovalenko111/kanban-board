@@ -4,12 +4,11 @@ import { scheduleEvent } from '../test/fixtures'
 import { loadEventTypes, saveEventTypes } from './eventTypes'
 
 describe('напоминания событий', () => {
-  it('поддерживает произвольные напоминания, момент начала или отключение', () => {
+  it('поддерживает несколько произвольных напоминаний, момент начала и отключение', () => {
     expect(validateReminderMinutes([90])).toEqual([90])
     expect(validateReminderMinutes([0])).toEqual([0])
     expect(validateReminderMinutes([])).toEqual([])
-    expect(validateReminderMinutes([30, 90])).toEqual([30, 90])
-    expect(() => validateReminderMinutes([30, 30])).toThrow('не должны повторяться')
+    expect(validateReminderMinutes([30, 90, 0, 30])).toEqual([30, 90, 0])
   })
   it.each([[-1], [1.5], [NaN], [Infinity]])('отклоняет некорректный интервал %s', (value) => {
     expect(() => validateReminderMinutes([value])).toThrow()
@@ -28,7 +27,7 @@ describe('напоминания событий', () => {
     expect(eventReminderMinutes({ ...scheduleEvent, reminder: '1-hour' }, types)).toEqual([60])
     expect(eventReminderMinutes({ ...scheduleEvent, reminder: 'none' }, types)).toEqual([])
   })
-  it('сохраняет все интервалы из ранее записанных данных', () => {
+  it('сохраняет все интервалы при загрузке типов и событий', () => {
     saveEventTypes([{ id: 'custom', label: 'Тип', color: '#123456', reminderMinutes: [90, 30] }])
     expect(loadEventTypes()[0].reminderMinutes).toEqual([90, 30])
     expect(eventReminderMinutes({ ...scheduleEvent, reminderMode: 'custom', reminderMinutes: [90, 30] }, [])).toEqual([90, 30])

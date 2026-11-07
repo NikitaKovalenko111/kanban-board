@@ -35,6 +35,7 @@ function App() {
   }, [dispatch])
   useEffect(() => { document.documentElement.dataset.theme = localStorage.getItem('theme') ?? 'light' }, [])
   const [menuOpen, setMenuOpen] = useState(false)
+  useEffect(() => { setMenuOpen(false) }, [user?.id])
 
   if (isBackendMode) {
     if (restoring) return <main className="loader" role="status">Проверяем сессию…</main>

@@ -1,5 +1,6 @@
 import { mapLimited } from './parallel'
-import type { AddProjectSourcesPayload, AddTaskCommentPayload, Attachment, EntityId, EventPrivacy, EventReminders, NewProject, NewScheduleEvent, NewTask, NewTeamMember, ScheduleEvent, ScheduleQuery, Task, TaskStatus, UpdateProjectPayload } from '../types'
+import type { AccountSettings, AddProjectSourcesPayload, AddTaskCommentPayload, Attachment, EntityId, EventPrivacy, EventReminders, NewProject, NewScheduleEvent, NewTask, NewTeamMember, ScheduleEvent, ScheduleQuery, Task, TaskPriority, TaskStatus, UpdateProjectPayload } from '../types'
+import { validatePriority } from '../utils/taskPriority'
 import type { ColumnDto, EventDto, EventTypeDto, GroupDto, LessonsDto, NotificationDto, ProfileDto, ProjectDto, TaskDto } from './contracts'
 import { backendHttp as http } from './backendApi'
 import { readBackendSession } from './backendSession'
@@ -14,6 +15,10 @@ const staged = new Map<string, File>()
 const uploadedTaskFiles = new Map<string, string>()
 const pathId = (id: EntityId) => encodeURIComponent(String(id))
 const iso = (value: string) => new Date(value).toISOString()
+const serverPriority: Record<TaskPriority, string> = { low: 'LOW', medium: 'NORMAL', high: 'HIGH' }
+function requireFileAttachments(files: Attachment[]) {
+  if (files.some(file => file.url)) throw new Error('Для задач доступны только файлы. Ссылки можно добавить в источники проекта')
+}
 const adjacentDate = (value: string, days: number) => { const date = new Date(`${value}T00:00:00Z`); date.setUTCDate(date.getUTCDate() + days); return date.toISOString().slice(0, 10) }
 const get = async <T>(path: string, params?: object): Promise<T> => (await http.get<T>(path, { params })).data
 async function context() {
@@ -48,6 +53,7 @@ function stagedFile(file: Attachment): File {
   return content
 }
 async function attachTaskFiles(id: EntityId, files: Attachment[], kind: 'SOURCE' | 'RESULT') {
+  requireFileAttachments(files)
   for (const file of files.filter(item => item.id.startsWith('pending:'))) {
     const target = `${id}:${kind}`
     if (uploadedTaskFiles.get(file.id) === target) continue
@@ -99,6 +105,14 @@ export const realApi = {
   },
   async toggleMember(id: EntityId, active: boolean) { return mapProfile((await http.patch<ProfileDto>(`/users/${pathId(id)}/status`, { status: active ? 'ACTIVE' : 'BLOCKED' })).data, projects) },
   async resetPassword(id: EntityId) { return { password: (await http.post<{ temporaryPassword: string }>(`/users/${pathId(id)}/reset-password`)).data.temporaryPassword } },
+  async updateAccount(id: EntityId, settings: AccountSettings) {
+    if (String(id) !== readBackendSession()?.user_id) throw new Error('Изменение аккаунта другого участника пока недоступно')
+    const current = await get<ProfileDto>('/me')
+    if (settings.login.trim() !== current.username) throw new Error('Изменение логина пока недоступно')
+    const dto = (await http.patch<ProfileDto>('/me', { studentGroup: settings.studentGroup ?? '' })).data
+    profiles = [...profiles.filter(profile => profile.id !== dto.id), dto]
+    return mapProfile(dto, projects)
+  },
   async changePassword(payload: { currentPassword: string; newPassword: string }) { await http.post('/auth/change-password', payload); return { success: true } },
   async updatePrivacy(privacy: EventPrivacy) { return mapProfile((await http.patch<ProfileDto>('/me', { schedulePrivacy: privacyToServer[privacy] })).data, projects) },
   async updateAvatar(file?: File) {
@@ -125,12 +139,22 @@ export const realApi = {
   },
   async getTask(id: EntityId) { await context(); return taskDetail(id) },
   async createTask(task: NewTask) {
-    const dto = (await http.post<TaskDto>(`/projects/${pathId(task.projectId)}/tasks`, { title: task.taskName, description: task.taskDesc, priority: 'NORMAL', assigneeId: task.assigneeId === undefined ? null : String(task.assigneeId), dueAt: task.taskDeadline ? iso(`${task.taskDeadline}T23:59:00`) : null })).data
+    requireFileAttachments(task.attachments)
+    const dto = (await http.post<TaskDto>(`/projects/${pathId(task.projectId)}/tasks`, { title: task.taskName, description: task.taskDesc, priority: serverPriority[validatePriority(task.priority)], assigneeId: task.assigneeId === undefined ? null : String(task.assigneeId), dueAt: task.taskDeadline ? iso(`${task.taskDeadline}T23:59:00`) : null })).data
     try { await attachTaskFiles(dto.id, task.attachments, 'SOURCE') }
     catch (error) { throw new Error(`Задача создана (${dto.id}), но файлы не загружены. ${error instanceof Error ? error.message : ''}`) }
     return taskDetail(dto.id)
   },
   async assignTask(id: EntityId, assigneeId: EntityId | null) { await http.patch(`/tasks/${pathId(id)}`, { assigneeId: assigneeId === null ? null : String(assigneeId) }); return taskDetail(id) },
+  async updateTaskPriority(id: EntityId, priority: TaskPriority) {
+    const value = validatePriority(priority)
+    const task = await get<TaskDto>(`/tasks/${pathId(id)}`)
+    const board = await projectColumns(task.projectId)
+    if (columnStatus(task.columnId, board) !== 'waiting') throw new Error('Приоритет можно менять только до начала работы над задачей')
+    await http.patch(`/tasks/${pathId(id)}`, { priority: serverPriority[value] })
+    return taskDetail(id)
+  },
+  async addTaskSources(id: EntityId, files: Attachment[]) { await attachTaskFiles(id, files, 'SOURCE'); return taskDetail(id) },
   async updateTaskStatus(id: EntityId, status: TaskStatus, _author: string, comment?: string, files?: Attachment[], _assignee?: string) {
     const current = await get<TaskDto>(`/tasks/${pathId(id)}`)
     const project = await projectColumns(current.projectId)
@@ -179,7 +203,7 @@ export const realApi = {
     const lessons = await Promise.all(groups.map(group => get<LessonsDto>('/schedule/lessons', { group, from, to }).catch((): LessonsDto => ({ lessons: [], updatedAt: null, source: 'UNAVAILABLE' }))))
     scheduleSourceMessage = lessons.some(result => result.source === 'UNAVAILABLE') ? 'Источник учебного расписания недоступен. События команды показаны отдельно.' : lessons.some(result => result.source === 'CACHED') ? 'Учебное расписание загружено из кеша.' : ''
     if (groupView && groupPeople.length < requestedGroups.length) scheduleSourceMessage += `${scheduleSourceMessage ? ' ' : ''}События групп без активных участников недоступны; пары показаны по выбранным группам.`
-    const mapped = [...(events ?? []).map(event => mapEvent(event, types ?? [], profiles, overrides ?? {})), ...lessons.flatMap(result => (result.lessons ?? []).map(lesson => ({ id: `lesson:${lesson.id}`, projectId: 'all', title: lesson.title, description: lesson.teacher, location: lesson.room, startsAt: `${lesson.date}T${lesson.start}`, endsAt: `${lesson.date}T${lesson.end}`, type: 'class', typeLabel: lesson.kind, typeColor: '#42a682', category: 'class' as const, group: lesson.group, author: lesson.teacher, reminder: 'none' as const, reminderMode: 'custom' as const, reminderMinutes: overrides?.[`lesson:${lesson.id}`] ?? [] })))]
+    const mapped = [...(events ?? []).map(event => mapEvent(event, types ?? [], profiles, overrides ?? {})), ...lessons.flatMap(result => (result.lessons ?? []).map(lesson => ({ id: `lesson:${lesson.id}`, projectId: 'all', title: lesson.title, description: lesson.teacher, location: lesson.room, startsAt: `${lesson.date}T${lesson.start}`, endsAt: `${lesson.date}T${lesson.end}`, type: 'class', typeLabel: lesson.kind, typeColor: '#42a682', category: 'group' as const, group: lesson.group, author: lesson.teacher, reminder: 'none' as const, reminderMode: 'custom' as const, reminderMinutes: overrides?.[`lesson:${lesson.id}`] ?? [] })))]
     scheduleCache = mapped
     return mapped
   },

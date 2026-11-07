@@ -46,6 +46,40 @@ beforeEach(() => {
 afterEach(() => { backendHttp.defaults.adapter = original; realApi.clear(); sessionStorage.clear() })
 
 describe('адаптер обновлённого API', () => {
+  it.each([['low', 'LOW'], ['medium', 'NORMAL'], ['high', 'HIGH']] as const)('сохраняет UI-приоритет %s в серверном формате %s', async (priority, wire) => {
+    const previous = backendHttp.defaults.adapter as (config: InternalAxiosRequestConfig) => Promise<ReturnType<typeof json>>
+    backendHttp.defaults.adapter = async config => {
+      if (config.url === '/tasks/task-id' && config.method === 'patch') currentTask = { ...currentTask, priority: JSON.parse(config.data).priority }
+      return previous(config)
+    }
+    await realApi.createTask({ projectId, taskName: 'Приоритет', taskDesc: 'ТЗ', attachments: [], priority })
+    expect(JSON.parse(requests.find(request => request.method === 'post')!.data).priority).toBe(wire)
+    expect((await realApi.updateTaskPriority(task.id, priority)).priority).toBe(priority)
+    expect(JSON.parse(requests.find(request => request.method === 'patch')!.data)).toEqual({ priority: wire })
+  })
+  it('не изменяет приоритет уже взятой задачи через API', async () => {
+    currentTask.columnId = 'progress'
+    await expect(realApi.updateTaskPriority(task.id, 'high')).rejects.toThrow('только до начала работы')
+    expect(requests.some(request => request.method === 'patch')).toBe(false)
+  })
+  it('сохраняет собственную группу через PATCH /me без отправки неподдерживаемого login', async () => {
+    const previous = backendHttp.defaults.adapter as (config: InternalAxiosRequestConfig) => Promise<ReturnType<typeof json>>
+    backendHttp.defaults.adapter = async config => {
+      if (config.url === '/me' && config.method === 'patch') { requests.push(config); return json(config, { ...profile, studentGroup: 'TOP-204B' }) }
+      return previous(config)
+    }
+    expect(await realApi.updateAccount(userId, { login: profile.username, studentGroup: 'TOP-204B' })).toMatchObject({ id: userId, studentGroup: 'TOP-204B' })
+    expect(JSON.parse(requests.find(request => request.method === 'patch')!.data)).toEqual({ studentGroup: 'TOP-204B' })
+    await expect(realApi.updateAccount(userId, { login: 'new-login' })).rejects.toThrow('Изменение логина')
+    await expect(realApi.updateAccount(otherId, { login: 'other' })).rejects.toThrow('другого участника')
+  })
+  it('не теряет ссылки задачи молча и не создаёт запись перед отказом неподдерживаемого вложения', async () => {
+    const link = { id: 'link:1', name: 'ТЗ', size: 0, url: 'https://example.com' }
+    await expect(realApi.createTask({ projectId, taskName: 'Задача', taskDesc: 'ТЗ', attachments: [link] })).rejects.toThrow('только файлы')
+    expect(requests).toHaveLength(0)
+    await expect(realApi.addTaskSources(task.id, [link])).rejects.toThrow('только файлы')
+    expect(requests).toHaveLength(0)
+  })
   it('при ошибке перехода повторяет сдачу без повторной загрузки уже принятого файла', async () => {
     currentTask = { ...currentTask, columnId: 'progress', assigneeId: userId }
     const file = await realApi.uploadAttachment(new File(['result'], 'result.txt'))

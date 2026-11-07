@@ -8,8 +8,14 @@ export const uploadFiles = async (files: FileList | File[]): Promise<Attachment[
   if (selected.some((file) => file.size > limit * 1024 * 1024)) throw new Error(`Размер каждого файла не должен превышать ${limit} МБ`)
   return Promise.all(selected.map((file) => api.uploadAttachment(file)))
 }
+export { createLinkAttachment } from '../utils/attachmentLinks'
+import { createLinkAttachment } from '../utils/attachmentLinks'
 export const downloadFile = async (file: Attachment): Promise<void> => {
-  if (file.url) { const url = new URL(file.url); if (!['http:', 'https:'].includes(url.protocol)) throw new Error('Недопустимый адрес источника'); window.open(url.href, '_blank', 'noopener,noreferrer'); return }
+  if (file.url) {
+    const safe = createLinkAttachment(file.url, file.name)
+    window.open(safe.url, '_blank', 'noopener,noreferrer')
+    return
+  }
   const blob = await api.downloadAttachment(file.downloadId ?? file.id)
   const url = URL.createObjectURL(blob)
   const link = document.createElement('a')
