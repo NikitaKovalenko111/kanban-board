@@ -121,14 +121,14 @@ func (r *Repository) ListEvents(ctx context.Context, userID, personID string, gr
 		FROM events e
 		JOIN users owner ON owner.user_id = e.owner_user_id
 		LEFT JOIN student_groups sg ON sg.student_group_id = e.student_group_id
-		WHERE e.starts_at >= $4 AND e.starts_at < $5
+		WHERE e.starts_at >= $3 AND e.starts_at < $4
 			AND (
 				e.visibility = 'TEAM'
-				OR (e.visibility = 'GROUP' AND sg.group_code = ANY(string_to_array($3, ',')))
-				OR (e.visibility = 'PERSONAL' AND e.owner_user_id = $2)
+				OR (e.visibility = 'GROUP' AND sg.group_code = ANY(string_to_array($2, ',')))
+				OR (e.visibility = 'PERSONAL' AND e.owner_user_id = $1)
 			)
 		ORDER BY e.starts_at
-	`, userID, personID, groupList, from, to)
+	`, personID, groupList, from, to)
 	if err != nil {
 		return nil, err
 	}
