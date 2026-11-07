@@ -12,7 +12,7 @@ export const personName = (id: string | null | undefined, profiles: ProfileDto[]
 export function mapProject(dto: ProjectDto, profiles: ProfileDto[] = []): Project {
   const palette = ['#6577df', '#8b72e8', '#4e8bd8', '#42a682', '#e58a58', '#d75f82']
   const hash = [...dto.id].reduce((sum, character) => sum + character.charCodeAt(0), 0)
-  return { id: dto.id, name: dto.name, description: dto.description, color: palette[hash % palette.length], sources: (dto.sources ?? []).map(source => ({ ...(source.file ? mapFile(source.file) : { id: source.id, name: source.title, size: 0 }), id: source.id, downloadId: source.file?.id, url: source.kind === 'LINK' ? source.url ?? undefined : undefined, uploadedAt: source.addedAt, uploadedBy: personName(source.addedBy, profiles), uploadedById: source.addedBy ?? undefined })) }
+  return { id: dto.id, name: dto.name, canViewBoard: dto.canViewBoard, description: dto.description ?? '', color: palette[hash % palette.length], sources: (dto.sources ?? []).map(source => ({ ...(source.file ? mapFile(source.file) : { id: source.id, name: source.title, size: 0 }), id: source.id, downloadId: source.file?.id, url: source.kind === 'LINK' ? source.url ?? undefined : undefined, uploadedAt: source.addedAt, uploadedBy: personName(source.addedBy, profiles), uploadedById: source.addedBy ?? undefined })) }
 }
 export function columnStatus(id: string, columns: ColumnDto[]): TaskStatus {
   const column = columns.find(item => item.id === id)
@@ -31,5 +31,5 @@ export function mapTask(dto: TaskDto, columns: ColumnDto[], profiles: ProfileDto
 export function mapEvent(dto: EventDto, types: EventTypeDto[], profiles: ProfileDto[], reminders: Record<string, number[]>): ScheduleEvent {
   const type = types.find(item => item.id === dto.typeId)
   const override = reminders[`event:${dto.id}`]
-  return { id: dto.id, projectId: 'all', title: dto.title, description: dto.description ?? '', location: dto.location, startsAt: dto.startsAt, endsAt: dto.endsAt ?? undefined, type: dto.typeId ?? 'event', typeLabel: type?.title ?? 'Событие', typeColor: type?.color ?? '#6577df', category: dto.visibility === 'PERSONAL' ? 'personal' : dto.visibility === 'GROUP' ? 'group' : 'team', group: dto.group ?? undefined, ownerId: dto.ownerId, author: personName(dto.ownerId, profiles), reminder: 'none', reminderMode: override ? 'custom' : 'type', reminderMinutes: (override ?? type?.defaultReminders ?? []).slice(0, 1), masked: dto.masked }
+  return { id: dto.id, projectId: 'all', title: dto.title, description: dto.description ?? '', location: dto.location, startsAt: dto.startsAt, endsAt: dto.endsAt ?? undefined, type: dto.typeId ?? 'event', typeLabel: type?.title ?? 'Событие', typeColor: type?.color ?? '#6577df', category: dto.visibility === 'PERSONAL' ? 'personal' : dto.visibility === 'GROUP' ? 'group' : 'team', group: dto.group ?? undefined, ownerId: dto.ownerId, author: personName(dto.ownerId, profiles), reminder: 'none', reminderMode: override ? 'custom' : 'type', reminderMinutes: override ?? type?.defaultReminders ?? [], masked: dto.masked, partial: dto.partial }
 }

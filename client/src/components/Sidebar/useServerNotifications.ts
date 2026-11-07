@@ -14,7 +14,6 @@ export function useServerNotifications(open: boolean) {
       if (loading) return
       loading = true
       try {
-        if (open) await realApi.readNotifications()
         const result = await realApi.notifications()
         if (!cancelled) { setItems(result); setError('') }
       } catch (reason) { if (!cancelled) setError(reason instanceof Error ? reason.message : 'Не удалось загрузить уведомления') }
@@ -26,5 +25,16 @@ export function useServerNotifications(open: boolean) {
     window.addEventListener('focus', focus)
     return () => { cancelled = true; window.clearInterval(timer); window.removeEventListener('focus', focus) }
   }, [open])
-  return { items: items.map(item => ({ id: item.id, title: item.title, text: item.text, createdAt: item.at, href: item.taskId ? `/?task=${encodeURIComponent(item.taskId)}` : item.eventId ? `/schedule?event=${encodeURIComponent(item.eventId)}&date=${item.at.slice(0, 10)}` : '/schedule' })), readIds: items.filter(item => item.read).map(item => item.id), error }
+  const readAll = async () => {
+    try { await realApi.readNotifications(); setItems(await realApi.notifications()); setError('') }
+    catch (reason) { setError(reason instanceof Error ? reason.message : 'Не удалось прочитать уведомления') }
+  }
+  return { items: items.map(notificationItem), readIds: items.filter(item => item.read).map(item => item.id), error, readAll }
+}
+
+export function notificationItem(item: NotificationDto) {
+  const href = item.taskId ? `/?task=${encodeURIComponent(item.taskId)}`
+    : item.eventId ? `/schedule?event=${encodeURIComponent(item.eventId)}`
+      : item.lessonId ? `/schedule?lesson=${encodeURIComponent(item.lessonId)}&at=${encodeURIComponent(item.at)}` : '/schedule'
+  return { id: item.id, title: item.title, text: item.text, createdAt: item.at, href }
 }

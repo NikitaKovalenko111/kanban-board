@@ -52,7 +52,7 @@ describe('состояние приложения', () => {
     state = tasks(state, t.updateTaskSuccess(updated))
     expect(state.items).toEqual([second, updated])
     expect(state.saving).toBe(false)
-    expect(tasks(state, t.updateTaskSuccess({ ...task, taskId: -1 })).items).toEqual(state.items)
+    expect(tasks(state, t.updateTaskSuccess({ ...task, taskId: -1 })).items).toEqual([...state.items, { ...task, taskId: -1 }])
   })
 
   it('снимает флаги загрузки и сохранения при ошибке задач', () => {

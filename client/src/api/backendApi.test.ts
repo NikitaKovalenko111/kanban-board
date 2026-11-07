@@ -148,6 +148,21 @@ describe('существующий backend: авторизация', () => {
     await backendApi.logout()
     expect(readBackendSession()).toBeNull()
   })
+  it('при истёкшем access перед выходом обновляет и отзывает новую пару токенов', async () => {
+    seed()
+    let calls = 0
+    authHttp.defaults.adapter = async config => {
+      if (config.url === '/auth/refresh') return ok(config, wire({ ...tokens, access_token: 'new-access', refresh_token: 'new-refresh' }))
+      calls++
+      if (calls === 1) return fail(config, 401, 'invalid_access_token')
+      expect(config.headers.get('Authorization')).toBe('Bearer new-access')
+      expect(JSON.parse(config.data)).toEqual({ refreshToken: 'new-refresh' })
+      return ok(config, undefined, 204)
+    }
+    await backendApi.logout()
+    expect(calls).toBe(2)
+    expect(readBackendSession()).toBeNull()
+  })
 
   it('при сетевой ошибке выхода очищает токены и сообщает, что сервер не подтвердил выход', async () => {
     seed()

@@ -103,12 +103,21 @@ export const backendApi = {
     // If a rotation is already running, revoke its replacement token.
     if (refreshFlight) { try { await refreshFlight } catch { /* Local logout still completes. */ } }
     const session = readBackendSession()
-    clearBackendSession()
     if (!session) return
-    try { await authHttp.post('/auth/logout', { refreshToken: session.refresh_token }, { headers: { Authorization: `Bearer ${session.access_token}` } }) }
+    let current = session
+    const revoke = () => authHttp.post('/auth/logout', { refreshToken: current.refresh_token }, { headers: { Authorization: `Bearer ${current.access_token}` } })
+    try {
+      try { await revoke() }
+      catch (error) {
+        if (!axios.isAxiosError(error) || error.response?.status !== 401) throw error
+        current = await refreshBackendSession()
+        await revoke()
+      }
+    }
     catch (error) {
       throw new Error(`Вы вышли на этом устройстве. ${backendError(error).message}`)
     }
+    finally { if (readBackendSession()?.user_id === session.user_id) clearBackendSession() }
   },
   async health(): Promise<void> {
     try { await authHttp.get('/system/health') }

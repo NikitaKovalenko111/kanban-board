@@ -11,12 +11,13 @@ const tasksSlice = createSlice({
     loadTasksSuccess(state, action: PayloadAction<Task[]>) { state.items = action.payload; state.loading = false },
     createTaskRequest(state, _action: PayloadAction<NewTask>) { state.saving = true; state.error = null },
     createTaskSuccess(state, action: PayloadAction<Task>) { state.items.unshift(action.payload); state.saving = false },
-    updateTaskStatusRequest(state, _action: PayloadAction<TaskStatusUpdate>) { state.saving = true },
+    updateTaskStatusRequest(state, _action: PayloadAction<TaskStatusUpdate>) { state.saving = true; state.error = null },
     assignTaskRequest(state, _action: PayloadAction<TaskAssignment>) { state.saving = true; state.error = null },
     addTaskCommentRequest(state, _action: PayloadAction<AddTaskCommentPayload>) { state.saving = true; state.error = null },
     updateTaskSuccess(state, action: PayloadAction<Task>) {
       const index = state.items.findIndex((task) => task.taskId === action.payload.taskId)
       if (index >= 0) state.items[index] = action.payload
+      else state.items.push(action.payload)
       state.saving = false
     },
     tasksFailure(state, action: PayloadAction<string>) { state.loading = false; state.saving = false; state.error = action.payload },

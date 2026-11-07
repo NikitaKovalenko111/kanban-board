@@ -17,7 +17,7 @@ const fill = (selector, value) => run(`(()=>{const e=document.querySelector(${JS
 const click = selector => run(`document.querySelector(${JSON.stringify(selector)}).click();true`)
 const go = async path => { await send('Page.navigate', { url: 'http://127.0.0.1:5175' + path }); await wait('document.readyState==="complete"'); await pause(450) }
 const imports = () => run('(async()=>{const url=path=>performance.getEntriesByType("resource").find(entry=>new URL(entry.name).pathname===path)?.name??path;window.qaApi=(await import(url("/src/api/index.ts"))).api;window.qaReal=(await import(url("/src/api/realApi.ts"))).realApi;window.qaStore=(await import(url("/src/store/index.ts"))).store;return true})()')
-const signIn = async (login, password) => { await wait('document.querySelector(".login-card")'); await fill('input[autocomplete=username]', login); await fill('input[autocomplete=current-password]', password); await run('document.querySelector(".login-card form").requestSubmit();true'); await wait('document.querySelector(".board-page")'); await imports(); await wait('!qaStore.getState().tasks.loading && qaStore.getState().projects.items.length>0') }
+const signIn = async (login, password) => { await wait('document.querySelector(".login-card")'); await fill('input[autocomplete=username]', login); await fill('input[autocomplete=current-password]', password); await run('document.querySelector(".login-card form").requestSubmit();true'); await wait('document.querySelector(".board-page")'); await imports(); await wait('!qaStore.getState().tasks.loading && qaStore.getState().projects.items.length>0'); await run('qaStore.dispatch({type:"projects/setProjectForTab",payload:{tab:"board",projectId:' + JSON.stringify(account.projectId) + '}});true') }
 const signOut = async () => { if (await run('!!document.querySelector(".add-task-modal")')) { await click('.add-task-modal__top button'); await pause(350) } await click('.sidebar__logout'); await wait('document.querySelector(".login-card")') }
 const upload = (selector, text) => run(`(()=>{const input=document.querySelector(${JSON.stringify(selector)});const data=new DataTransfer();data.items.add(new File([${JSON.stringify(text)}],'web.txt',{type:'text/plain'}));input.files=data.files;input.dispatchEvent(new Event('change',{bubbles:true}));return true})()`)
 const select = (selector, value) => run(`(()=>{const e=document.querySelector(${JSON.stringify(selector)});e.value=${JSON.stringify(value)};e.dispatchEvent(new Event('change',{bubbles:true}));return true})()`)
@@ -85,9 +85,11 @@ try {
   await click('.page-heading button')
   await fill('.form-modal .management-form input:not([type=color]):not([type=checkbox])', 'Browser event type')
   await fill('.reminder-editor input[type=number]', '90')
+  await run('Array.from(document.querySelectorAll(".reminder-editor button")).find(button=>button.textContent.includes("Добавить напоминание")).click();true')
+  await fill('.reminder-editor__row:nth-of-type(2) input[type=number]', '30')
   await run('document.querySelector(".form-modal form").requestSubmit();true')
   await wait('!document.querySelector(".form-modal")')
-  assert.equal(await run('(async()=>{return (await qaReal.getEventTypes()).some(type=>type.label==="Browser event type"&&type.reminderMinutes[0]===90)})()'), true)
+  assert.equal(await run('(async()=>{return (await qaReal.getEventTypes()).some(type=>type.label==="Browser event type"&&type.reminderMinutes[0]===90&&type.reminderMinutes[1]===30)})()'), true)
   console.log('PASS: project source download, privacy and event type stored on backend')
   await go('/schedule?date=2026-11-05'); await imports()
   await wait('!qaStore.getState().schedule.loading')
@@ -101,9 +103,45 @@ try {
   assert.equal(await run('qaStore.getState().schedule.items.some(event=>event.title==="Browser team event")'), true)
   await click('.sidebar__notifications')
   await pause(500)
+  assert.equal(await run('(async()=>{return (await qaReal.notifications()).some(item=>!item.read)})()'), true)
+  await click('.notifications-toolbar button')
+  await wait('document.querySelector(".notifications-toolbar button")?.disabled')
   assert.equal(await run('(async()=>{return (await qaReal.notifications()).every(item=>item.read)})()'), true)
-  console.log('PASS: shared schedule creation and server read-all notifications')
+  console.log('PASS: shared schedule creation and explicit read-all notifications')
   await send('Emulation.setDeviceMetricsOverride', { width: 390, height: 844, deviceScaleFactor: 1, mobile: true })
   assert.equal(await run('document.documentElement.scrollWidth<=innerWidth'), true)
+
+  await click('.form-modal__panel > header button')
+  await go('/projects?tab=sources'); await imports()
+  await run('qaStore.dispatch({type:"projects/setProjectForTab",payload:{tab:"projects",projectId:' + JSON.stringify(account.projectId) + '}});true')
+  await run('Array.from(document.querySelectorAll("button")).find(button=>button.textContent.includes("Добавить ссылку")).click();true')
+  await wait('document.querySelector(".form-modal input[type=url]")')
+  await fill('.form-modal input:not([type=url])', 'Browser source link')
+  await fill('.form-modal input[type=url]', 'https://example.com/spec')
+  await run('document.querySelector(".form-modal form").requestSubmit();true')
+  await wait('!document.querySelector(".form-modal")')
+  assert.equal(await run('qaStore.getState().projects.items.find(project=>project.id===' + JSON.stringify(account.projectId) + ').sources.some(source=>source.url==="https://example.com/spec")'), true)
+  await run('Array.from(document.querySelectorAll(".source-row")).find(row=>row.textContent.includes("Browser source link")).querySelector(".source-row__delete").click();true')
+  await wait('document.querySelector(".form-modal .button--danger")')
+  await click('.form-modal .button--danger')
+  await wait('!document.querySelector(".form-modal")')
+  console.log('PASS: actual project link creation and deletion')
+  await go('/schedule?lesson='+encodeURIComponent(account.lessonId)+'&at='+encodeURIComponent(account.lessonAt)); await imports()
+  await wait('Array.from(document.querySelectorAll(".error-banner")).some(element=>element.textContent.includes("Занятие не найдено"))')
+  console.log('CONFIRMED: lesson ID contract gap is shown as an error without guessing another date')
+  await go('/?task='+account.taskId); await imports()
+  await wait('document.querySelector(".task-details")')
+  assert.equal(await run('document.querySelector(".add-task-modal").textContent.includes("Integration task")'),true)
+  await click('.add-task-modal__top button'); await pause(350)
+  for(const theme of ['light','dark']) {
+    await run('document.documentElement.dataset.theme='+JSON.stringify(theme)+';true')
+    for(const path of ['/','/schedule','/history','/team','/projects','/profile','/settings']) {
+      await go(path); await imports()
+      await run('document.documentElement.dataset.theme='+JSON.stringify(theme)+';true')
+      await pause(200)
+      assert.equal(await run('document.documentElement.scrollWidth<=innerWidth'),true,theme+' mobile overflow '+path)
+    }
+  }
+  console.log('PASS: mobile layout of seven sections in both themes and task notification deep link')
   console.log('ALL BROWSER INTEGRATION CHECKS PASSED')
 } finally { socket.close() }

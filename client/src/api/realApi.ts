@@ -11,8 +11,10 @@ let profiles: ProfileDto[] = []
 let columns: ColumnDto[] = []
 let contextFlight: Promise<void> | null = null
 const staged = new Map<string, File>()
+const uploadedTaskFiles = new Map<string, string>()
 const pathId = (id: EntityId) => encodeURIComponent(String(id))
 const iso = (value: string) => new Date(value).toISOString()
+const adjacentDate = (value: string, days: number) => { const date = new Date(`${value}T00:00:00Z`); date.setUTCDate(date.getUTCDate() + days); return date.toISOString().slice(0, 10) }
 const get = async <T>(path: string, params?: object): Promise<T> => (await http.get<T>(path, { params })).data
 async function context() {
   if (contextFlight) return contextFlight
@@ -25,7 +27,10 @@ async function context() {
 async function projectColumns(projectId: string) {
   const result = await get<ColumnDto[] | null>(`/projects/${pathId(projectId)}/columns`)
   columns = [...columns.filter(column => column.projectId !== projectId), ...(result ?? [])]
-  return result ?? []
+  const fixed = result ?? []
+  const kinds: ColumnDto['kind'][] = ['BACKLOG', 'IN_PROGRESS', 'REVIEW', 'DONE']
+  if (fixed.length !== 4 || kinds.some(kind => fixed.filter(column => column.kind === kind).length !== 1)) throw new Error('Сервер вернул некорректные колонки доски')
+  return fixed
 }
 async function taskDetail(id: EntityId): Promise<Task> {
   const dto = await get<TaskDto>(`/tasks/${pathId(id)}`)
@@ -44,28 +49,33 @@ function stagedFile(file: Attachment): File {
 }
 async function attachTaskFiles(id: EntityId, files: Attachment[], kind: 'SOURCE' | 'RESULT') {
   for (const file of files.filter(item => item.id.startsWith('pending:'))) {
+    const target = `${id}:${kind}`
+    if (uploadedTaskFiles.get(file.id) === target) continue
     await upload(`/tasks/${pathId(id)}/attachments`, stagedFile(file), kind)
+    uploadedTaskFiles.set(file.id, target)
     staged.delete(file.id)
   }
 }
 async function sourceUpload(projectId: string, files: Attachment[]) {
   for (const file of files) {
-    await upload(`/projects/${pathId(projectId)}/sources/files`, stagedFile(file))
+    if (file.url) await http.post(`/projects/${pathId(projectId)}/sources/links`, { title: file.name, url: file.url })
+    else await upload(`/projects/${pathId(projectId)}/sources/files`, stagedFile(file))
     staged.delete(file.id)
   }
   const project = await get<ProjectDto>(`/projects/${pathId(projectId)}`)
   return mapProject(project, profiles)
 }
-const typeOption = (type: EventTypeDto): EventTypeOption => ({ id: type.id, label: type.title, color: type.color, builtIn: !type.ownerId, reminderMinutes: (type.defaultReminders ?? []).slice(0, 1) })
+const typeOption = (type: EventTypeDto): EventTypeOption => ({ id: type.id, label: type.title, color: type.color, builtIn: !type.ownerId, reminderMinutes: type.defaultReminders ?? [] })
 function reminders(minutes: number[]) {
-  if (minutes.length > 1 || minutes.some(value => !Number.isInteger(value) || value < 1 || value > 40320)) throw new Error('Укажите одно напоминание от 1 до 40320 минут или отключите его')
+  if (minutes.some(value => !Number.isInteger(value) || value < 1 || value > 40320)) throw new Error('Укажите напоминания от 1 до 40320 минут или отключите их')
+  if (new Set(minutes).size !== minutes.length) throw new Error('Интервалы напоминаний не должны повторяться')
   return minutes
 }
 export let scheduleSourceMessage = ''
 let scheduleCache: ScheduleEvent[] = []
 export const realApi = {
   async getCurrentUser() { const [profile] = await Promise.all([get<ProfileDto>('/me'), context()]); if (profile.id !== readBackendSession()?.user_id) throw new Error('Сервер вернул профиль другого пользователя'); return mapProfile(profile, projects) },
-  async getProjects() { await context(); const me = readBackendSession()?.user_id; return [...projects].sort((a, b) => Number((b.members ?? []).some(member => member.userId === me)) - Number((a.members ?? []).some(member => member.userId === me))).map(project => mapProject(project, profiles)) },
+  async getProjects() { await context(); return [...projects].sort((a, b) => Number(b.canViewBoard) - Number(a.canViewBoard)).map(project => mapProject(project, profiles)) },
   async createProject(project: NewProject) {
     const creatorId = readBackendSession()?.user_id
     if (!creatorId) throw new Error('Войдите в аккаунт, чтобы создать проект')
@@ -99,9 +109,7 @@ export const realApi = {
   },
   async getTasks() {
     await context()
-    const me = readBackendSession()?.user_id
-    const captain = profiles.find(profile => profile.id === me)?.role === 'CAPTAIN'
-    const accessible = projects.filter(project => captain || (project.members ?? []).some(member => member.userId === me))
+    const accessible = projects.filter(project => project.canViewBoard)
     const lists = await mapLimited(accessible, async project => {
       await projectColumns(project.id)
       return await get<TaskDto[] | null>(`/projects/${pathId(project.id)}/tasks`) ?? []
@@ -109,6 +117,13 @@ export const realApi = {
     const details = await mapLimited(lists.flat(), task => get<TaskDto>(`/tasks/${pathId(task.id)}`))
     return details.map(task => mapTask(task, columns, profiles))
   },
+  async getMyTasks() {
+    await context()
+    const tasks = await get<TaskDto[] | null>('/tasks') ?? []
+    await mapLimited([...new Set(tasks.map(task => task.projectId))], projectColumns)
+    return tasks.map(task => mapTask(task, columns, profiles))
+  },
+  async getTask(id: EntityId) { await context(); return taskDetail(id) },
   async createTask(task: NewTask) {
     const dto = (await http.post<TaskDto>(`/projects/${pathId(task.projectId)}/tasks`, { title: task.taskName, description: task.taskDesc, priority: 'NORMAL', assigneeId: task.assigneeId === undefined ? null : String(task.assigneeId), dueAt: task.taskDeadline ? iso(`${task.taskDeadline}T23:59:00`) : null })).data
     try { await attachTaskFiles(dto.id, task.attachments, 'SOURCE') }
@@ -127,7 +142,8 @@ export const realApi = {
     if (files?.length) await attachTaskFiles(id, files, 'RESULT')
     const refreshed = await get<TaskDto>(`/tasks/${pathId(id)}`)
     if (columnStatus(refreshed.columnId, project) !== status) {
-      const target = project.find(column => columnStatus(column.id, project) === status)
+      const kind: Record<TaskStatus, ColumnDto['kind']> = { waiting: 'BACKLOG', working: 'IN_PROGRESS', checking: 'REVIEW', done: 'DONE' }
+      const target = project.find(column => column.kind === kind[status])
       if (!target) throw new Error('В проекте нет нужной колонки')
       await http.post(`/tasks/${pathId(id)}/move`, { columnId: target.id, ...(comment ? { comment } : {}) })
     }
@@ -150,16 +166,39 @@ export const realApi = {
   async getGroups() { return await get<GroupDto[] | null>('/student-groups') ?? [] },
   async getSchedule(_projectId: string, query?: ScheduleQuery): Promise<ScheduleEvent[]> {
     const now = new Date(); const from = query?.from ?? new Date(now.getFullYear(), now.getMonth(), 1).toISOString().slice(0, 10); const to = query?.to ?? new Date(now.getFullYear(), now.getMonth() + 2, 0).toISOString().slice(0, 10)
-    const [events, types, overrides] = await Promise.all([get<EventDto[] | null>('/events', { from, to, personId: query?.personId, groups: query?.groups?.join(',') }), get<EventTypeDto[] | null>('/event-types'), get<Record<string, number[]> | null>('/me/reminders')])
+    if (!profiles.length) await context()
+    const groupView = query?.groups !== undefined
+    const requestedGroups = query?.groups ?? []
+    const groupPeople = requestedGroups.map(group => profiles.find(profile => profile.active && profile.studentGroup === group)?.id).filter((id): id is string => !!id)
+    const people = groupView ? [...new Set(groupPeople)] : [query?.personId]
+    // The API date range is interpreted in UTC; include boundary days for local-time rendering.
+    const [eventLists, types, overrides] = await Promise.all([mapLimited(people.length ? people : [query?.personId], personId => get<EventDto[] | null>('/events', { from: adjacentDate(from, -1), to: adjacentDate(to, 1), personId })), get<EventTypeDto[] | null>('/event-types'), get<Record<string, number[]> | null>('/me/reminders')])
+    const events = [...new Map(eventLists.flatMap(list => list ?? []).filter(event => !groupView || event.visibility === 'TEAM' || (event.visibility === 'GROUP' && !!event.group && requestedGroups.includes(event.group))).map(event => [event.id, event])).values()]
     const owner = query?.personId ? profiles.find(profile => profile.id === query.personId) : profiles.find(profile => profile.id === readBackendSession()?.user_id)
     const groups = query?.groups?.length ? query.groups : owner?.studentGroup ? [owner.studentGroup] : []
     const lessons = await Promise.all(groups.map(group => get<LessonsDto>('/schedule/lessons', { group, from, to }).catch((): LessonsDto => ({ lessons: [], updatedAt: null, source: 'UNAVAILABLE' }))))
     scheduleSourceMessage = lessons.some(result => result.source === 'UNAVAILABLE') ? 'Источник учебного расписания недоступен. События команды показаны отдельно.' : lessons.some(result => result.source === 'CACHED') ? 'Учебное расписание загружено из кеша.' : ''
-    const mapped = [...(events ?? []).map(event => mapEvent(event, types ?? [], profiles, overrides ?? {})), ...lessons.flatMap(result => (result.lessons ?? []).map(lesson => ({ id: `lesson:${lesson.id}`, projectId: 'all', title: lesson.title, description: lesson.teacher, location: lesson.room, startsAt: `${lesson.date}T${lesson.start}`, endsAt: `${lesson.date}T${lesson.end}`, type: 'class', typeLabel: lesson.kind, typeColor: '#42a682', category: 'class' as const, group: lesson.group, author: lesson.teacher, reminder: 'none' as const, reminderMode: 'custom' as const, reminderMinutes: (overrides?.[`lesson:${lesson.id}`] ?? []).slice(0, 1) })))]
+    if (groupView && groupPeople.length < requestedGroups.length) scheduleSourceMessage += `${scheduleSourceMessage ? ' ' : ''}События групп без активных участников недоступны; пары показаны по выбранным группам.`
+    const mapped = [...(events ?? []).map(event => mapEvent(event, types ?? [], profiles, overrides ?? {})), ...lessons.flatMap(result => (result.lessons ?? []).map(lesson => ({ id: `lesson:${lesson.id}`, projectId: 'all', title: lesson.title, description: lesson.teacher, location: lesson.room, startsAt: `${lesson.date}T${lesson.start}`, endsAt: `${lesson.date}T${lesson.end}`, type: 'class', typeLabel: lesson.kind, typeColor: '#42a682', category: 'class' as const, group: lesson.group, author: lesson.teacher, reminder: 'none' as const, reminderMode: 'custom' as const, reminderMinutes: overrides?.[`lesson:${lesson.id}`] ?? [] })))]
     scheduleCache = mapped
     return mapped
   },
   async getScheduleEventDate(id: string) { return (await get<EventDto>(`/events/${pathId(id)}`)).startsAt },
+  async getScheduleEventTarget(id: string) { return get<EventDto>(`/events/${pathId(id)}`) },
+  async getLessonDate(id: string, notificationAt: string) {
+    const cached = scheduleCache.find(event => event.id === `lesson:${id}`)
+    if (cached) return cached.startsAt
+    // Notifications contain the delivery time, which may precede the lesson by up to 28 days.
+    if (!profiles.length) await context()
+    const group = profiles.find(profile => profile.id === readBackendSession()?.user_id)?.studentGroup
+    if (!group) throw new Error('Укажите учебную группу, чтобы открыть занятие')
+    const start = new Date(notificationAt); start.setDate(start.getDate() - 1)
+    const end = new Date(notificationAt); end.setDate(end.getDate() + 30)
+    const result = await get<LessonsDto>('/schedule/lessons', { group, from: start.toISOString().slice(0, 10), to: end.toISOString().slice(0, 10) })
+    const lesson = result.lessons?.find(lesson => lesson.id === id)
+    if (!lesson) throw new Error('Занятие не найдено в текущем расписании')
+    return `${lesson.date}T${lesson.start}`
+  },
   async createScheduleEvent(event: NewScheduleEvent) {
     const dto = (await http.post<EventDto>('/events', { title: event.title, description: event.description, location: event.location ?? '', startsAt: iso(event.startsAt), endsAt: event.endsAt ? iso(event.endsAt) : null, visibility: event.category === 'personal' ? 'PERSONAL' : event.category === 'group' ? 'GROUP' : 'TEAM', group: event.category === 'group' ? event.group : '', typeId: event.type || null, ...(event.reminderMode === 'custom' ? { myReminders: reminders(event.reminderMinutes ?? []) } : {}) })).data
     if (event.reminderMode === 'custom' && event.reminderMinutes?.length) await http.put(`/me/reminders/${pathId(`event:${dto.id}`)}`, { minutes: event.reminderMinutes })
@@ -175,5 +214,5 @@ export const realApi = {
   },
   async notifications() { return await get<NotificationDto[] | null>('/notifications', { limit: 100 }) ?? [] },
   async readNotifications() { await http.post('/notifications/read-all') },
-  clear() { projects = []; profiles = []; columns = []; staged.clear() },
+  clear() { projects = []; profiles = []; columns = []; scheduleCache = []; scheduleSourceMessage = ''; staged.clear(); uploadedTaskFiles.clear() },
 }

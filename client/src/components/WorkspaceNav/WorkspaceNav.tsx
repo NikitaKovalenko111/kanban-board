@@ -57,14 +57,14 @@ const WorkspaceNav = () => {
             </button>
             {items.map((project) => <button type="button" role="option" aria-selected={project.id === activeProjectId} className={project.id === activeProjectId ? 'is-active' : ''} key={project.id} onClick={() => selectProject(project.id)}>
               <span className="project-menu__color" style={{ background: project.color }} />
-              <span><strong>{project.name}</strong><small>{project.description || 'Без описания'}</small></span>
+              <span><strong>{project.name}</strong><small>{project.canViewBoard === false ? 'Нет доступа к проекту' : project.description || 'Без описания'}</small></span>
               {project.id === activeProjectId && <svg viewBox="0 0 20 20" aria-hidden="true"><path d="m5 10 3 3 7-7" /></svg>}
             </button>)}
           </div>
           <Link className="project-menu__manage" to="/projects" onClick={() => setProjectsOpen(false)}><Icon name={user.role === 'lead' ? 'plus' : 'arrow-right'} /> {user.role === 'lead' ? 'Управление проектами' : 'Все проекты'}</Link>
         </div>}
       </div>}
-      {user.role === 'lead' && activeProject && pathname === '/' && <Link className="project-nav-manage" to={`/projects/${activeProject.id}/manage`}>Управление проектом</Link>}
+      {user.role === 'lead' && activeProject && activeProject.canViewBoard !== false && pathname === '/' && <Link className="project-nav-manage" to={`/projects/${activeProject.id}/manage`}>Управление проектом</Link>}
       {showSearch && <SearchField value={params.get('q') ?? ''} onChange={(value) => setParams((previous) => { const next = new URLSearchParams(previous); if (value) next.set('q', value); else next.delete('q'); return next }, { replace: true })} placeholder={pathname === '/' ? 'Поиск по задачам' : 'Поиск по истории'} />}
     </div>
   </div>

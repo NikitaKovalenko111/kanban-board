@@ -5,6 +5,8 @@ import { loadTeamRequest } from '../slices/teamSlice'
 import { updateProjectRequest, updateProjectSuccess, deleteProjectSourceRequest } from '../slices/projectsSlice'
 import type { TeamMember, User } from '../../types'
 import { api } from '../../api'
+import { isBackendMode } from '../../api/config'
+import { realApi } from '../../api/realApi'
 import type { AddProjectSourcesPayload, NewProject, Project } from '../../types'
 import { addProjectSourcesRequest, addProjectSourcesSuccess, createProjectRequest, createProjectSuccess, loadProjectsRequest, loadProjectsSuccess, projectsFailure } from '../slices/projectsSlice'
 
@@ -14,7 +16,16 @@ function* loadProjectsWorker() {
 }
 
 function* createProjectWorker(action: ReturnType<typeof createProjectRequest>) {
-  try { const project: Project = yield call(api.createProject, action.payload as NewProject); yield put(createProjectSuccess(project)) }
+  try {
+    const project: Project = yield call(api.createProject, action.payload as NewProject)
+    yield put(createProjectSuccess(project))
+    if (isBackendMode) {
+      yield put(loadTeamRequest())
+      // Project membership is returned by the server; do not invent a local role.
+      try { const user: User = yield call(realApi.getCurrentUser); yield put(loginSuccess(user)) }
+      catch { /* A profile refresh failure must not turn a created project into a failed creation. */ }
+    }
+  }
   catch (error) { yield put(projectsFailure(error instanceof Error ? error.message : 'Не удалось создать проект')) }
 }
 

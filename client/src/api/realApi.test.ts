@@ -10,7 +10,7 @@ const userId = '89aa283b-e289-4584-af55-10d331cb979f'
 const otherId = 'a0c95905-d70c-47b9-a8e7-89f5c47a83b0'
 const projectId = 'c522a7fd-91e1-4f1c-a2f5-5832d3da5de4'
 const profile: ProfileDto = { id: userId, fullName: 'Капитан API', username: 'captain', studentGroup: 'TOP-203B', imageUrl: null, role: 'CAPTAIN', schedulePrivacy: 'BUSY', joinedAt: '2026-11-05T10:00:00Z', active: true }
-const project: ProjectDto = { id: projectId, name: 'Проект API', description: '', members: [{ userId, role: 'Lead' }], sources: [] }
+const project: ProjectDto = { id: projectId, name: 'Проект API', canViewBoard: true, description: '', members: [{ userId, role: 'Lead' }], sources: [] }
 const columns: ColumnDto[] = [
   { id: 'backlog', projectId, title: 'Ожидает', kind: 'BACKLOG', position: 0, color: '#123456' },
   { id: 'progress', projectId, title: 'Разработка', kind: 'IN_PROGRESS', position: 1, color: '#123456' },
@@ -46,19 +46,106 @@ beforeEach(() => {
 afterEach(() => { backendHttp.defaults.adapter = original; realApi.clear(); sessionStorage.clear() })
 
 describe('адаптер обновлённого API', () => {
+  it('при ошибке перехода повторяет сдачу без повторной загрузки уже принятого файла', async () => {
+    currentTask = { ...currentTask, columnId: 'progress', assigneeId: userId }
+    const file = await realApi.uploadAttachment(new File(['result'], 'result.txt'))
+    const previous = backendHttp.defaults.adapter as (config: InternalAxiosRequestConfig) => Promise<ReturnType<typeof json>>
+    let fail = true
+    backendHttp.defaults.adapter = async config => {
+      if (fail && config.url?.endsWith('/move')) { fail = false; throw new AxiosError('Offline', 'ERR_NETWORK', config) }
+      return previous(config)
+    }
+    await expect(realApi.updateTaskStatus(task.id, 'checking', 'Автор', undefined, [file])).rejects.toThrow('Не удалось связаться')
+    await expect(realApi.updateTaskStatus(task.id, 'checking', 'Автор', undefined, [file])).resolves.toMatchObject({ taskStatus: 'checking' })
+    expect(requests.filter(request => request.url?.endsWith('/attachments'))).toHaveLength(1)
+  })
+  it('использует canViewBoard сервера вместо локального членства', async () => {
+    const previous = backendHttp.defaults.adapter as (config: InternalAxiosRequestConfig) => Promise<ReturnType<typeof json>>
+    backendHttp.defaults.adapter = async config => config.url === '/projects' ? json(config, [{ ...project, members: [] }]) : config.url === '/users' ? json(config, [{ ...profile, role: 'MEMBER' }]) : previous(config)
+    expect(await realApi.getTasks()).toHaveLength(1)
+    expect(requests.some(request => request.url === `/projects/${projectId}/tasks`)).toBe(true)
+  })
+  it('получает личные счётчики через GET /tasks без загрузки всех досок и деталей', async () => {
+    expect(await realApi.getMyTasks()).toHaveLength(1)
+    expect(requests.filter(request => request.url === '/tasks')).toHaveLength(1)
+    expect(requests.some(request => request.url === `/projects/${projectId}/tasks` || request.url === '/tasks/task-id')).toBe(false)
+  })
+  it('отклоняет динамические или неполные колонки вместо выбора случайной', async () => {
+    const previous = backendHttp.defaults.adapter as (config: InternalAxiosRequestConfig) => Promise<ReturnType<typeof json>>
+    backendHttp.defaults.adapter = async config => config.url?.endsWith('/columns') ? json(config, [...columns, { ...columns[1], id: 'extra' }]) : previous(config)
+    await expect(realApi.getTasks()).rejects.toThrow('некорректные колонки')
+  })
+  it('сохраняет все интервалы типа и не отправляет повторы', async () => {
+    backendHttp.defaults.adapter = async config => { requests.push(config); return json(config, { id: 'type', title: 'Тип', color: '#123456', ownerId: userId, defaultReminders: [30, 90] }) }
+    expect((await realApi.saveEventType({ id: 'type', label: 'Тип', color: '#123456', reminderMinutes: [30, 90] }, false)).reminderMinutes).toEqual([30, 90])
+    expect(JSON.parse(requests[0].data).defaultReminders).toEqual([30, 90])
+    await expect(realApi.saveEventType({ id: 'type', label: 'Тип', color: '#123456', reminderMinutes: [30, 30] }, false)).rejects.toThrow('не должны повторяться')
+  })
+  it('отправляет ссылку проекта JSON-запросом, без попытки загрузить файл', async () => {
+    const previous = backendHttp.defaults.adapter as (config: InternalAxiosRequestConfig) => Promise<ReturnType<typeof json>>
+    backendHttp.defaults.adapter = async config => {
+      if (config.url?.endsWith('/sources/links')) { requests.push(config); return json(config, {}) }
+      return previous(config)
+    }
+    await realApi.addProjectSources({ projectId, author: 'Имя', files: [{ id: 'link:1', name: 'Репозиторий', size: 0, url: 'https://example.com/' }] })
+    expect(JSON.parse(requests.find(request => request.url?.endsWith('/sources/links'))!.data)).toEqual({ title: 'Репозиторий', url: 'https://example.com/' })
+    expect(requests.some(request => request.url?.endsWith('/sources/files'))).toBe(false)
+  })
+  it('сетевая ошибка расписания остаётся ошибкой, без подмены моками', async () => {
+    await realApi.getCurrentUser()
+    backendHttp.defaults.adapter = async config => {
+      if (config.url === '/events') throw new AxiosError('Offline', 'ERR_NETWORK', config)
+      return json(config, config.url === '/event-types' ? [] : {})
+    }
+    await expect(realApi.getSchedule('all')).rejects.toThrow('Не удалось связаться')
+  })
+  it('групповой просмотр использует personId участников выбранных групп и исключает личные события', async () => {
+    const previous = backendHttp.defaults.adapter as (config: InternalAxiosRequestConfig) => Promise<ReturnType<typeof json>>
+    backendHttp.defaults.adapter = async config => config.url === '/users' ? json(config, [profile, { ...profile, id: otherId, studentGroup: 'TOP-204B' }]) : previous(config)
+    await realApi.getCurrentUser()
+    backendHttp.defaults.adapter = async config => {
+      requests.push(config)
+      if (config.url === '/events') return json(config, [
+        { id: 'team', ownerId: userId, title: 'Общее', startsAt: task.createdAt, endsAt: null, visibility: 'TEAM', group: null, masked: false, partial: false },
+        { id: 'private', ownerId: otherId, title: 'Личное', startsAt: task.createdAt, endsAt: null, visibility: 'PERSONAL', group: null, masked: false, partial: false },
+        { id: 'group', ownerId: otherId, title: 'Группа 204', startsAt: task.createdAt, endsAt: null, visibility: 'GROUP', group: 'TOP-204B', masked: false, partial: false },
+      ])
+      return json(config, config.url === '/event-types' ? [] : config.url === '/schedule/lessons' ? { lessons: [], source: 'ACTUAL' } : {})
+    }
+    const result = await realApi.getSchedule('all', { projectId: 'all', groups: ['TOP-204B'], from: '2026-11-02', to: '2026-11-09' })
+    expect(result.map(event => event.id)).toEqual(['team', 'group'])
+    expect(requests.find(request => request.url === '/events')?.params).toMatchObject({ personId: otherId })
+  })
+  it('находит дату занятия по lessonId, а не по времени доставки уведомления', async () => {
+    await realApi.getCurrentUser()
+    backendHttp.defaults.adapter = async config => {
+      requests.push(config)
+      return json(config, { lessons: [{ id: 'lesson-id', date: '2026-11-06', start: '08:00', end: '09:20' }], source: 'ACTUAL' })
+    }
+    expect(await realApi.getLessonDate('lesson-id', '2026-11-05T22:45:00Z')).toBe('2026-11-06T08:00')
+    expect(requests.at(-1)?.params.group).toBe('TOP-203B')
+    expect(requests.at(-1)?.params.from).toMatch(/^\d{4}-\d{2}-\d{2}$/)
+  })
+  it('не подменяет занятие другим при несовпадении внутреннего и внешнего ID', async () => {
+    await realApi.getCurrentUser()
+    backendHttp.defaults.adapter = async config => json(config, { lessons: [{ id: 'external-uust-id', date: '2026-11-06', start: '08:00', title: 'Одинаковое название' }], source: 'ACTUAL' })
+    await expect(realApi.getLessonDate('internal-uuid', '2026-11-05T22:45:00Z')).rejects.toThrow('Занятие не найдено')
+  })
   it('отправляет UUID исполнителя строкой в PATCH задачи', async () => {
     await realApi.assignTask(task.id, otherId)
     const request = requests.find(request => request.method === 'patch' && request.url === '/tasks/task-id')!
     expect(JSON.parse(request.data)).toEqual({ assigneeId: otherId })
   })
-  it('передаёт параметры расписания по контракту и не скрывает серверную ошибку 500', async () => {
+  it('загружает расписание без устаревшего groups и сохраняет все напоминания', async () => {
+    await realApi.getCurrentUser()
     backendHttp.defaults.adapter = async config => {
       requests.push(config)
-      if (config.url === '/events') throw new AxiosError('workspace request failed', 'ERR_BAD_RESPONSE', config, undefined, { ...json(config, {}), status: 500 })
+      if (config.url === '/events') return json(config, [])
+      if (config.url === '/schedule/lessons') return json(config, { lessons: [], source: 'ACTUAL' })
       return json(config, config.url === '/event-types' ? [] : {})
     }
-    await expect(realApi.getSchedule('all', { projectId: 'all', personId: userId, groups: ['ТОП-204Б'], from: '2026-11-02', to: '2026-11-09' })).rejects.toThrow('Сервер временно недоступен')
-    expect(requests.find(request => request.url === '/events')?.params).toEqual({ personId: userId, groups: 'ТОП-204Б', from: '2026-11-02', to: '2026-11-09' })
+    await expect(realApi.getSchedule('all', { projectId: 'all', personId: userId, from: '2026-11-02', to: '2026-11-09' })).resolves.toEqual([])
+    expect(requests.find(request => request.url === '/events')?.params).toEqual({ personId: userId, from: '2026-11-01', to: '2026-11-10' })
   })
   it('получает настоящий профиль и проектные роли без преобразования UUID в число', async () => {
     const user = await realApi.getCurrentUser()
@@ -112,11 +199,11 @@ describe('адаптер обновлённого API', () => {
   it('не ломает всю доску при истории с удалённым или переименованным названием', () => {
     expect(mapTask({ ...task, history: [{ id: 'old', action: 'MOVED', actorId: userId, at: task.createdAt, fromColumn: 'Старое название', toColumn: 'Ожидает' }] }, columns, [profile]).history[0].fromLabel).toBe('Старое название')
   })
-  it('не запрашивает задачи проектов, в которых участник не состоит', async () => {
+  it('не запрашивает детали проектов с canViewBoard=false даже для капитана', async () => {
     const previous = backendHttp.defaults.adapter as (config: InternalAxiosRequestConfig) => Promise<ReturnType<typeof json>>
-    backendHttp.defaults.adapter = async config => config.url === '/users' ? json(config, [{ ...profile, role: 'MEMBER' }]) : config.url === '/projects' ? json(config, [{ ...project, members: [] }]) : config.url === `/projects/${projectId}` ? json(config, { ...project, members: [] }) : previous(config)
+    backendHttp.defaults.adapter = async config => config.url === '/users' ? json(config, [{ ...profile, role: 'MEMBER' }]) : config.url === '/projects' ? json(config, [{ id: projectId, name: 'Недоступный проект', canViewBoard: false }]) : config.url === `/projects/${projectId}` ? json(config, { ...project, members: [] }) : previous(config)
     expect(await realApi.getTasks()).toEqual([])
-    expect(requests.some(request => request.url?.endsWith('/tasks'))).toBe(false)
+    expect(requests.some(request => request.url?.endsWith('/tasks') || request.url?.endsWith('/columns') || request.url === `/projects/${projectId}`)).toBe(false)
   })
   it('ошибка загрузки после создания проекта не выдаётся за успешную загрузку файлов', async () => {
     const file = await realApi.uploadAttachment(new File(['source'], 'brief.txt'))

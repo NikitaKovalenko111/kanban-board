@@ -1,3 +1,4 @@
+.notifications-toolbar { display: flex; justify-content: flex-end; padding: 8px 0 16px; .text-button { color: var(--color-primary); border: 0; background: transparent; &:disabled { color: var(--color-muted); } } }
 .sidebar-backdrop { position: fixed; inset: 0; z-index: 60; border: 0; background: rgba(28,33,43,.24); opacity: 0; pointer-events: none; transition: opacity .2s; &.is-open { opacity: 1; pointer-events: auto; } }
 .sidebar { position: fixed; top: 0; bottom: 0; left: 0; z-index: 70; display: flex; flex-direction: column; width: 252px; padding: 22px; background: var(--color-surface); box-shadow: 8px 0 28px rgba(30,35,45,.07); transform: none; transition: transform .32s cubic-bezier(.22,.8,.25,1); &.is-open { transform: none; }
   &__top { display: flex; align-items: center; justify-content: flex-end; margin-bottom: 32px; }

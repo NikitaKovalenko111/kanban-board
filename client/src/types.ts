@@ -10,6 +10,7 @@ export type EventCategory = 'class' | 'team' | 'group' | 'personal' | 'deadline'
 
 export interface Project {
   id: string
+  canViewBoard?: boolean
   name: string
   description: string
   color: string
@@ -55,6 +56,7 @@ export interface ScheduleEvent {
   ownerId?: EntityId
   category?: EventCategory
   masked?: boolean
+  partial?: boolean
 }
 
 export type NewScheduleEvent = Omit<ScheduleEvent, 'id'>

@@ -26,16 +26,17 @@ const makeStore = (member = false) => configureStore({
 const Location = () => <output data-testid="location">{useLocation().pathname}</output>
 
 describe('регрессии навигации и ролей', () => {
-  it('отмечает уведомления прочитанными при открытии без дополнительных кнопок', async () => {
+  it('не читает уведомления при открытии списка и поддерживает явное прочтение', async () => {
     vi.spyOn(mockApi, 'getSchedule').mockResolvedValue([])
     const store = makeStore()
     render(<Provider store={store}><MemoryRouter><Sidebar open={false} onClose={vi.fn()} /></MemoryRouter></Provider>)
     const button = screen.getByRole('button', { name: /Уведомления/ })
     expect(within(button).getByText('1')).toBeInTheDocument()
     await userEvent.click(button)
-    expect(within(button).queryByText('1')).not.toBeInTheDocument()
+    expect(within(button).getByText('1')).toBeInTheDocument()
     expect(screen.getByRole('dialog', { name: 'Уведомления' })).toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: 'Прочитать все' })).not.toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: 'Прочитать все' }))
+    expect(within(button).queryByText('1')).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Прочитано' })).not.toBeInTheDocument()
     expect(JSON.parse(localStorage.getItem(`notification-reads-${user.id}`)!)).toContain('new-comment')
     await waitFor(() => expect(mockApi.getSchedule).toHaveBeenCalled())

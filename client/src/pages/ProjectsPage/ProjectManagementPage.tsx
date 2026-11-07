@@ -51,6 +51,7 @@ const ProjectManagementPage = () => {
   }
   if (loading) return <div className="loader">Загружаем проект…</div>
   if (!project) return <main className="projects-page"><div className="container"><Link className="back-link" to="/projects"><Icon name="arrow-left" /> К проектам</Link><h1>Проект не найден</h1></div></main>
+  if (isBackendMode && project.canViewBoard === false) return <main className="projects-page"><div className="container"><Link className="back-link" to="/projects"><Icon name="arrow-left" /> К проектам</Link><h1>{project.name}</h1><p className="error-banner">Нет доступа к проекту. Обратитесь к тимлиду.</p></div></main>
 
   const projectMembers = members.filter((member) => member.projectRoles[project.id])
   return <main className="projects-page"><div className="container">

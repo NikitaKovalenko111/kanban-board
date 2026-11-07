@@ -78,7 +78,16 @@ const SchedulePage = () => {
     if (requested && /^\d{4}-\d{2}-\d{2}$/.test(requested) && !Number.isNaN(Date.parse(requested))) setSelectedDate(requested)
   }, [searchParams])
   const linkedEventId = searchParams.get('event')
-  useEffect(() => { if (isBackendMode && linkedEventId) { let active = true; void realApi.getScheduleEventDate(linkedEventId).then(date => { if (active) setSelectedDate(localDate(new Date(date))) }).catch(reason => { if (active) setReminderError(reason.message) }); return () => { active = false } } }, [linkedEventId])
+  const linkedLessonId = searchParams.get('lesson')
+  const linkedNotificationAt = searchParams.get('at')
+  useEffect(() => {
+    if (!isBackendMode || !linkedLessonId || !linkedNotificationAt) return
+    let active = true
+    setScope('mine')
+    void realApi.getLessonDate(linkedLessonId, linkedNotificationAt).then(date => { if (active) setSelectedDate(localDate(new Date(date))) }).catch(reason => { if (active) setReminderError(reason.message) })
+    return () => { active = false }
+  }, [linkedLessonId, linkedNotificationAt])
+  useEffect(() => { if (isBackendMode && linkedEventId) { let active = true; void realApi.getScheduleEventTarget(linkedEventId).then(event => { if (active) { setSelectedDate(localDate(new Date(event.startsAt))); setScope(event.visibility === 'PERSONAL' && event.ownerId !== user.id ? `user:${event.ownerId}` : 'mine'); setCategoryFilter('all'); setQuery('') } }).catch(reason => { if (active) setReminderError(reason.message) }); return () => { active = false } } }, [linkedEventId, user.id])
   useEffect(() => { if (!eventProjectId && projects.length) setEventProjectId(projects[0].id) }, [eventProjectId, projects])
 
   const weekDays = useMemo(() => {
@@ -115,7 +124,7 @@ const SchedulePage = () => {
   useEffect(() => {
     if (reminderSubmitted && !saving && !error) { setReminderEvent(null); setReminderSubmitted(false) }
   }, [reminderSubmitted, saving, error])
-  const editableReminders = (event: ScheduleEvent) => isBackendMode ? !event.masked : event.ownerId === user.id || (user.role === 'lead' && eventCategory(event) !== 'personal')
+  const editableReminders = (event: ScheduleEvent) => isBackendMode ? !event.masked && !event.partial : event.ownerId === user.id || (user.role === 'lead' && eventCategory(event) !== 'personal')
   const openReminders = (event: ScheduleEvent) => {
     setReminderEvent(event); setReminderError(''); setReminderSubmitted(false)
     setReminders({ reminderMode: event.reminderMode ?? 'custom', reminderMinutes: eventReminderMinutes(event, eventTypes) })
@@ -188,10 +197,10 @@ const SchedulePage = () => {
       </button>)}
     </nav>}
     {sourceMessage && <p role="status" className="muted">{sourceMessage}</p>}
-    {error && <div className="error-banner">{error}</div>}
+    {(error || (!showForm && !reminderEvent && reminderError)) && <div className="error-banner" role="alert">{error || reminderError}</div>}
     {loading ? <div className="loader">Загружаем расписание…</div> : <div ref={slider.viewportRef} className={slider.className} style={slider.viewportStyle} {...slider.handlers}><section className={`${layout === 'rows' ? 'agenda' : `schedule-grid schedule-grid--${visibleMode}`} ${slider.mobile ? 'schedule-slider__track' : ''}`} style={slider.trackStyle} onTransitionEnd={slider.onTransitionEnd} aria-label={visibleMode === 'week' ? 'События недели' : 'События дня'}>
       {visibleDays.map((day) => {
-        const dayEvents = filteredEvents.filter((event) => event.startsAt.slice(0, 10) === day)
+        const dayEvents = filteredEvents.filter((event) => localDate(new Date(event.startsAt)) === day)
         return <section className={`${layout === 'rows' ? 'agenda-day' : 'schedule-day'} ${day === selectedDate ? 'is-selected' : ''}`} aria-hidden={slider.mobile && day !== selectedDate ? true : undefined} key={day} id={`schedule-day-${day}`}>
           {layout === 'rows' ? <div className="agenda-day__date"><strong>{new Date(`${day}T12:00:00`).toLocaleDateString('ru-RU', { day: '2-digit' })}</strong><span>{new Date(`${day}T12:00:00`).toLocaleDateString('ru-RU', slider.mobile ? { month: 'short' } : { month: 'short', weekday: 'long' })}</span></div> : <h2>{visibleMode === 'week' && <span>{new Date(`${day}T12:00:00`).toLocaleDateString('ru-RU', { weekday: 'long' })}</span>}<span>{new Date(`${day}T12:00:00`).toLocaleDateString('ru-RU', { day: 'numeric', month: 'long' })}</span></h2>}
           <div className={layout === 'rows' ? 'agenda-day__items' : 'schedule-day__events'}>{dayEvents.map((event) => {

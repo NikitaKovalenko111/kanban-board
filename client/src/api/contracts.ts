@@ -1,7 +1,7 @@
 export interface ProfileDto { id: string; fullName: string; username: string; studentGroup: string; imageUrl: string | null; role: 'CAPTAIN' | 'MEMBER'; schedulePrivacy: 'NOTHING' | 'BUSY' | 'TITLE' | 'TITLE_AND_DESCRIPTION'; joinedAt: string; active: boolean }
 export interface FileDto { id: string; name: string; sizeBytes: number; mimeType: string; downloadUrl: string }
 export interface SourceDto { id: string; kind: 'FILE' | 'LINK'; title: string; url: string | null; file: FileDto | null; addedBy: string | null; addedAt: string }
-export interface ProjectDto { id: string; name: string; description: string; members: { userId: string; role: string }[] | null; sources: SourceDto[] | null }
+export interface ProjectDto { id: string; name: string; canViewBoard: boolean; description?: string; members?: { userId: string; role: string }[] | null; sources?: SourceDto[] | null }
 export interface ColumnDto { id: string; projectId: string; title: string; position: number; kind: 'BACKLOG' | 'IN_PROGRESS' | 'REVIEW' | 'DONE'; color: string }
 export interface AttachmentDto { id: string; kind: 'SOURCE' | 'RESULT'; uploadedBy: string; uploadedAt: string; file: FileDto }
 export interface CommentDto { id: string; authorId: string; text: string; createdAt: string }
@@ -12,4 +12,4 @@ export interface EventDto { id: string; ownerId: string; title: string; descript
 export interface LessonDto { id: string; group: string; date: string; start: string; end: string; title: string; room: string; teacher: string; kind: string }
 export interface LessonsDto { lessons: LessonDto[] | null; updatedAt: string | null; source: 'ACTUAL' | 'CACHED' | 'UNAVAILABLE' }
 export interface GroupDto { id: string; groupCode: string; name: string }
-export interface NotificationDto { id: string; kind: string; title: string; text: string; at: string; read: boolean; taskId: string | null; eventId: string | null }
+export interface NotificationDto { id: string; kind: 'COMMENT' | 'RETURNED' | 'STATUS' | 'EVENT' | 'LESSON'; title: string; text: string; at: string; read: boolean; taskId?: string | null; eventId?: string | null; lessonId?: string | null }
