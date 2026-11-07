@@ -234,7 +234,7 @@ private fun HistoryCard(row: HistoryRow, onClick: () -> Unit) {
                 Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 6.dp)) {
                     val assignee = row.assignee
                     if (assignee != null) {
-                        UserAvatar(assignee.fullName, size = 20.dp, photo = assignee.photo)
+                        UserAvatar(assignee.fullName, size = 28.dp, photo = assignee.photo)
                         Spacer(Modifier.width(6.dp))
                     }
                     Caption(

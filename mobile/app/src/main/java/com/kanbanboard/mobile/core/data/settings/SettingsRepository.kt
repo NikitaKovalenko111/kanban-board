@@ -33,7 +33,8 @@ data class AppSettings(
     val theme: ThemeMode = ThemeMode.SYSTEM,
     val bottomBar: BottomBarStyle = BottomBarStyle.STATIC,
     /** Сдвиг экрана влево/вправо при переключении вкладок. */
-    val tabAnimation: Boolean = true,
+    /** Анимация смены вкладок — бета, по умолчанию выключена. */
+    val tabAnimation: Boolean = false,
     /** Путь к своей картинке-обоям в памяти приложения; null — обычный фон. */
     val wallpaper: String? = null,
     /** Показывать системные уведомления (push) о задачах. */
@@ -77,7 +78,7 @@ class DataStoreSettingsRepository(context: Context) : SettingsRepository {
             AppSettings(
                 theme = ThemeMode.entries.firstOrNull { it.name == prefs[Keys.theme] } ?: ThemeMode.SYSTEM,
                 bottomBar = BottomBarStyle.entries.firstOrNull { it.name == prefs[Keys.bottomBar] } ?: BottomBarStyle.STATIC,
-                tabAnimation = prefs[Keys.tabAnimation] ?: true,
+                tabAnimation = prefs[Keys.tabAnimation] ?: false,
                 wallpaper = prefs[Keys.wallpaper],
                 pushTasks = prefs[Keys.pushTasks] ?: true,
                 pushEvents = prefs[Keys.pushEvents] ?: true,

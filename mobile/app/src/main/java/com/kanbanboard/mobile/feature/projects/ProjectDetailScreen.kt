@@ -58,6 +58,7 @@ import com.kanbanboard.mobile.core.data.ProjectRepository
 import com.kanbanboard.mobile.core.data.SessionRepository
 import com.kanbanboard.mobile.core.data.TeamRepository
 import com.kanbanboard.mobile.core.data.settings.SettingsRepository
+import com.kanbanboard.mobile.core.features.Features
 import com.kanbanboard.mobile.core.files.FileStore
 import com.kanbanboard.mobile.core.designsystem.BackButton
 import com.kanbanboard.mobile.core.designsystem.AppButton
@@ -241,8 +242,13 @@ private fun ProjectDetailScreen(
                 actions = {
                     if (state.canManage && project != null) {
                         IconButton(onClick = onEdit) { Icon(Icons.Outlined.Edit, contentDescription = "Настройки проекта") }
-                        IconButton(onClick = { confirmDelete = true }) {
-                            Icon(Icons.Outlined.Delete, contentDescription = "Удалить проект", tint = MaterialTheme.ext.danger)
+                        // Удаление проекта есть только в мобилке — заблокировано до решения команды.
+                        IconButton(onClick = { confirmDelete = true }, enabled = Features.DELETE_PROJECT) {
+                            Icon(
+                                Icons.Outlined.Delete,
+                                contentDescription = if (Features.DELETE_PROJECT) "Удалить проект" else "Удаление проекта: ${Features.BLOCKED_HINT.lowercase()}",
+                                tint = if (Features.DELETE_PROJECT) MaterialTheme.ext.danger else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f),
+                            )
                         }
                     }
                 },

@@ -10,6 +10,8 @@ val isuUrlTemplate = providers.gradleProperty("isuUrlTemplate").orNull
     ?: "https://isu.uust.ru/class_schedule/?group={group}"
 val isuGroup203 = providers.gradleProperty("isuGroup203").orNull ?: "203"
 val isuGroup204 = providers.gradleProperty("isuGroup204").orNull ?: "204"
+val backendBaseUrl = providers.gradleProperty("backendBaseUrl").orNull.orEmpty()
+require('"' !in backendBaseUrl && '\\' !in backendBaseUrl) { "Некорректный backendBaseUrl" }
 
 android {
     namespace = "com.kanbanboard.mobile"
@@ -19,18 +21,37 @@ android {
         applicationId = "com.kanbanboard.mobile"
         minSdk = 29
         targetSdk = 37
-        versionCode = 6
-        versionName = "0.5.1-demo"
+        versionCode = 8
+        versionName = "0.5.3-demo"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
         buildConfigField("String", "ISU_URL_TEMPLATE", "\"$isuUrlTemplate\"")
         buildConfigField("String", "ISU_GROUP_203", "\"$isuGroup203\"")
         buildConfigField("String", "ISU_GROUP_204", "\"$isuGroup204\"")
+        buildConfigField("String", "BACKEND_BASE_URL", "\"$backendBaseUrl\"")
     }
 
     buildTypes {
         release {
             isMinifyEnabled = false
+        }
+    }
+
+    // Две версии приложения, ставятся рядом (у mock свой applicationId и свои данные):
+    //  clean — чистый старт: только тимлид и участник, всё остальное создают пользователи;
+    //  mock  — заполненная команда, проекты, задачи, события и файлы для показа и тестирования.
+    flavorDimensions += "data"
+    productFlavors {
+        create("clean") {
+            dimension = "data"
+            isDefault = true
+            resValue("string", "app_name", "Код в сапоге")
+        }
+        create("mock") {
+            dimension = "data"
+            applicationIdSuffix = ".mock"
+            versionNameSuffix = "-mock"
+            resValue("string", "app_name", "Код в сапоге (мок)")
         }
     }
 
@@ -42,6 +63,7 @@ android {
     buildFeatures {
         compose = true
         buildConfig = true
+        resValues = true
     }
 }
 
@@ -69,4 +91,5 @@ dependencies {
 
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.10.2")
+    testImplementation("com.squareup.okhttp3:mockwebserver:4.12.0")
 }

@@ -270,7 +270,7 @@ private fun ColumnsPager(
             val isDone = column.column.kind == ColumnKind.DONE
             val visible = if (isDone) column.cards.take(DONE_LIMIT) else column.cards
             LazyColumn(
-                contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 96.dp),
+                contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 12.dp, bottom = if (state.canCreate) 96.dp else 16.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
                 modifier = Modifier.fillMaxSize(),
             ) {

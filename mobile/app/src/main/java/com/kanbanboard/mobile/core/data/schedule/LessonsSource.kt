@@ -49,6 +49,8 @@ class IsuLessonsSource(
         .connectTimeout(10, TimeUnit.SECONDS)
         .readTimeout(15, TimeUnit.SECONDS)
         .build(),
+    /** Пример пар на случай, когда нет ни сети, ни кэша. Задаётся только в мок-версии. */
+    private val example: ((StudyGroup, LocalDate, LocalDate) -> List<Lesson>)? = null,
 ) : LessonsSource {
 
     private val cacheDir = File(context.applicationContext.filesDir, "isu").apply { mkdirs() }
@@ -63,7 +65,10 @@ class IsuLessonsSource(
         val fresh = locks.getOrPut(group) { Mutex() }.withLock { refreshIfDue(group) }
         when {
             fresh != null -> emit(fresh.snapshot(from, to, Source.ISU))
-            cached == null -> emit(LessonsSnapshot(emptyList(), null, Source.UNAVAILABLE))
+            cached == null -> emit(
+                example?.let { LessonsSnapshot(it(group, from, to), null, Source.EXAMPLE) }
+                    ?: LessonsSnapshot(emptyList(), null, Source.UNAVAILABLE),
+            )
         }
     }.flowOn(Dispatchers.IO)
 

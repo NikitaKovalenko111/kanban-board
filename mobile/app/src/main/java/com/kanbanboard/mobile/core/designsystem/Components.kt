@@ -44,10 +44,16 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.text.PlatformTextStyle
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.LineHeightStyle
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.tooling.preview.Preview
 
 /*
  * Общие компоненты. Внутри — стандартные компоненты Material 3 (Card, FilterChip, Button,
@@ -323,6 +329,8 @@ fun UserAvatar(
     }
     val initials = name.split(' ').filter { it.isNotBlank() }.take(2)
         .joinToString("") { it.first().uppercase() }.ifEmpty { "?" }
+    // Привязываем буквы к диаметру, чтобы системный масштаб шрифта не обрезал инициалы.
+    val initialsSize = with(LocalDensity.current) { (size * 0.4f).toSp() }
     Surface(
         modifier = modifier.size(size),
         shape = CircleShape,
@@ -331,9 +339,39 @@ fun UserAvatar(
         Box(contentAlignment = Alignment.Center) {
             Text(
                 initials,
-                style = if (size >= 56.dp) MaterialTheme.typography.titleLarge else MaterialTheme.typography.labelLarge,
+                style = TextStyle(
+                    fontSize = initialsSize,
+                    fontWeight = FontWeight.Medium,
+                    lineHeight = initialsSize,
+                    platformStyle = PlatformTextStyle(includeFontPadding = false),
+                    lineHeightStyle = LineHeightStyle(
+                        alignment = LineHeightStyle.Alignment.Center,
+                        trim = LineHeightStyle.Trim.Both,
+                    ),
+                ),
+                maxLines = 1,
+                softWrap = false,
                 color = if (highlighted) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onPrimaryContainer,
             )
+        }
+    }
+}
+
+@Preview(name = "Аватары", showBackground = true)
+@Preview(name = "Аватары — шрифт 200%", showBackground = true, fontScale = 2f)
+@Composable
+private fun UserAvatarPreview() {
+    MaterialTheme {
+        Row(
+            modifier = Modifier.padding(16.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            UserAvatar("Самир Миргазямов", size = 20.dp)
+            UserAvatar("Никита Коваленко", size = 24.dp)
+            UserAvatar("Ю", size = 28.dp)
+            UserAvatar("", size = 40.dp)
+            UserAvatar("Самир Миргазямов", size = 64.dp, highlighted = true)
         }
     }
 }
