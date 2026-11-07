@@ -30,6 +30,19 @@ func (h *Handler) Start(mux *http.ServeMux) {
 	mux.HandleFunc("DELETE /event-types/{eventTypeId}", h.deleteEventType)
 	mux.HandleFunc("GET /me/reminders", h.getReminders)
 	mux.HandleFunc("PUT /me/reminders/{itemKey}", h.putReminders)
+	mux.HandleFunc("DELETE /me/reminders/{itemKey}", h.deleteReminderOverride)
+}
+
+func (h *Handler) deleteReminderOverride(w http.ResponseWriter, r *http.Request) {
+	userID, ok := handlercommon.UserID(r)
+	if !ok {
+		return
+	}
+	if err := h.service.DeleteReminderOverride(r.Context(), userID, r.PathValue("itemKey")); err != nil {
+		handlercommon.WriteError(w, r, err)
+		return
+	}
+	pkg.WriteEmpty(w, http.StatusNoContent)
 }
 
 type eventTypeRequest struct {
@@ -47,6 +60,7 @@ type createEventRequest struct {
 	Visibility  string     `json:"visibility"`
 	Group       string     `json:"group"`
 	TypeID      *string    `json:"typeId"`
+	ProjectID   *string    `json:"projectId"`
 	MyReminders []int      `json:"myReminders"`
 }
 
@@ -59,6 +73,7 @@ type updateEventRequest struct {
 	Visibility  *string                           `json:"visibility"`
 	Group       *string                           `json:"group"`
 	TypeID      handlercommon.Optional[string]    `json:"typeId"`
+	ProjectID   handlercommon.Optional[string]    `json:"projectId"`
 }
 
 type remindersRequest struct {
@@ -144,15 +159,12 @@ func (h *Handler) listEvents(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	groups := make([]string, 0)
-	if value := r.URL.Query().Get("groups"); value != "" {
-		for _, group := range strings.Split(value, ",") {
-			if group = strings.TrimSpace(group); group != "" {
-				groups = append(groups, group)
-			}
-		}
+	personID := strings.TrimSpace(r.URL.Query().Get("personId"))
+	group := strings.TrimSpace(r.URL.Query().Get("group"))
+	if group == "" && personID == "" {
+		group = strings.TrimSpace(strings.Split(r.URL.Query().Get("groups"), ",")[0])
 	}
-	items, err := h.service.ListEvents(r.Context(), userID, r.URL.Query().Get("personId"), groups, from, to)
+	items, err := h.service.ListEvents(r.Context(), userID, personID, group, from, to)
 	if err != nil {
 		handlercommon.WriteError(w, r, err)
 		return
@@ -185,7 +197,7 @@ func (h *Handler) createEvent(w http.ResponseWriter, r *http.Request) {
 	item, err := h.service.CreateEvent(
 		r.Context(), userID, request.Title, request.Description, request.Location,
 		request.StartsAt, request.EndsAt, request.Visibility, request.Group,
-		request.TypeID, request.MyReminders,
+		request.TypeID, request.ProjectID, request.MyReminders,
 	)
 	if err != nil {
 		handlercommon.WriteError(w, r, err)
@@ -208,6 +220,7 @@ func (h *Handler) updateEvent(w http.ResponseWriter, r *http.Request) {
 		request.Description, request.Location, request.StartsAt,
 		request.EndsAt.Value, request.EndsAt.Set, request.Visibility,
 		request.Group, request.TypeID.Value, request.TypeID.Set,
+		request.ProjectID.Value, request.ProjectID.Set,
 	)
 	if err != nil {
 		handlercommon.WriteError(w, r, err)

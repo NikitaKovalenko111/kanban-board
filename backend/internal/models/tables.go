@@ -42,6 +42,7 @@ const (
 			created_by_user_id UUID NOT NULL REFERENCES users (user_id),
 			name VARCHAR NOT NULL,
 			description TEXT,
+			color VARCHAR NOT NULL DEFAULT '#6576DF',
 			join_policy VARCHAR NOT NULL DEFAULT 'INVITE_ONLY' CHECK (join_policy IN ('OPEN', 'INVITE_ONLY', 'CLOSED')),
 			is_archived BOOLEAN NOT NULL DEFAULT FALSE,
 			created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -195,6 +196,14 @@ const (
 			item_key VARCHAR NOT NULL,
 			minutes_before INTEGER NOT NULL CHECK (minutes_before BETWEEN 1 AND 40320),
 			PRIMARY KEY (user_id, item_key, minutes_before)
+		);`
+	REMINDER_OVERRIDES_TABLE = `
+		CREATE TABLE IF NOT EXISTS reminder_overrides (
+			user_id UUID NOT NULL REFERENCES users (user_id) ON DELETE CASCADE,
+			item_key VARCHAR NOT NULL,
+			enabled BOOLEAN NOT NULL,
+			updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+			PRIMARY KEY (user_id, item_key)
 		);`
 	PROJECT_SOURCES_TABLE = `
 		CREATE TABLE IF NOT EXISTS project_sources (
@@ -417,6 +426,7 @@ const (
 	ATTACHMENTS_UPLOADED_BY_USER_ID_INDEX     = `CREATE INDEX IF NOT EXISTS attachments_uploaded_by_user_id_idx ON attachments (uploaded_by_user_id);`
 	ATTACHMENTS_STORAGE_KEY_INDEX             = `CREATE UNIQUE INDEX IF NOT EXISTS attachments_storage_key_idx ON attachments (storage_key);`
 	LESSONS_GROUP_START_INDEX                 = `CREATE INDEX IF NOT EXISTS lessons_group_starts_at_idx ON lessons (student_group_id, starts_at);`
+	LESSONS_GROUP_EXTERNAL_UNIQUE_INDEX       = `CREATE UNIQUE INDEX IF NOT EXISTS lessons_group_external_uidx ON lessons (student_group_id, external_id) WHERE external_id IS NOT NULL;`
 	EVENT_TYPES_OWNER_INDEX                   = `CREATE INDEX IF NOT EXISTS event_types_created_by_user_id_idx ON event_types (created_by_user_id);`
 	EVENT_TYPES_PROJECT_INDEX                 = `CREATE INDEX IF NOT EXISTS event_types_project_id_idx ON event_types (project_id);`
 	EVENTS_OWNER_START_INDEX                  = `CREATE INDEX IF NOT EXISTS events_owner_starts_at_idx ON events (owner_user_id, starts_at);`

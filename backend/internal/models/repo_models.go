@@ -62,6 +62,7 @@ type Profile struct {
 type Project struct {
 	ID           string          `json:"id"`
 	Name         string          `json:"name"`
+	Color        string          `json:"color"`
 	Description  string          `json:"description,omitempty"`
 	CanViewBoard bool            `json:"canViewBoard"`
 	Members      []ProjectMember `json:"members,omitempty"`
@@ -157,15 +158,16 @@ type Attachment struct {
 }
 
 type Lesson struct {
-	ID      string `json:"id"`
-	Group   string `json:"group"`
-	Date    string `json:"date"`
-	Start   string `json:"start"`
-	End     string `json:"end"`
-	Title   string `json:"title"`
-	Room    string `json:"room"`
-	Teacher string `json:"teacher"`
-	Kind    string `json:"kind"`
+	ID         string  `json:"id"`
+	ExternalID *string `json:"externalId,omitempty"`
+	Group      string  `json:"group"`
+	Date       string  `json:"date"`
+	Start      string  `json:"start"`
+	End        string  `json:"end"`
+	Title      string  `json:"title"`
+	Room       string  `json:"room"`
+	Teacher    string  `json:"teacher"`
+	Kind       string  `json:"kind"`
 }
 
 type Schedule struct {
@@ -185,6 +187,7 @@ type EventType struct {
 type Event struct {
 	ID          string     `json:"id"`
 	OwnerID     string     `json:"ownerId"`
+	ProjectID   *string    `json:"projectId,omitempty"`
 	Title       string     `json:"title"`
 	Description string     `json:"description,omitempty"`
 	Location    string     `json:"location,omitempty"`

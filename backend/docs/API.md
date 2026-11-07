@@ -8,7 +8,7 @@
 Authorization: Bearer <accessToken>
 ```
 
-Время передаётся в RFC 3339, идентификаторы — UUID. Поля `PATCH` являются необязательными: отсутствующее поле не меняется, а допустимый `null` очищает значение.
+Время в JSON передаётся в RFC 3339, идентификаторы — UUID. Параметры диапазона `from` и `to` передаются как `YYYY-MM-DD`; день `to` включается полностью. Поля `PATCH` являются необязательными: отсутствующее поле не меняется, а допустимый `null` очищает значение.
 
 ## Ошибки
 
@@ -58,12 +58,13 @@ Refresh-токен при обновлении ротируется: стары�
 | Метод | Маршрут | Назначение |
 |---|---|---|
 | GET | `/me` | свой профиль |
-| PATCH | `/me` | частично изменить `fullName`, `studentGroup`, `schedulePrivacy` |
+| PATCH | `/me` | частично изменить `username`, `fullName`, `studentGroup`, `schedulePrivacy` |
 | PUT | `/me/photo` | загрузить `jpg`, `png` или `webp`, multipart-поле `file` |
 | DELETE | `/me/photo` | удалить фото |
 | GET | `/team` | название и описание команды |
 | GET | `/users?search=` | список пользователей |
 | GET | `/users/{userId}` | профиль пользователя |
+| PATCH | `/users/{userId}` | изменить `username` и/или `studentGroup`; только капитан |
 | POST | `/users` | создать пользователя; только капитан |
 | PATCH | `/users/{userId}/status` | `{ "status": "ACTIVE" | "BLOCKED" }` |
 | POST | `/users/{userId}/reset-password` | выдать одноразово показываемый временный пароль |
@@ -156,7 +157,8 @@ Authorization: Bearer <accessToken>
 |---|---|---|
 | GET | `/student-groups` | известные учебные группы |
 | GET | `/schedule/lessons?group=&from=&to=` | пары и состояние источника |
-| GET | `/events?personId=&groups=&from=&to=` | события расписания |
+| GET | `/schedule/lessons/{lessonId}` | занятие по стабильному внутреннему UUID |
+| GET | `/events?personId=&group=&from=&to=` | события пользователя либо выбранной группы |
 | GET | `/events/{eventId}` | событие с учётом приватности |
 | POST | `/events` | создать событие |
 | PATCH | `/events/{eventId}` | частично изменить; автор или капитан |
@@ -166,9 +168,12 @@ Authorization: Bearer <accessToken>
 | PATCH | `/event-types/{eventTypeId}` | изменить личный тип |
 | DELETE | `/event-types/{eventTypeId}` | удалить личный тип |
 | GET | `/me/reminders` | карта напоминаний `event:<id>`/`lesson:<id>` |
-| PUT | `/me/reminders/{itemKey}` | `{ "minutes": [60, 15] }`; пустой список удаляет настройку |
+| PUT | `/me/reminders/{itemKey}` | заменить интервалы; пустой список явно отключает напоминания |
+| DELETE | `/me/reminders/{itemKey}` | удалить переопределение и снова наследовать исходные интервалы |
 
-Видимость события: `TEAM`, `GROUP`, `PERSONAL`. `personId` выбирает пользователя, чьё расписание запрошено; если он не указан, используется текущий пользователь. Авторизованный пользователь может запросить расписание любого активного пользователя. Для чужого личного события применяются настройки владельца `NOTHING`, `BUSY`, `TITLE`, `TITLE_AND_DESCRIPTION`: при `NOTHING` событие вообще не возвращается. Групповые события выбираются по фактической учебной группе запрошенного пользователя. Напоминание задаётся в пределах 1–40320 минут.
+Видимость события: `TEAM`, `GROUP`, `PERSONAL`. `personId` выбирает пользователя, чьё расписание запрошено; если он не указан, используется текущий пользователь. `group` вместо `personId` возвращает `TEAM` и `GROUP` выбранной учебной группы без личных событий. Для чужого личного события применяются настройки владельца `NOTHING`, `BUSY`, `TITLE`, `TITLE_AND_DESCRIPTION`: при `NOTHING` событие вообще не возвращается. `projectId` можно передать для `TEAM`-события доступного проекта. Напоминание задаётся в пределах 1–40320 минут.
+
+В расписании `lessons[].id` — стабильный внутренний UUID, совпадающий с `lessonId` уведомления. Исходный идентификатор УУНиТ находится в необязательном `externalId`.
 
 Ответ расписания:
 
@@ -189,6 +194,7 @@ Authorization: Bearer <accessToken>
 | GET | `/notifications?limit=100` | уведомления, новые сверху |
 | GET | `/notifications/stream` | SSE-поток новых уведомлений и изменений прочитанности |
 | POST | `/notifications/read-all` | отметить все прочитанными, `204` |
+| POST | `/notifications/{notificationId}/read` | отметить одно своё уведомление прочитанным, `204` |
 | POST | `/me/push-tokens` | `{ "token", "platform": "android" }`, `204` |
 | DELETE | `/me/push-tokens/{token}` | удалить push-токен, `204` |
 
