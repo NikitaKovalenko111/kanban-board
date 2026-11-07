@@ -209,6 +209,7 @@ if (!import.meta.env.VITE_API_URL) client.defaults.adapter = async (config) => {
   if (config.url === '/projects' && config.method === 'post') {
     const actor = requireLead()
     const payload = JSON.parse(config.data as string) as NewProject
+    if (!payload.name.trim()) throw new Error('Укажите название проекта')
     await validateFiles(payload.sources ?? [])
     const baseId = payload.name.trim().toLowerCase().replace(/[^a-zа-яё0-9]+/gi, '-').replace(/^-|-$/g, '') || 'project'
     const id = projects.some((project) => project.id === baseId) ? `${baseId}-${Date.now()}` : baseId
@@ -338,10 +339,11 @@ if (!import.meta.env.VITE_API_URL) client.defaults.adapter = async (config) => {
   if (config.url === '/tasks' && config.method === 'post') {
     requireLead()
     const payload = JSON.parse(config.data as string) as NewTask
+    if (!payload.taskName.trim()) throw new Error('Укажите название задачи')
     const assignee = payload.assigneeId === undefined ? undefined : accounts.find((account) => account.id === payload.assigneeId && account.active)
     if (payload.assigneeId !== undefined && !assignee) throw new Error('Выберите активного участника')
     await validateFiles(payload.attachments)
-    const task: Task = { ...payload, priority: validatePriority(payload.priority), resultAttachments: [], history: [], comments: [], taskId: Date.now(), taskStatus: 'waiting', assignee: assignee?.name ?? 'Не назначен', assigneeId: assignee?.id, createdAt: new Date().toISOString().slice(0, 10) }
+    const task: Task = { ...payload, taskName: payload.taskName.trim(), taskDesc: payload.taskDesc.trim(), priority: validatePriority(payload.priority), resultAttachments: [], history: [], comments: [], taskId: Date.now(), taskStatus: 'waiting', assignee: assignee?.name ?? 'Не назначен', assigneeId: assignee?.id, createdAt: new Date().toISOString().slice(0, 10) }
     tasks = [task, ...tasks]
     return response(config, cloneTask(task), 201)
   }

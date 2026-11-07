@@ -35,6 +35,10 @@ const readText = (blob: Blob) => new Promise<string>((resolve, reject) => {
 })
 
 describe('mockApi', () => {
+  it('отклоняет пустые названия задачи и проекта на уровне данных', async () => {
+    await expect(request(api.createTask({ projectId: 'ai-hackathon', taskName: '   ', taskDesc: 'Описание', attachments: [] }))).rejects.toThrow('Укажите название задачи')
+    await expect(request(api.createProject({ name: '   ', description: '', color: '#123456' }))).rejects.toThrow('Укажите название проекта')
+  })
   it('создаёт личное событие без проекта и возвращает его при переключении проектов', async () => {
     const event = await request(api.createScheduleEvent({ ...scheduleEvent, projectId: undefined, category: 'personal' }))
     expect(event.projectId).toBeUndefined()

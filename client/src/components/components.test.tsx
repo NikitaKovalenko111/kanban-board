@@ -34,6 +34,14 @@ function renderModal(currentTask: TaskType | null = null) {
 }
 
 describe('основные компоненты доски', () => {
+  it('не создаёт задачу с названием из пробелов', async () => {
+    const dispatch = renderModal()
+    await userEvent.type(screen.getByLabelText('Название задачи'), '   ')
+    await userEvent.type(screen.getByLabelText('Описание / ТЗ'), 'Описание')
+    await userEvent.click(screen.getByRole('button', { name: 'Создать задачу' }))
+    expect(screen.getByRole('alert')).toHaveTextContent('Укажите название и описание задачи')
+    expect(dispatch.mock.calls.some(([action]) => createTaskRequest.match(action))).toBe(false)
+  })
   it.each(['working', 'checking', 'done'] as const)('показывает приоритет без редактирования в статусе %s', (taskStatus) => {
     renderModal({ ...task, taskStatus, priority: 'high' })
     expect(screen.queryByRole('combobox', { name: 'Приоритет' })).not.toBeInTheDocument()

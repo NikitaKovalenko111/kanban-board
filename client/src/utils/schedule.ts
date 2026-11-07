@@ -2,6 +2,9 @@ import type { EventCategory, ScheduleEvent, User } from '../types'
 
 export const eventCategory = (event: ScheduleEvent): EventCategory => event.category === 'personal' ? 'personal' : event.category === 'group' || event.type === 'class' ? 'group' : 'team'
 
+export type ScheduleFilterCategory = EventCategory | 'class'
+export const eventFilterCategory = (event: ScheduleEvent): ScheduleFilterCategory => eventCategory(event) === 'personal' ? 'personal' : event.type === 'class' ? 'class' : eventCategory(event)
+
 export function visibleSchedule(events: ScheduleEvent[], viewer: User, owners: User[]): ScheduleEvent[] {
   return events.flatMap((event) => {
     if (eventCategory(event) !== 'personal' || event.ownerId === viewer.id) return [{ ...event }]

@@ -14,13 +14,22 @@ const WorkspaceNav = () => {
   const tab = projectTab(pathname)
   const activeProjectId = useProjectSelection(tab ?? '')
   const showSwitcher = !!tab && (pathname !== '/projects' || params.get('tab') === 'sources')
-  const showSearch = pathname === '/' || pathname === '/history'
+  const [mobile, setMobile] = useState(() => window.matchMedia?.('(max-width: 760px)')?.matches ?? false)
+  const showSearch = pathname === '/' || (pathname === '/history' && !mobile)
   const { items, loading } = useAppSelector((state) => state.projects)
   const user = useAppSelector((state) => state.auth.user)!
   const activeProject = items.find((project) => project.id === activeProjectId)
   const allProjectsSelected = activeProjectId === 'all'
   const [projectsOpen, setProjectsOpen] = useState(false)
   const switcherRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    const media = window.matchMedia?.('(max-width: 760px)')
+    if (!media) return
+    const resize = () => setMobile(media.matches)
+    media.addEventListener('change', resize)
+    return () => media.removeEventListener('change', resize)
+  }, [])
 
   useEffect(() => { if (!items.length) dispatch(loadProjectsRequest()) }, [dispatch, items.length])
   useEffect(() => {
@@ -56,7 +65,7 @@ const WorkspaceNav = () => {
             </button>
             {items.map((project) => <button type="button" role="option" aria-selected={project.id === activeProjectId} className={project.id === activeProjectId ? 'is-active' : ''} key={project.id} onClick={() => selectProject(project.id)}>
               <span className="project-menu__color" style={{ background: project.color }} />
-              <span><strong>{project.name}</strong><small>{project.description || 'Без описания'}</small></span>
+              <span><strong title={project.name}>{project.name}</strong><small>{project.description || 'Без описания'}</small></span>
               {project.id === activeProjectId && <svg viewBox="0 0 20 20" aria-hidden="true"><path d="m5 10 3 3 7-7" /></svg>}
             </button>)}
           </div>

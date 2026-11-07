@@ -16,7 +16,7 @@ it('показывает собственный список и сохраняе
   const trigger = screen.getByRole('combobox', { name: 'Приоритет' })
   await userEvent.click(trigger)
   expect(screen.getAllByRole('option')).toHaveLength(3)
-  expect(screen.getByRole('option', { name: 'Средний' })).toHaveAttribute('aria-selected', 'true')
+  expect(screen.getByRole('option', { name: 'Обычный' })).toHaveAttribute('aria-selected', 'true')
   await userEvent.click(screen.getByRole('option', { name: 'Высокий' }))
   expect(trigger).toHaveTextContent('Высокий')
   expect(trigger).toHaveFocus()
@@ -41,7 +41,7 @@ it('закрывает список по Escape, сохраняя окно за�
   await userEvent.keyboard('{ArrowDown}{Escape}')
   expect(close).not.toHaveBeenCalled()
   expect(screen.queryByRole('listbox')).not.toBeInTheDocument()
-  expect(screen.getByRole('combobox')).toHaveTextContent('Средний')
+  expect(screen.getByRole('combobox')).toHaveTextContent('Обычный')
 })
 
 it('закрывает меню при нажатии снаружи и не открывает заблокированное поле', async () => {

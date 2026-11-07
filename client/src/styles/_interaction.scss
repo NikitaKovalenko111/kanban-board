@@ -47,3 +47,14 @@ html { scrollbar-gutter: stable; }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; }
 }
+.page-heading > div { min-width: 0; }
+main h1 { overflow-wrap: anywhere; }
+.project-menu__list strong, .project-menu__list small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.member-dialog dl > div { flex-wrap: wrap; }
+.member-dialog dt, .member-dialog dd { min-width: 0; overflow-wrap: anywhere; }
+.form-modal__panel:focus, .add-task-modal__wrapper:focus, .sidebar:focus { outline: none; }
+@media (max-width: 760px) {
+  .app-shell :where(input, select, textarea), .form-modal :where(input, select, textarea), .add-task-modal :where(input, select, textarea), .login-page input { font-size: 16px !important; }
+}
+[data-theme='dark'] .status-badge.is-active { color: #86efac; background: #153d2b; }
+[data-theme='dark'] .status-badge:not(.is-active), [data-theme='dark'] .task__deadline.is-overdue { color: var(--color-danger); background: #432832; }

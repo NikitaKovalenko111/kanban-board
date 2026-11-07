@@ -1,8 +1,9 @@
+import { useModal } from '../FormModal/useModal'
 import LinkAttachment from '../LinkAttachment/LinkAttachment'
 import PrioritySelect from '../PrioritySelect/PrioritySelect'
 import { priorityLabels } from '../../utils/taskPriority'
 import Icon from '../Icon/Icon'
-import { useCallback, useEffect, useRef, useState, type FormEvent, type JSX } from 'react'
+import { useCallback, useEffect, useId, useRef, useState, type FormEvent, type JSX } from 'react'
 import { createPortal } from 'react-dom'
 import type React from 'react'
 import { uploadFiles, downloadFile as saveDownload } from '../../api/attachments'
@@ -19,6 +20,8 @@ const statusLabels: Record<TaskStatus, string> = { waiting: 'Ожидание', 
 
 const AddTaskModal: React.FC<PropsType> = ({ task, onClose }): JSX.Element => {
     const dispatch = useAppDispatch()
+    const panelRef = useRef<HTMLDivElement>(null)
+    const titleId = useId()
     const { saving, error: taskError } = useAppSelector((state) => state.tasks)
     const user = useAppSelector((state) => state.auth.user)!
     const { members, loading: teamLoading, error: teamError } = useAppSelector((state) => state.team)
@@ -57,23 +60,16 @@ const AddTaskModal: React.FC<PropsType> = ({ task, onClose }): JSX.Element => {
 
     useEffect(() => { if (user.role === 'lead') dispatch(loadTeamRequest()) }, [dispatch, user.role])
     useEffect(() => { setAssigneeDraft(null) }, [task?.assigneeId, task?.assignee])
-    useEffect(() => { if (submitted && !saving && !taskError) close() }, [submitted, saving, taskError, close])
+    useEffect(() => { if (!submitted || saving) return; if (taskError) setSubmitted(false); else close() }, [submitted, saving, taskError, close])
 
-    useEffect(() => {
-      const previousOverflow = document.body.style.overflow
-      document.body.style.overflow = 'hidden'
-      const handleKeyDown = (event: KeyboardEvent) => { if (event.key === 'Escape') close() }
-      document.addEventListener('keydown', handleKeyDown)
-      return () => {
-        document.body.style.overflow = previousOverflow
-        document.removeEventListener('keydown', handleKeyDown)
-        if (closeTimer.current) window.clearTimeout(closeTimer.current)
-      }
-    }, [close])
+    useModal(panelRef, close)
+    useEffect(() => () => { if (closeTimer.current) window.clearTimeout(closeTimer.current) }, [])
 
     const submit = (event: FormEvent) => {
       event.preventDefault()
-      dispatch(createTaskRequest({ projectId: activeProjectId, taskName: name, taskDesc: description, priority, taskDeadline: deadline || undefined, attachments, ...(assigneeValue ? { assigneeId: Number(assigneeValue) } : {}) }))
+      if (!name.trim() || !description.trim()) { setFileError('Укажите название и описание задачи'); return }
+      setFileError('')
+      dispatch(createTaskRequest({ projectId: activeProjectId, taskName: name.trim(), taskDesc: description.trim(), priority, taskDeadline: deadline || undefined, attachments, ...(assigneeValue ? { assigneeId: Number(assigneeValue) } : {}) }))
       setSubmitted(true)
     }
 
@@ -97,7 +93,7 @@ const AddTaskModal: React.FC<PropsType> = ({ task, onClose }): JSX.Element => {
     const returnForRevision = () => {
       if (!task || !revision.trim()) return
       dispatch(updateTaskStatusRequest({ taskId: task.taskId, status: 'working', revisionComment: revision, resultAttachments: [], author: user.name }))
-      close()
+      setSubmitted(true)
     }
 
     const handleUpload = async (files: FileList | null, result: boolean) => {
@@ -116,10 +112,10 @@ const AddTaskModal: React.FC<PropsType> = ({ task, onClose }): JSX.Element => {
     const assigneeSelect = <label className="task-assignment__label">Исполнитель<select value={assigneeValue} disabled={saving || teamLoading} onChange={(event) => setAssigneeDraft(event.target.value)}><option value="" disabled={task?.taskStatus === 'working'}>Не назначен</option>{members.filter((member) => member.active).map((member) => <option key={member.id} value={member.id}>{member.name} (@{member.login})</option>)}{currentAssignee !== undefined && !members.some((member) => member.active && member.id === currentAssignee) && <option value={currentAssignee} disabled>{task?.assignee}</option>}</select></label>
 
     return createPortal(
-        <div className={`add-task-modal ${closing ? 'is-closing' : ''}`} role="dialog" aria-modal="true">
-            <button className="add-task-modal__backdrop" onClick={close} aria-label="Закрыть" />
-            <div className="add-task-modal__wrapper">
-                <div className="add-task-modal__top"><div><span className="eyebrow">{task ? `Задача #${task.taskId}` : 'Новая задача'}</span><h2 className="add-task-modal__header">{task ? task.taskName : 'Создать задачу'}</h2></div><button className="icon-button" onClick={close} aria-label="Закрыть"><Icon name="close" /></button></div>
+        <div className={`add-task-modal ${closing ? 'is-closing' : ''}`} role="dialog" aria-modal="true" aria-labelledby={titleId}>
+            <button className="add-task-modal__backdrop" tabIndex={-1} onClick={close} aria-label="Закрыть" />
+            <div className="add-task-modal__wrapper" ref={panelRef} tabIndex={-1}>
+                <div className="add-task-modal__top"><div><span className="eyebrow">{task ? `Задача #${task.taskId}` : 'Новая задача'}</span><h2 className="add-task-modal__header" id={titleId}>{task ? task.taskName : 'Создать задачу'}</h2></div><button className="icon-button" onClick={close} aria-label="Закрыть"><Icon name="close" /></button></div>
                 {(fileError || taskError) && <div className="error-banner" role="alert">{fileError || taskError}</div>}
                 {user.role === 'lead' && teamError && <div className="error-banner" role="alert">{teamError}</div>}
                 {task ? (
@@ -146,7 +142,7 @@ const AddTaskModal: React.FC<PropsType> = ({ task, onClose }): JSX.Element => {
                       <SearchField value={commentQuery} onChange={setCommentQuery} placeholder="Поиск комментариев" />
                       {comments.length > 0 && <div className="task-comments__list" tabIndex={0} role="region" aria-label="Общий разбор">{visibleComments.map((item) => <article key={item.id}><div><strong>{item.author}</strong><time>{new Date(item.createdAt).toLocaleString('ru-RU', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}</time></div><p>{item.text}</p></article>)}</div>}
                       {commentQuery && !visibleComments.length && <p className="muted">Комментарии не найдены</p>}
-                      <div className="task-comments__form"><textarea value={comment} onChange={(event) => setComment(event.target.value)} placeholder="Написать комментарий…" /><button type="button" onClick={addComment} disabled={!comment.trim() || saving} aria-label="Отправить комментарий">➤</button></div>
+                      <div className="task-comments__form"><textarea aria-label="Комментарий к задаче" value={comment} onChange={(event) => setComment(event.target.value)} placeholder="Написать комментарий…" /><button type="button" onClick={addComment} disabled={!comment.trim() || saving} aria-label="Отправить комментарий">➤</button></div>
                     </section>
                     <section className="task-history">
                       <span className="eyebrow">История задачи</span>
