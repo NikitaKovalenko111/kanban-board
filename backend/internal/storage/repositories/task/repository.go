@@ -506,6 +506,20 @@ func (r *Repository) ListAssigned(ctx context.Context, userID, requestedUserID s
 	`, requestedUserID)
 }
 
+func (r *Repository) ListUserTasks(ctx context.Context, userID string) ([]models.Task, error) {
+	if _, err := r.GetUserActive(ctx, userID); err != nil {
+		return nil, err
+	}
+	return r.queryTasks(ctx, `
+		EXISTS(
+			SELECT 1
+			FROM task_assignees ta
+			WHERE ta.task_id = t.task_id
+				AND ta.user_id = $1
+		)
+	`, userID)
+}
+
 func (r *Repository) GetUserActive(ctx context.Context, userID string) (bool, error) {
 	var active bool
 	err := r.db.QueryRowContext(ctx, `SELECT is_active FROM users WHERE user_id = $1`, userID).Scan(&active)

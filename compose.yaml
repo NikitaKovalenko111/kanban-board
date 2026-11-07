@@ -69,6 +69,12 @@ services:
             minio_secret_key: ${MINIO_ROOT_PASSWORD:?Set MINIO_ROOT_PASSWORD in .env}
             minio_bucket: ${MINIO_BUCKET:-kanban-attachments}
             minio_use_ssl: "false"
+            schedule_sync_enabled: ${SCHEDULE_SYNC_ENABLED:-false}
+            schedule_sync_source_url: ${SCHEDULE_SYNC_SOURCE_URL:-https://dev.uust-time.ru/api/v/852972}
+            schedule_sync_semester_id: ${SCHEDULE_SYNC_SEMESTER_ID:-241}
+            schedule_sync_semester_start: ${SCHEDULE_SYNC_SEMESTER_START:-2026-09-01}
+            schedule_sync_interval: ${SCHEDULE_SYNC_INTERVAL:-6h}
+            schedule_sync_http_timeout: ${SCHEDULE_SYNC_HTTP_TIMEOUT:-20s}
         # Override the old image healthcheck for the current API prefix.
         healthcheck:
             test:

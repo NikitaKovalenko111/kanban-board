@@ -26,6 +26,8 @@ func (s *Storage) Migrate() error {
 		{version: 2, name: "mobile api schema", run: func(storage *Storage) error { return storage.ApplySchemaMigration() }},
 		{version: 3, name: "create indexes", run: func(storage *Storage) error { return storage.CreateIndexes() }},
 		{version: 4, name: "notification events", run: createNotificationEvents},
+		{version: 5, name: "notification targets", run: migrateNotificationTargets},
+		{version: 6, name: "fixed board columns", run: migrateFixedBoardColumns},
 	}
 	for _, item := range migrations {
 		var applied bool
@@ -43,6 +45,151 @@ func (s *Storage) Migrate() error {
 		}
 	}
 	return nil
+}
+
+func migrateNotificationTargets(storage *Storage) error {
+	_, err := storage.Db.Exec(`
+		ALTER TABLE notifications
+			ADD COLUMN IF NOT EXISTS lesson_id UUID REFERENCES lessons (lesson_id) ON DELETE CASCADE;
+		ALTER TABLE notifications
+			ADD COLUMN IF NOT EXISTS lesson_key VARCHAR;
+		ALTER TABLE notifications DROP CONSTRAINT IF EXISTS notifications_kind_check;
+
+		UPDATE notifications n
+		SET lesson_id = l.lesson_id,
+			kind = 'LESSON'
+		FROM lessons l
+		WHERE n.lesson_id IS NULL
+			AND n.lesson_key = 'lesson:' || COALESCE(l.external_id, l.lesson_id::text);
+
+		DELETE FROM notifications
+		WHERE num_nonnulls(task_id, event_id, lesson_id) <> 1;
+
+		ALTER TABLE notifications
+			ADD CONSTRAINT notifications_kind_check
+			CHECK (kind IN ('COMMENT', 'RETURNED', 'STATUS', 'EVENT', 'LESSON'));
+
+		ALTER TABLE notifications DROP CONSTRAINT IF EXISTS notifications_target_check;
+		ALTER TABLE notifications
+			ADD CONSTRAINT notifications_target_check
+			CHECK (num_nonnulls(task_id, event_id, lesson_id) = 1);
+
+		DROP INDEX IF EXISTS notifications_user_lesson_uidx;
+		CREATE UNIQUE INDEX notifications_user_lesson_uidx
+			ON notifications (user_id, lesson_id, reminder_key)
+			WHERE lesson_id IS NOT NULL AND kind = 'LESSON' AND reminder_key IS NOT NULL;
+
+		ALTER TABLE notifications DROP COLUMN IF EXISTS lesson_key;
+	`)
+	return err
+}
+
+func migrateFixedBoardColumns(storage *Storage) error {
+	_, err := storage.Db.Exec(`
+		UPDATE board_columns
+		SET
+			code = 'MIGRATION_' || REPLACE(column_id::text, '-', ''),
+			position = position + 10000;
+
+		INSERT INTO board_columns (column_id, board_id, code, name, kind, color, position)
+		SELECT
+			gen_random_uuid(),
+			b.board_id,
+			definition.kind,
+			definition.name,
+			definition.kind,
+			definition.color,
+			definition.position
+		FROM boards b
+		CROSS JOIN (
+			VALUES
+				('BACKLOG', 'Ожидает', '#8A94A6', 0),
+				('IN_PROGRESS', 'В работе', '#6576DF', 1),
+				('REVIEW', 'На проверке', '#DA8A37', 2),
+				('DONE', 'Выполнено', '#58A779', 3)
+		) AS definition(kind, name, color, position)
+		WHERE NOT EXISTS (
+			SELECT 1
+			FROM board_columns bc
+			WHERE bc.board_id = b.board_id
+				AND bc.kind = definition.kind
+		);
+
+		WITH ranked AS (
+			SELECT
+				column_id,
+				board_id,
+				CASE
+					WHEN kind IN ('BACKLOG', 'REVIEW', 'DONE') THEN kind
+					ELSE 'IN_PROGRESS'
+				END AS normalized_kind,
+				ROW_NUMBER() OVER (
+					PARTITION BY board_id, CASE
+						WHEN kind IN ('BACKLOG', 'REVIEW', 'DONE') THEN kind
+						ELSE 'IN_PROGRESS'
+					END
+					ORDER BY position, column_id
+				) AS row_number
+			FROM board_columns
+		), moves AS (
+			SELECT extra.column_id AS source_id, target.column_id AS target_id
+			FROM ranked extra
+			JOIN ranked target
+				ON target.board_id = extra.board_id
+				AND target.normalized_kind = extra.normalized_kind
+				AND target.row_number = 1
+			WHERE extra.row_number > 1
+		)
+		UPDATE tasks t
+		SET column_id = moves.target_id
+		FROM moves
+		WHERE t.column_id = moves.source_id;
+
+		WITH ranked AS (
+			SELECT
+				column_id,
+				ROW_NUMBER() OVER (
+					PARTITION BY board_id, CASE
+						WHEN kind IN ('BACKLOG', 'REVIEW', 'DONE') THEN kind
+						ELSE 'IN_PROGRESS'
+					END
+					ORDER BY position, column_id
+				) AS row_number
+			FROM board_columns
+		)
+		DELETE FROM board_columns bc
+		USING ranked
+		WHERE bc.column_id = ranked.column_id
+			AND ranked.row_number > 1;
+
+		UPDATE board_columns
+		SET
+			code = kind,
+			name = CASE kind
+				WHEN 'BACKLOG' THEN 'Ожидает'
+				WHEN 'IN_PROGRESS' THEN 'В работе'
+				WHEN 'REVIEW' THEN 'На проверке'
+				WHEN 'DONE' THEN 'Выполнено'
+			END,
+			color = CASE kind
+				WHEN 'BACKLOG' THEN '#8A94A6'
+				WHEN 'IN_PROGRESS' THEN '#6576DF'
+				WHEN 'REVIEW' THEN '#DA8A37'
+				WHEN 'DONE' THEN '#58A779'
+			END,
+			position = CASE kind
+				WHEN 'BACKLOG' THEN 0
+				WHEN 'IN_PROGRESS' THEN 1
+				WHEN 'REVIEW' THEN 2
+				WHEN 'DONE' THEN 3
+			END;
+
+		ALTER TABLE board_columns DROP CONSTRAINT IF EXISTS board_columns_kind_check;
+		ALTER TABLE board_columns
+			ADD CONSTRAINT board_columns_kind_check
+			CHECK (kind IN ('BACKLOG', 'IN_PROGRESS', 'REVIEW', 'DONE'));
+	`)
+	return err
 }
 
 func createNotificationEvents(storage *Storage) error {

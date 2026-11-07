@@ -4,7 +4,6 @@ import (
 	"context"
 	"database/sql"
 	"errors"
-	"strings"
 	"time"
 
 	"kanban-board/internal/models"
@@ -111,24 +110,35 @@ func (r *Repository) DeleteEventType(ctx context.Context, userID, eventTypeID st
 	return repositorycommon.RequireAffected(result)
 }
 
-func (r *Repository) ListEvents(ctx context.Context, userID, personID string, groups []string, from, to time.Time) ([]models.Event, error) {
-	groupList := strings.Join(groups, ",")
+func (r *Repository) ListEvents(ctx context.Context, userID, personID string, _ []string, from, to time.Time) ([]models.Event, error) {
 	rows, err := r.db.QueryContext(ctx, `
+		WITH requested_person AS (
+			SELECT user_id, student_group_id
+			FROM users
+			WHERE user_id = $1 AND is_active = TRUE
+		)
 		SELECT
 			e.event_id, e.owner_user_id, e.title, COALESCE(e.description, ''),
 			COALESCE(e.location, ''), e.starts_at, e.ends_at, e.visibility,
 			sg.group_code, e.event_type_id, owner.schedule_privacy
 		FROM events e
 		JOIN users owner ON owner.user_id = e.owner_user_id
+		CROSS JOIN requested_person person
 		LEFT JOIN student_groups sg ON sg.student_group_id = e.student_group_id
-		WHERE e.starts_at >= $4 AND e.starts_at < $5
+		WHERE e.starts_at >= $2 AND e.starts_at < $3
 			AND (
 				e.visibility = 'TEAM'
-				OR (e.visibility = 'GROUP' AND sg.group_code = ANY(string_to_array($3, ',')))
-				OR (e.visibility = 'PERSONAL' AND e.owner_user_id = $2)
+				OR (
+					e.visibility = 'GROUP'
+					AND e.student_group_id = person.student_group_id
+				)
+				OR (
+					e.visibility = 'PERSONAL'
+					AND e.owner_user_id = person.user_id
+				)
 			)
 		ORDER BY e.starts_at
-	`, userID, personID, groupList, from, to)
+	`, personID, from, to)
 	if err != nil {
 		return nil, err
 	}
@@ -172,21 +182,14 @@ func (r *Repository) GetEvent(ctx context.Context, userID, eventID string) (*mod
 		JOIN users owner ON owner.user_id = e.owner_user_id
 		LEFT JOIN student_groups sg ON sg.student_group_id = e.student_group_id
 		WHERE e.event_id = $2
+			AND EXISTS(
+				SELECT 1
+				FROM users viewer
+				WHERE viewer.user_id = $1 AND viewer.is_active = TRUE
+			)
 			AND (
-				e.visibility = 'TEAM'
+				e.visibility IN ('TEAM', 'GROUP')
 				OR e.owner_user_id = $1
-				OR (
-					e.visibility = 'GROUP'
-					AND (
-						e.student_group_id = (
-							SELECT student_group_id FROM users WHERE user_id = $1
-						)
-						OR EXISTS(
-							SELECT 1 FROM users
-							WHERE user_id = $1 AND system_role = 'CAPTAIN' AND is_active = TRUE
-						)
-					)
-				)
 				OR (e.visibility = 'PERSONAL' AND owner.schedule_privacy <> 'NOTHING')
 			)
 	`, userID, eventID).Scan(

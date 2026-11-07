@@ -60,11 +60,12 @@ type Profile struct {
 }
 
 type Project struct {
-	ID          string          `json:"id"`
-	Name        string          `json:"name"`
-	Description string          `json:"description"`
-	Members     []ProjectMember `json:"members"`
-	Sources     []ProjectSource `json:"sources"`
+	ID           string          `json:"id"`
+	Name         string          `json:"name"`
+	Description  string          `json:"description,omitempty"`
+	CanViewBoard bool            `json:"canViewBoard"`
+	Members      []ProjectMember `json:"members,omitempty"`
+	Sources      []ProjectSource `json:"sources,omitempty"`
 }
 
 type ProjectMember struct {
@@ -197,12 +198,13 @@ type Event struct {
 }
 
 type Notification struct {
-	ID      string    `json:"id"`
-	Kind    string    `json:"kind"`
-	Title   string    `json:"title"`
-	Text    string    `json:"text"`
-	At      time.Time `json:"at"`
-	Read    bool      `json:"read"`
-	TaskID  *string   `json:"taskId"`
-	EventID *string   `json:"eventId"`
+	ID       string    `json:"id"`
+	Kind     string    `json:"kind"`
+	Title    string    `json:"title"`
+	Text     string    `json:"text"`
+	At       time.Time `json:"at"`
+	Read     bool      `json:"read"`
+	TaskID   *string   `json:"taskId,omitempty"`
+	EventID  *string   `json:"eventId,omitempty"`
+	LessonID *string   `json:"lessonId,omitempty"`
 }
