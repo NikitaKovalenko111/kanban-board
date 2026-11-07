@@ -30,6 +30,7 @@ func (s *Storage) Migrate() error {
 		{version: 6, name: "fixed board columns", run: migrateFixedBoardColumns},
 		{version: 7, name: "frontend integration contracts", run: migrateFrontendIntegrationContracts},
 		{version: 8, name: "stable lesson reminder keys", run: migrateStableLessonReminderKeys},
+		{version: 9, name: "task link attachments", run: migrateTaskLinkAttachments},
 	}
 	for _, item := range migrations {
 		var applied bool
@@ -47,6 +48,37 @@ func (s *Storage) Migrate() error {
 		}
 	}
 	return nil
+}
+
+func migrateTaskLinkAttachments(storage *Storage) error {
+	_, err := storage.Db.Exec(`
+		ALTER TABLE attachments
+			ADD COLUMN IF NOT EXISTS content_kind VARCHAR NOT NULL DEFAULT 'FILE',
+			ADD COLUMN IF NOT EXISTS title VARCHAR,
+			ADD COLUMN IF NOT EXISTS link_url VARCHAR;
+
+		UPDATE attachments SET title = file_name WHERE title IS NULL;
+
+		ALTER TABLE attachments
+			ALTER COLUMN title SET NOT NULL,
+			ALTER COLUMN file_name DROP NOT NULL,
+			ALTER COLUMN storage_key DROP NOT NULL,
+			ALTER COLUMN mime_type DROP NOT NULL,
+			ALTER COLUMN file_size DROP NOT NULL;
+
+		ALTER TABLE attachments DROP CONSTRAINT IF EXISTS attachments_content_kind_check;
+		ALTER TABLE attachments
+			ADD CONSTRAINT attachments_content_kind_check
+			CHECK (content_kind IN ('FILE', 'LINK'));
+
+		ALTER TABLE attachments DROP CONSTRAINT IF EXISTS attachments_content_check;
+		ALTER TABLE attachments
+			ADD CONSTRAINT attachments_content_check CHECK (
+				(content_kind = 'FILE' AND file_name IS NOT NULL AND storage_key IS NOT NULL AND mime_type IS NOT NULL AND file_size IS NOT NULL AND link_url IS NULL) OR
+				(content_kind = 'LINK' AND link_url IS NOT NULL AND file_name IS NULL AND storage_key IS NULL AND mime_type IS NULL AND file_size IS NULL)
+			);
+	`)
+	return err
 }
 
 func migrateStableLessonReminderKeys(storage *Storage) error {

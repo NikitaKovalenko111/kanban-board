@@ -587,6 +587,28 @@ paths:
           content: {application/json: {schema: {$ref: '#/components/schemas/Attachment'}}}
         '403': {$ref: '#/components/responses/Forbidden'}
         '413': {$ref: '#/components/responses/FileTooLarge'}
+  /api/v1/tasks/{taskId}/attachments/links:
+    post:
+      tags: [Attachments]
+      summary: Добавить ссылку к задаче
+      parameters: [{$ref: '#/components/parameters/TaskId'}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [kind, title, url]
+              properties:
+                kind: {type: string, enum: [SOURCE, RESULT]}
+                title: {type: string, minLength: 1, maxLength: 200}
+                url: {type: string, format: uri, maxLength: 2000}
+      responses:
+        '201':
+          description: Ссылочное вложение
+          content: {application/json: {schema: {$ref: '#/components/schemas/Attachment'}}}
+        '400': {$ref: '#/components/responses/Validation'}
+        '403': {$ref: '#/components/responses/Forbidden'}
   /api/v1/tasks/{taskId}/attachments/{attachmentId}:
     delete:
       tags: [Attachments]
@@ -1199,10 +1221,20 @@ components:
         createdAt: {type: string, format: date-time}
     Attachment:
       type: object
-      required: [id, kind, uploadedBy, uploadedAt, file]
+      required: [id, kind, contentKind, title, uploadedBy, uploadedAt]
+      oneOf:
+        - required: [file]
+          properties:
+            contentKind: {type: string, enum: [FILE]}
+        - required: [url]
+          properties:
+            contentKind: {type: string, enum: [LINK]}
       properties:
         id: {type: string, format: uuid}
         kind: {type: string, enum: [SOURCE, RESULT]}
+        contentKind: {type: string, enum: [FILE, LINK]}
+        title: {type: string}
+        url: {type: string, format: uri}
         uploadedBy: {type: string, format: uuid}
         uploadedAt: {type: string, format: date-time}
         file: {$ref: '#/components/schemas/FileInfo'}

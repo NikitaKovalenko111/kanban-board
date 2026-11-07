@@ -146,10 +146,60 @@ Authorization: Bearer <accessToken>
 | PATCH | `/comments/{commentId}` | изменить свой комментарий |
 | DELETE | `/comments/{commentId}` | удалить свой комментарий |
 | POST | `/tasks/{taskId}/attachments` | multipart `file`, `kind=SOURCE|RESULT` |
+| POST | `/tasks/{taskId}/attachments/links` | добавить ссылку `{ "kind", "title", "url" }` |
 | DELETE | `/tasks/{taskId}/attachments/{attachmentId}` | удалить вложение до состояния `DONE` |
 | GET | `/files/{fileId}` | скачать вложение или файл-источник |
 
 При `PATCH` значения `assigneeId: null` и `dueAt: null` очищают исполнителя и дедлайн. При возврате из `REVIEW`/`DONE` обязателен непустой комментарий. Сервер записывает каждое перемещение в историю и проверяет матрицу прав мобильного приложения.
+
+Файловое вложение возвращает `contentKind: "FILE"` и объект `file`. Ссылочное вложение возвращает `contentKind: "LINK"`, `title` и `url`. Правила доступа одинаковые: `SOURCE` добавляет капитан, `RESULT` — назначенный исполнитель в работе или на проверке.
+
+Пример добавления ссылки:
+
+```http
+POST /api/v1/tasks/550e8400-e29b-41d4-a716-446655440000/attachments/links
+Content-Type: application/json
+
+{
+  "kind": "SOURCE",
+  "title": "Макет в Figma",
+  "url": "https://www.figma.com/design/example"
+}
+```
+
+Ответ `201 Created`:
+
+```json
+{
+  "id": "5f0e8400-e29b-41d4-a716-446655440001",
+  "kind": "SOURCE",
+  "contentKind": "LINK",
+  "title": "Макет в Figma",
+  "url": "https://www.figma.com/design/example",
+  "uploadedBy": "650e8400-e29b-41d4-a716-446655440002",
+  "uploadedAt": "2026-11-08T12:00:00Z"
+}
+```
+
+У файлового вложения вместо `url` приходит `file`:
+
+```json
+{
+  "id": "7f0e8400-e29b-41d4-a716-446655440003",
+  "kind": "RESULT",
+  "contentKind": "FILE",
+  "title": "report.pdf",
+  "uploadedBy": "650e8400-e29b-41d4-a716-446655440002",
+  "uploadedAt": "2026-11-08T12:10:00Z",
+  "file": {
+    "id": "7f0e8400-e29b-41d4-a716-446655440003",
+    "name": "report.pdf",
+    "sizeBytes": 102400,
+    "mimeType": "application/pdf",
+    "downloadUrl": "/api/v1/files/7f0e8400-e29b-41d4-a716-446655440003"
+  }
+}
+```
 
 ## Расписание и события
 

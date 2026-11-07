@@ -148,13 +148,16 @@ type Comment struct {
 }
 
 type Attachment struct {
-	ID         string    `json:"id"`
-	Kind       string    `json:"kind"`
-	UploadedBy string    `json:"uploadedBy"`
-	UploadedAt time.Time `json:"uploadedAt"`
-	File       FileInfo  `json:"file"`
-	TaskID     string    `json:"-"`
-	StorageKey string    `json:"-"`
+	ID          string    `json:"id"`
+	Kind        string    `json:"kind"`
+	ContentKind string    `json:"contentKind"`
+	Title       string    `json:"title"`
+	URL         *string   `json:"url,omitempty"`
+	UploadedBy  string    `json:"uploadedBy"`
+	UploadedAt  time.Time `json:"uploadedAt"`
+	File        *FileInfo `json:"file,omitempty"`
+	TaskID      string    `json:"-"`
+	StorageKey  string    `json:"-"`
 }
 
 type Lesson struct {

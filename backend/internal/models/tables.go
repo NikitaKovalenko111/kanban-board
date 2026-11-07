@@ -122,11 +122,18 @@ const (
 			task_id UUID NOT NULL REFERENCES tasks (task_id) ON DELETE CASCADE,
 			uploaded_by_user_id UUID NOT NULL REFERENCES users (user_id),
 			attachment_type VARCHAR NOT NULL CHECK (attachment_type IN ('SOURCE', 'RESULT')),
-			file_name VARCHAR NOT NULL,
-			storage_key VARCHAR NOT NULL,
-			mime_type VARCHAR NOT NULL,
-			file_size BIGINT NOT NULL CHECK (file_size >= 0),
-			created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+			content_kind VARCHAR NOT NULL DEFAULT 'FILE' CHECK (content_kind IN ('FILE', 'LINK')),
+			title VARCHAR NOT NULL,
+			link_url VARCHAR,
+			file_name VARCHAR,
+			storage_key VARCHAR,
+			mime_type VARCHAR,
+			file_size BIGINT CHECK (file_size IS NULL OR file_size >= 0),
+			created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+			CHECK (
+				(content_kind = 'FILE' AND file_name IS NOT NULL AND storage_key IS NOT NULL AND mime_type IS NOT NULL AND file_size IS NOT NULL AND link_url IS NULL) OR
+				(content_kind = 'LINK' AND link_url IS NOT NULL AND file_name IS NULL AND storage_key IS NULL AND mime_type IS NULL AND file_size IS NULL)
+			)
 		);`
 	LESSONS_TABLE = `
 		CREATE TABLE IF NOT EXISTS lessons (
