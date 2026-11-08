@@ -1,3 +1,4 @@
+import type { EntityId } from '../../types'
 import { createSlice, type PayloadAction } from '@reduxjs/toolkit'
 import type { NewTeamMember, TeamMember, TeamSettings } from '../../types'
 
@@ -13,7 +14,7 @@ const teamSlice = createSlice({
     updateTeamSuccess(state, action: PayloadAction<TeamSettings>) { state.settings = action.payload; state.saving = false },
     createMemberRequest(state, _action: PayloadAction<NewTeamMember>) { state.saving = true; state.error = null },
     createMemberSuccess(state, action: PayloadAction<TeamMember>) { state.members.push(action.payload); state.saving = false },
-    toggleMemberRequest(state, _action: PayloadAction<{ id: number; active: boolean }>) { state.saving = true; state.error = null },
+    toggleMemberRequest(state, _action: PayloadAction<{ id: EntityId; active: boolean }>) { state.saving = true; state.error = null },
     updateMemberSuccess(state, action: PayloadAction<TeamMember>) { const index = state.members.findIndex((member) => member.id === action.payload.id); if (index >= 0) state.members[index] = action.payload; state.saving = false },
     teamFailure(state, action: PayloadAction<string>) { state.loading = false; state.saving = false; state.error = action.payload },
   },

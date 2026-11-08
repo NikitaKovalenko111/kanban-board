@@ -11,7 +11,7 @@ export const loadEventTypes = (): EventTypeOption[] => {
   const saved = localStorage.getItem('event-types')
   if (!saved) return defaultEventTypes
   try {
-    return (JSON.parse(saved) as EventTypeOption[]).map((item) => ({ ...item, reminderMinutes: (item.reminderMinutes ?? defaultEventTypes.find((type) => type.id === item.id)?.reminderMinutes ?? []) }))
+    return (JSON.parse(saved) as EventTypeOption[]).map((item) => ({ ...item, reminderMinutes: item.reminderMinutes ?? defaultEventTypes.find((type) => type.id === item.id)?.reminderMinutes ?? [] }))
   } catch { return defaultEventTypes }
 }
 

@@ -44,6 +44,7 @@ func (h *Handler) Start(mux *http.ServeMux) {
 type projectRequest struct {
 	Name        *string                 `json:"name"`
 	Description *string                 `json:"description"`
+	Color       *string                 `json:"color"`
 	Members     *[]models.ProjectMember `json:"members"`
 }
 
@@ -95,11 +96,15 @@ func (h *Handler) createProject(w http.ResponseWriter, r *http.Request) {
 	if request.Description != nil {
 		description = *request.Description
 	}
+	color := "#6576DF"
+	if request.Color != nil {
+		color = *request.Color
+	}
 	members := make([]models.ProjectMember, 0)
 	if request.Members != nil {
 		members = *request.Members
 	}
-	project, err := h.service.CreateProject(r.Context(), userID, *request.Name, description, members)
+	project, err := h.service.CreateProject(r.Context(), userID, *request.Name, description, color, members)
 	if err != nil {
 		handlercommon.WriteError(w, r, err)
 		return
@@ -119,6 +124,7 @@ func (h *Handler) updateProject(w http.ResponseWriter, r *http.Request) {
 	project, err := h.service.UpdateProject(
 		r.Context(), userID, r.PathValue("projectId"),
 		request.Name, request.Description, request.Members,
+		request.Color,
 	)
 	if err != nil {
 		handlercommon.WriteError(w, r, err)

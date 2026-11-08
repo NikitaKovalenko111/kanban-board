@@ -31,7 +31,7 @@
 .event-reminders__summary { margin: 0; color: var(--color-muted); line-height: 1.5; }
 .schedule-form > .event-reminders { grid-column: 1 / -1; }
 .schedule-form--modal > label:first-of-type { grid-column: 1 / -1; }
-.schedule-reminder-button { align-self: flex-start; padding: 6px 8px; border: 1px solid var(--color-border); border-radius: 8px; color: var(--color-text); background: var(--color-surface-muted); cursor: pointer; }
+.schedule-reminder-button { align-self: flex-start; margin-top: 12px; padding: 6px 8px; border: 1px solid var(--color-border); border-radius: 8px; color: var(--color-text); background: var(--color-surface-muted); cursor: pointer; }
 .schedule-reminder-button:hover { background: var(--color-surface-accent); }
 .schedule-slider.is-mobile {
   --day-gap: 16px;

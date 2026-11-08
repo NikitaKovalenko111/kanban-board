@@ -1,3 +1,5 @@
+import { isBackendMode } from '../../api/config'
+import { realApi } from '../../api/realApi'
 import Icon from '../../components/Icon/Icon'
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type JSX, type TouchEvent } from 'react'
 import type React from 'react'
@@ -6,6 +8,7 @@ import AddTaskModal from '../../components/AddTaskModal/AddTaskModal'
 import BoardElement from '../../components/BoardElement/BoardElement'
 import { useAppDispatch, useAppSelector } from '../../store/hooks'
 import { loadTasksRequest } from '../../store/slices/tasksSlice'
+import { setProjectForTab } from '../../store/slices/projectsSlice'
 import { useProjectSelection } from '../../store/useProjectSelection'
 import type { Task, TaskStatus } from '../../types'
 
@@ -18,6 +21,8 @@ const BoardPage: React.FC<PropsType> = (): JSX.Element => {
     const { items, loading, error } = useAppSelector((state) => state.tasks)
     const user = useAppSelector((state) => state.auth.user)!
     const activeProjectId = useProjectSelection('board')
+    const project = useAppSelector((state) => state.projects.items.find(project => project.id === activeProjectId))
+    const denied = isBackendMode && project?.canViewBoard === false
     const [drawerOpen, setDrawerOpen] = useState(false)
     const [selectedTask, setSelectedTask] = useState<Task | null>(null)
     const query = searchParams.get('q') ?? ''
@@ -26,8 +31,19 @@ const BoardPage: React.FC<PropsType> = (): JSX.Element => {
     const swiped = useRef(false)
 
     useEffect(() => { if (!items.length) dispatch(loadTasksRequest()) }, [dispatch, items.length])
-    const notificationTaskId = Number(searchParams.get('task'))
-    const notificationTask = items.find((task) => task.taskId === notificationTaskId)
+    const notificationTaskId = searchParams.get('task')
+    const [linkedTask, setLinkedTask] = useState<Task | null>(null)
+    const [linkedError, setLinkedError] = useState('')
+    useEffect(() => {
+      setLinkedTask(null); setLinkedError('')
+      if (!notificationTaskId || !isBackendMode) return
+      let active = true
+      void realApi.getTask(notificationTaskId).then(task => {
+        if (active) { setLinkedTask(task); dispatch(setProjectForTab({ tab: 'board', projectId: task.projectId })) }
+      }).catch(reason => { if (active) setLinkedError(reason.message) })
+      return () => { active = false }
+    }, [notificationTaskId, dispatch])
+    const notificationTask = isBackendMode ? linkedTask : items.find((task) => String(task.taskId) === notificationTaskId)
     const allProjectsSelected = activeProjectId === 'all'
     const filtered = useMemo(() => items.filter((task) => (allProjectsSelected || task.projectId === activeProjectId) && `${task.taskName} ${task.taskDesc}`.toLowerCase().includes(query.toLowerCase())), [activeProjectId, allProjectsSelected, items, query])
     const latestDoneIds = useMemo(() => new Set([...items].filter((task) => (allProjectsSelected || task.projectId === activeProjectId) && task.taskStatus === 'done').sort((a, b) => (b.completedAt ?? '').localeCompare(a.completedAt ?? '')).slice(0, 5).map((task) => task.taskId)), [activeProjectId, allProjectsSelected, items])
@@ -60,13 +76,15 @@ const BoardPage: React.FC<PropsType> = (): JSX.Element => {
             <div className="container board-page__container">
                 <div className="board-page__heading">
                   <h1>Kanban-доска</h1>
-                  {user.role === 'lead' && !allProjectsSelected && <button className="button" onClick={openCreate}><Icon name="plus" /> Новая задача</button>}
+                  {user.role === 'lead' && !allProjectsSelected && !denied && <button className="button" onClick={openCreate}><Icon name="plus" /> Новая задача</button>}
                 </div>
+                {denied && <p className="error-banner">Нет доступа к этому проекту. Обратитесь к тимлиду.</p>}
+                {linkedError && <p className="error-banner" role="alert">{linkedError}</p>}
                 {error && <div className="error-banner">{error}</div>}
                 <div className="board-slider" onTouchStart={handleTouchStart} onTouchEnd={handleTouchEnd} onTouchCancel={() => { touchStart.current = null }} onClickCapture={(event) => { if (swiped.current) { event.preventDefault(); event.stopPropagation(); swiped.current = false } }}>
                   <div className="board-page__tables">
                     <div className="board-page__track" style={{ '--slide-index': activeColumn } as CSSProperties}>
-                    {loading ? <div className="loader">Загружаем доску…</div> : columns.map((column) => {
+                    {loading ? <div className="loader">Загружаем доску…</div> : denied ? null : columns.map((column) => {
                       const columnTasks = filtered.filter((task) => task.taskStatus === column.status)
                       const visibleTasks = column.status === 'done' ? columnTasks.filter((task) => latestDoneIds.has(task.taskId)).sort((a, b) => (b.completedAt ?? '').localeCompare(a.completedAt ?? '')) : columnTasks
                       return <BoardElement key={column.status} name={column.name} accent={column.accent} tasks={visibleTasks} onTaskClick={openTask} showProject={allProjectsSelected} onHistory={column.status === 'done' ? () => navigate('/history') : undefined} />

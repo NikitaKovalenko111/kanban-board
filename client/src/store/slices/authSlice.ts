@@ -1,20 +1,22 @@
 import { createSlice, type PayloadAction } from '@reduxjs/toolkit'
 import type { LoginCredentials, User } from '../../types'
+import { isBackendMode } from '../../api/config'
 
 interface AuthState { user: User | null; loading: boolean; error: string | null }
-const savedUser = localStorage.getItem('mock-session')
-const restoredUser = savedUser ? JSON.parse(savedUser) as User : null
+let restoredUser: User | null = null
+try { if (!isBackendMode) restoredUser = JSON.parse(localStorage.getItem('mock-session') ?? 'null') as User | null } catch { localStorage.removeItem('mock-session') }
 const initialState: AuthState = { user: restoredUser ? { ...restoredUser, projectRoles: restoredUser.projectRoles ?? {} } : null, loading: false, error: null }
 
 const authSlice = createSlice({
   name: 'auth', initialState,
   reducers: {
     loginRequest(state, _action: PayloadAction<LoginCredentials>) { state.loading = true; state.error = null },
+    loginFinished(state) { state.loading = false; state.error = null },
     loginSuccess(state, action: PayloadAction<User>) {
-      const savedAvatar = localStorage.getItem(`mock-avatar-${action.payload.login}`)
+      const savedAvatar = isBackendMode ? null : localStorage.getItem(`mock-avatar-${action.payload.login}`)
       state.user = { ...action.payload, projectRoles: action.payload.projectRoles ?? {}, avatarUrl: savedAvatar ?? action.payload.avatarUrl }
       state.loading = false
-      localStorage.setItem('mock-session', JSON.stringify(state.user))
+      if (!isBackendMode) localStorage.setItem('mock-session', JSON.stringify(state.user))
     },
     loginFailure(state, action: PayloadAction<string>) { state.loading = false; state.error = action.payload },
     clearLoginError(state) { state.error = null },
@@ -29,5 +31,5 @@ const authSlice = createSlice({
   },
 })
 
-export const { loginRequest, loginSuccess, loginFailure, clearLoginError, updateAvatar, logout } = authSlice.actions
+export const { loginRequest, loginSuccess, loginFailure, loginFinished, clearLoginError, updateAvatar, logout } = authSlice.actions
 export default authSlice.reducer

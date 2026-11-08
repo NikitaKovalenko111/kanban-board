@@ -3,6 +3,7 @@ package project_service
 import (
 	"context"
 	"net/url"
+	"regexp"
 	"strings"
 	"unicode/utf8"
 
@@ -10,6 +11,8 @@ import (
 	servicecommon "kanban-board/internal/services/common"
 	project_repo "kanban-board/internal/storage/repositories/project"
 )
+
+var projectColorPattern = regexp.MustCompile(`^#[0-9A-Fa-f]{6}$`)
 
 type Project = models.Project
 type ProjectMember = models.ProjectMember
@@ -36,7 +39,7 @@ func (s *Service) GetProject(ctx context.Context, userID, projectID string) (*Pr
 	return s.repo.GetProject(ctx, userID, projectID)
 }
 
-func (s *Service) CreateProject(ctx context.Context, userID, name, description string, members []ProjectMember) (*Project, error) {
+func (s *Service) CreateProject(ctx context.Context, userID, name, description, color string, members []ProjectMember) (*Project, error) {
 	if err := servicecommon.ValidateUUID(userID); err != nil {
 		return nil, err
 	}
@@ -46,14 +49,17 @@ func (s *Service) CreateProject(ctx context.Context, userID, name, description s
 	if err := validateMembers(members); err != nil {
 		return nil, err
 	}
-	projectID, err := s.repo.CreateProject(ctx, userID, strings.TrimSpace(name), description, members)
+	if !projectColorPattern.MatchString(color) {
+		return nil, servicecommon.InvalidInput("color must use #RRGGBB format")
+	}
+	projectID, err := s.repo.CreateProject(ctx, userID, strings.TrimSpace(name), description, color, members)
 	if err != nil {
 		return nil, servicecommon.DatabaseError(err)
 	}
 	return s.repo.GetProject(ctx, userID, projectID)
 }
 
-func (s *Service) UpdateProject(ctx context.Context, userID, projectID string, name, description *string, members *[]ProjectMember) (*Project, error) {
+func (s *Service) UpdateProject(ctx context.Context, userID, projectID string, name, description *string, members *[]ProjectMember, color *string) (*Project, error) {
 	if err := servicecommon.ValidateUUID(userID, projectID); err != nil {
 		return nil, err
 	}
@@ -67,7 +73,10 @@ func (s *Service) UpdateProject(ctx context.Context, userID, projectID string, n
 			return nil, err
 		}
 	}
-	if err := s.repo.UpdateProject(ctx, userID, projectID, name, description, members); err != nil {
+	if color != nil && !projectColorPattern.MatchString(*color) {
+		return nil, servicecommon.InvalidInput("color must use #RRGGBB format")
+	}
+	if err := s.repo.UpdateProject(ctx, userID, projectID, name, description, members, color); err != nil {
 		return nil, servicecommon.DatabaseError(err)
 	}
 	return s.repo.GetProject(ctx, userID, projectID)

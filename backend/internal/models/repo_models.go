@@ -60,11 +60,13 @@ type Profile struct {
 }
 
 type Project struct {
-	ID          string          `json:"id"`
-	Name        string          `json:"name"`
-	Description string          `json:"description"`
-	Members     []ProjectMember `json:"members"`
-	Sources     []ProjectSource `json:"sources"`
+	ID           string          `json:"id"`
+	Name         string          `json:"name"`
+	Color        string          `json:"color"`
+	Description  string          `json:"description,omitempty"`
+	CanViewBoard bool            `json:"canViewBoard"`
+	Members      []ProjectMember `json:"members,omitempty"`
+	Sources      []ProjectSource `json:"sources,omitempty"`
 }
 
 type ProjectMember struct {
@@ -146,25 +148,29 @@ type Comment struct {
 }
 
 type Attachment struct {
-	ID         string    `json:"id"`
-	Kind       string    `json:"kind"`
-	UploadedBy string    `json:"uploadedBy"`
-	UploadedAt time.Time `json:"uploadedAt"`
-	File       FileInfo  `json:"file"`
-	TaskID     string    `json:"-"`
-	StorageKey string    `json:"-"`
+	ID          string    `json:"id"`
+	Kind        string    `json:"kind"`
+	ContentKind string    `json:"contentKind"`
+	Title       string    `json:"title"`
+	URL         *string   `json:"url,omitempty"`
+	UploadedBy  string    `json:"uploadedBy"`
+	UploadedAt  time.Time `json:"uploadedAt"`
+	File        *FileInfo `json:"file,omitempty"`
+	TaskID      string    `json:"-"`
+	StorageKey  string    `json:"-"`
 }
 
 type Lesson struct {
-	ID      string `json:"id"`
-	Group   string `json:"group"`
-	Date    string `json:"date"`
-	Start   string `json:"start"`
-	End     string `json:"end"`
-	Title   string `json:"title"`
-	Room    string `json:"room"`
-	Teacher string `json:"teacher"`
-	Kind    string `json:"kind"`
+	ID         string  `json:"id"`
+	ExternalID *string `json:"externalId,omitempty"`
+	Group      string  `json:"group"`
+	Date       string  `json:"date"`
+	Start      string  `json:"start"`
+	End        string  `json:"end"`
+	Title      string  `json:"title"`
+	Room       string  `json:"room"`
+	Teacher    string  `json:"teacher"`
+	Kind       string  `json:"kind"`
 }
 
 type Schedule struct {
@@ -184,6 +190,7 @@ type EventType struct {
 type Event struct {
 	ID          string     `json:"id"`
 	OwnerID     string     `json:"ownerId"`
+	ProjectID   *string    `json:"projectId,omitempty"`
 	Title       string     `json:"title"`
 	Description string     `json:"description,omitempty"`
 	Location    string     `json:"location,omitempty"`
@@ -197,12 +204,13 @@ type Event struct {
 }
 
 type Notification struct {
-	ID      string    `json:"id"`
-	Kind    string    `json:"kind"`
-	Title   string    `json:"title"`
-	Text    string    `json:"text"`
-	At      time.Time `json:"at"`
-	Read    bool      `json:"read"`
-	TaskID  *string   `json:"taskId"`
-	EventID *string   `json:"eventId"`
+	ID       string    `json:"id"`
+	Kind     string    `json:"kind"`
+	Title    string    `json:"title"`
+	Text     string    `json:"text"`
+	At       time.Time `json:"at"`
+	Read     bool      `json:"read"`
+	TaskID   *string   `json:"taskId,omitempty"`
+	EventID  *string   `json:"eventId,omitempty"`
+	LessonID *string   `json:"lessonId,omitempty"`
 }

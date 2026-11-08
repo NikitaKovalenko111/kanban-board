@@ -12,7 +12,11 @@ import SchedulePage from './pages/SchedulePage/SchedulePage'
 import ProjectsPage from './pages/ProjectsPage/ProjectsPage'
 import SettingsPage from './pages/SettingsPage/SettingsPage'
 import ProjectManagementPage from './pages/ProjectsPage/ProjectManagementPage'
-import { useAppSelector } from './store/hooks'
+import { useAppDispatch, useAppSelector } from './store/hooks'
+import { isBackendMode } from './api/config'
+import { backendSessionExpiredEvent } from './api/backendApi'
+import { backendSessionCleared, restoreBackendSessionRequest } from './store/slices/backendAuthSlice'
+import { loginFailure, logout } from './store/slices/authSlice'
 
 import './styles/style.scss'
 
@@ -20,9 +24,23 @@ function MemberRedirect() { const { userId } = useParams(); return <Navigate to=
 
 function App() {
   const user = useAppSelector((state) => state.auth.user)
+  const { identity, restoring } = useAppSelector((state) => state.backendAuth)
+  const dispatch = useAppDispatch()
+  useEffect(() => {
+    if (!isBackendMode) return
+    const expired = () => { dispatch(logout()); dispatch(backendSessionCleared()); dispatch(loginFailure('Сессия истекла. Войдите снова')) }
+    window.addEventListener(backendSessionExpiredEvent, expired)
+    dispatch(restoreBackendSessionRequest())
+    return () => window.removeEventListener(backendSessionExpiredEvent, expired)
+  }, [dispatch])
   useEffect(() => { document.documentElement.dataset.theme = localStorage.getItem('theme') ?? 'light' }, [])
   const [menuOpen, setMenuOpen] = useState(false)
   useEffect(() => { setMenuOpen(false) }, [user?.id])
+
+  if (isBackendMode) {
+    if (restoring) return <main className="loader" role="status">Проверяем сессию…</main>
+    if (!identity || !user) return <Routes><Route path="*" element={<LoginPage />} /></Routes>
+  }
 
   if (!user) {
     return <Routes><Route path="*" element={<LoginPage />} /></Routes>

@@ -101,6 +101,13 @@ func (s *Service) ReadAll(ctx context.Context, userID string) error {
 	return s.repo.ReadAll(ctx, userID)
 }
 
+func (s *Service) Read(ctx context.Context, userID, notificationID string) error {
+	if err := servicecommon.ValidateUUID(userID, notificationID); err != nil {
+		return err
+	}
+	return s.repo.Read(ctx, userID, notificationID)
+}
+
 func (s *Service) AddPushToken(ctx context.Context, userID, token, platform string) error {
 	if err := servicecommon.ValidateUUID(userID); err != nil {
 		return err
@@ -138,6 +145,9 @@ func (s *Service) DispatchPush(ctx context.Context) (int, error) {
 		}
 		if item.EventID != nil {
 			data["eventId"] = *item.EventID
+		}
+		if item.LessonID != nil {
+			data["lessonId"] = *item.LessonID
 		}
 		if err := s.push.Send(ctx, push.Message{Token: item.Token, Title: item.Title, Body: item.Text, Data: data}); err != nil {
 			return len(sentNotifications), fmt.Errorf("send push: %w", err)

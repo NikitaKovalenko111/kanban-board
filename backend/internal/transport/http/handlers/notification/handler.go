@@ -29,8 +29,21 @@ func (h *Handler) Start(mux *http.ServeMux) {
 	mux.HandleFunc("GET /notifications", h.list)
 	mux.HandleFunc("GET /notifications/stream", h.stream)
 	mux.HandleFunc("POST /notifications/read-all", h.readAll)
+	mux.HandleFunc("POST /notifications/{notificationId}/read", h.read)
 	mux.HandleFunc("POST /me/push-tokens", h.addPushToken)
 	mux.HandleFunc("DELETE /me/push-tokens/{token}", h.deletePushToken)
+}
+
+func (h *Handler) read(w http.ResponseWriter, r *http.Request) {
+	userID, ok := handlercommon.UserID(r)
+	if !ok {
+		return
+	}
+	if err := h.service.Read(r.Context(), userID, r.PathValue("notificationId")); err != nil {
+		handlercommon.WriteError(w, r, err)
+		return
+	}
+	pkg.WriteEmpty(w, http.StatusNoContent)
 }
 
 func (h *Handler) stream(w http.ResponseWriter, r *http.Request) {

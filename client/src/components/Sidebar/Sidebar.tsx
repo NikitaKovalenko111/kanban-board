@@ -1,3 +1,6 @@
+import { isBackendMode } from '../../api/config'
+import { backendLogoutRequest } from '../../store/slices/backendAuthSlice'
+import { useServerNotifications } from './useServerNotifications'
 import { useModal } from '../FormModal/useModal'
 import { useMediaQuery } from '../../utils/useMediaQuery'
 import Icon from '../Icon/Icon'
@@ -8,7 +11,7 @@ import { logout } from '../../store/slices/authSlice'
 import UserAvatar from '../UserAvatar/UserAvatar'
 import NotificationsModal, { type NotificationItem } from './NotificationsModal'
 import { loadTasksRequest } from '../../store/slices/tasksSlice'
-import { mockApi } from '../../api/mockApi'
+import { api } from '../../api'
 import type { ScheduleEvent } from '../../types'
 import { eventCategory } from '../../utils/schedule'
 
@@ -17,6 +20,7 @@ interface Props { open: boolean; onClose: () => void }
 const Sidebar = ({ open, onClose }: Props) => {
   const dispatch = useAppDispatch()
   const navigate = useNavigate()
+  const signingOut = useAppSelector((state) => state.backendAuth?.signingOut ?? false)
   const sidebarRef = useRef<HTMLElement>(null)
   const mobile = useMediaQuery('(max-width: 1024px)')
   useModal(sidebarRef, onClose, mobile && open)
@@ -26,28 +30,37 @@ const Sidebar = ({ open, onClose }: Props) => {
   const scheduleItems = useAppSelector((state) => state.schedule.items)
   const [events, setEvents] = useState<ScheduleEvent[]>([])
   const [notificationsOpen, setNotificationsOpen] = useState(false)
+  const serverNotifications = useServerNotifications(notificationsOpen)
   const [readIds, setReadIds] = useState<string[]>(() => {
     try { return JSON.parse(localStorage.getItem(`notification-reads-${user.id}`) ?? '[]') } catch { return [] }
   })
   useEffect(() => { dispatch(loadTasksRequest()) }, [dispatch])
   useEffect(() => {
+    if (isBackendMode) return
     let cancelled = false
-    void mockApi.getSchedule('all').then((items) => { if (!cancelled) setEvents(items) }).catch(() => {})
+    void api.getSchedule('all').then((items) => { if (!cancelled) setEvents(items) }).catch(() => {})
     return () => { cancelled = true }
   }, [user.id, scheduleItems])
-  const notifications: NotificationItem[] = [
+  const notifications: NotificationItem[] = isBackendMode ? serverNotifications.items : [
     ...tasks.filter((task) => user.role === 'lead' || task.assignee === user.name).flatMap((task) => [
       ...task.comments.filter((comment) => comment.author !== user.name).map((comment) => ({ id: comment.id, title: `Комментарий к задаче #${task.taskId}`, text: `${comment.author}: ${comment.text}`, createdAt: comment.createdAt, href: `/?task=${task.taskId}` })),
       ...task.history.filter((event) => event.author !== user.name).map((event) => ({ id: event.id, title: event.type === 'assignment' ? 'Изменён исполнитель задачи' : event.type === 'revision' ? 'Задача возвращена на доработку' : 'Изменён статус задачи', text: `${task.taskName}${event.comment ? ': ' + event.comment : ''}`, createdAt: event.createdAt, href: `/?task=${task.taskId}` })),
     ]),
     ...events.filter((event) => new Date(event.startsAt) >= new Date() && (eventCategory(event) !== 'personal' || event.ownerId === user.id)).map((event) => ({ id: `schedule-${event.id}`, title: 'Предстоящее событие', text: event.title, createdAt: event.startsAt, href: `/schedule?date=${event.startsAt.slice(0, 10)}` })),
   ].sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+  const effectiveReadIds = isBackendMode ? serverNotifications.readIds : readIds
+  const [reading, setReading] = useState(false)
+  const readAll = async () => {
+    setReading(true)
+    try { if (isBackendMode) await serverNotifications.readAll(); else markRead(notifications.map(item => item.id)) }
+    finally { setReading(false) }
+  }
   const markRead = (ids: string[]) => {
     const next = [...new Set([...readIds, ...ids])]
     setReadIds(next)
     localStorage.setItem(`notification-reads-${user.id}`, JSON.stringify(next))
   }
-  const unreadCount = notifications.filter((item) => !readIds.includes(item.id)).length
+  const unreadCount = notifications.filter((item) => !effectiveReadIds.includes(item.id)).length
   const projectRole = activeProjectId === 'all' ? (user.role === 'lead' ? 'Капитан' : 'Участник') : user.projectRoles?.[activeProjectId] ?? 'Участник проекта'
   return (
     <>
@@ -65,9 +78,9 @@ const Sidebar = ({ open, onClose }: Props) => {
           <NavLink to="/profile" onClick={onClose}>◎ <span>Мой профиль</span></NavLink>
           <NavLink to="/settings" onClick={onClose}>⚙ <span>Настройки</span></NavLink>
         </nav>
-        <button className="sidebar__logout" onClick={() => dispatch(logout())}><Icon name="arrow-right" /> Выйти</button>
+        <button className="sidebar__logout" disabled={signingOut} onClick={() => dispatch(isBackendMode ? backendLogoutRequest() : logout())}><Icon name="arrow-right" /> {signingOut ? 'Выходим…' : 'Выйти'}</button>
       </aside>
-      {notificationsOpen && <NotificationsModal items={notifications} readIds={readIds} onClose={() => setNotificationsOpen(false)} onReadAll={() => markRead(notifications.map(item => item.id))} onOpen={(item) => { markRead([item.id]); setNotificationsOpen(false); onClose(); navigate(item.href) }} />}
+      {notificationsOpen && <NotificationsModal items={notifications} readIds={effectiveReadIds} error={serverNotifications.error} onClose={() => setNotificationsOpen(false)} onReadAll={() => void readAll()} reading={reading} onOpen={async (item) => { if (isBackendMode) { if (!await serverNotifications.readOne(item.id)) return } else markRead([item.id]); setNotificationsOpen(false); onClose(); navigate(item.href) }} />}
     </>
   )
 }

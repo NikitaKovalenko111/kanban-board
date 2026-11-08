@@ -1,7 +1,8 @@
+export type EntityId = string | number
 export type TaskStatus = 'waiting' | 'working' | 'checking' | 'done'
 export type UserRole = 'lead' | 'member'
 export type ScheduleEventType = string
-export type StudyGroup = '203' | '204' | 'both'
+export type StudyGroup = string
 export type ReminderScenario = 'none' | 'at-start' | '15-min' | '1-hour' | '1-day'
 export interface EventReminders { reminderMode: 'type' | 'custom'; reminderMinutes: number[] }
 export type EventPrivacy = 'hidden' | 'busy' | 'title' | 'details'
@@ -10,6 +11,7 @@ export type TaskPriority = 'low' | 'medium' | 'high'
 
 export interface Project {
   id: string
+  canViewBoard?: boolean
   name: string
   description: string
   color: string
@@ -20,14 +22,14 @@ export interface Project {
 export interface ProjectSource extends Attachment {
   uploadedAt: string
   uploadedBy: string
-  uploadedById?: number
+  uploadedById?: EntityId
 }
 
 export type NewProject = Omit<Project, 'id' | 'sources'> & { sources?: Attachment[] }
 
 export interface UpdateProjectPayload extends NewProject {
   id: string
-  members: { userId: number; role: string }[]
+  members: { userId: EntityId; role: string }[]
 }
 
 export interface AddProjectSourcesPayload {
@@ -37,7 +39,7 @@ export interface AddProjectSourcesPayload {
 }
 
 export interface ScheduleEvent {
-  id: number
+  id: EntityId
   projectId?: string
   title: string
   description: string
@@ -52,17 +54,20 @@ export interface ScheduleEvent {
   reminderMinutes?: number[]
   location?: string
   author: string
-  ownerId?: number
+  ownerId?: EntityId
   category?: EventCategory
+  masked?: boolean
+  partial?: boolean
 }
 
 export type NewScheduleEvent = Omit<ScheduleEvent, 'id'>
 
 export interface Attachment {
-  url?: string
   id: string
   name: string
   size: number
+  url?: string
+  downloadId?: string
 }
 
 export interface TaskComment {
@@ -74,16 +79,18 @@ export interface TaskComment {
 
 export interface TaskHistoryEvent {
   id: string
-  type: 'status' | 'revision' | 'assignment'
+  type: 'status' | 'revision' | 'assignment' | 'created'
   fromStatus: TaskStatus
   toStatus: TaskStatus
+  fromLabel?: string
+  toLabel?: string
   author: string
   createdAt: string
   comment?: string
 }
 
 export interface Task {
-  taskId: number
+  taskId: EntityId
   projectId: string
   taskName: string
   taskDesc: string
@@ -93,7 +100,7 @@ export interface Task {
   attachments: Attachment[]
   resultAttachments: Attachment[]
   assignee: string
-  assigneeId?: number
+  assigneeId?: EntityId
   createdAt: string
   completedAt?: string
   revisionComment?: string
@@ -102,7 +109,7 @@ export interface Task {
 }
 
 export interface User {
-  id: number
+  id: EntityId
   name: string
   login: string
   studentGroup?: StudyGroup
@@ -140,15 +147,15 @@ export interface NewTeamMember {
   projectRoles: Record<string, string>
 }
 
-export type NewTask = Pick<Task, 'projectId' | 'taskName' | 'taskDesc' | 'taskDeadline' | 'attachments'> & { assigneeId?: number; priority?: TaskPriority }
+export type NewTask = Pick<Task, 'projectId' | 'taskName' | 'taskDesc' | 'taskDeadline' | 'attachments'> & { assigneeId?: EntityId; priority?: TaskPriority }
 
 export interface TaskAssignment {
-  taskId: number
-  assigneeId: number | null
+  taskId: EntityId
+  assigneeId: EntityId | null
 }
 
 export interface TaskStatusUpdate {
-  taskId: number
+  taskId: EntityId
   status: TaskStatus
   revisionComment?: string
   resultAttachments?: Attachment[]
@@ -157,7 +164,8 @@ export interface TaskStatusUpdate {
 }
 
 export interface AddTaskCommentPayload {
-  taskId: number
+  taskId: EntityId
   author: string
   text: string
 }
+export interface ScheduleQuery { projectId: string; personId?: EntityId; groups?: string[]; from: string; to: string }

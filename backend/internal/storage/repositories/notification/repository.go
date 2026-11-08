@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"kanban-board/internal/models"
+	repositorycommon "kanban-board/internal/storage/repositories/common"
 
 	"github.com/jackc/pgx/v5/stdlib"
 )
@@ -19,6 +20,7 @@ type PendingPush struct {
 	Text           string
 	TaskID         *string
 	EventID        *string
+	LessonID       *string
 }
 
 type Repository struct {
@@ -31,7 +33,7 @@ func Init(db *sql.DB) *Repository {
 
 func (r *Repository) List(ctx context.Context, userID string, limit int) ([]models.Notification, error) {
 	rows, err := r.db.QueryContext(ctx, `
-		SELECT notification_id, kind, title, text, created_at, read_at IS NOT NULL, task_id, event_id
+		SELECT notification_id, kind, title, text, created_at, read_at IS NOT NULL, task_id, event_id, lesson_id
 		FROM notifications
 		WHERE user_id = $1
 		ORDER BY created_at DESC
@@ -44,7 +46,17 @@ func (r *Repository) List(ctx context.Context, userID string, limit int) ([]mode
 	items := make([]models.Notification, 0)
 	for rows.Next() {
 		var item models.Notification
-		if err := rows.Scan(&item.ID, &item.Kind, &item.Title, &item.Text, &item.At, &item.Read, &item.TaskID, &item.EventID); err != nil {
+		if err := rows.Scan(
+			&item.ID,
+			&item.Kind,
+			&item.Title,
+			&item.Text,
+			&item.At,
+			&item.Read,
+			&item.TaskID,
+			&item.EventID,
+			&item.LessonID,
+		); err != nil {
 			return nil, err
 		}
 		items = append(items, item)
@@ -70,7 +82,8 @@ func (r *Repository) ListAfter(ctx context.Context, userID, notificationID strin
 			n.created_at,
 			n.read_at IS NOT NULL,
 			n.task_id,
-			n.event_id
+			n.event_id,
+			n.lesson_id
 		FROM notifications n
 		CROSS JOIN cursor c
 		WHERE n.user_id = $1
@@ -95,6 +108,7 @@ func (r *Repository) ListAfter(ctx context.Context, userID, notificationID strin
 			&item.Read,
 			&item.TaskID,
 			&item.EventID,
+			&item.LessonID,
 		); err != nil {
 			return nil, err
 		}
@@ -143,6 +157,25 @@ func (r *Repository) ReadAll(ctx context.Context, userID string) error {
 	return err
 }
 
+func (r *Repository) Read(ctx context.Context, userID, notificationID string) error {
+	result, err := r.db.ExecContext(ctx, `
+		UPDATE notifications
+		SET read_at = COALESCE(read_at, CURRENT_TIMESTAMP)
+		WHERE notification_id = $1 AND user_id = $2
+	`, notificationID, userID)
+	if err != nil {
+		return err
+	}
+	rows, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if rows == 0 {
+		return repositorycommon.ErrNotFound
+	}
+	return nil
+}
+
 func (r *Repository) AddPushToken(ctx context.Context, userID, token, platform string) error {
 	_, err := r.db.ExecContext(ctx, `
 		INSERT INTO push_tokens (user_id, token, platform)
@@ -181,6 +214,11 @@ func (r *Repository) CreateUpcomingEventNotifications(ctx context.Context) (int6
 		JOIN users u ON u.user_id = er.user_id AND u.is_active = TRUE
 		WHERE e.starts_at > CURRENT_TIMESTAMP
 			AND e.starts_at - make_interval(mins => er.minutes_before) <= CURRENT_TIMESTAMP
+			AND NOT EXISTS(
+				SELECT 1 FROM reminder_overrides overrides
+				WHERE overrides.user_id = er.user_id
+					AND overrides.item_key = 'event:' || e.event_id::text
+			)
 		ON CONFLICT DO NOTHING
 	`)
 	if err != nil {
@@ -200,6 +238,10 @@ func (r *Repository) CreateUpcomingEventNotifications(ctx context.Context) (int6
 			'Событие начнётся через ' || ur.minutes_before || ' мин.',
 			e.event_id, 'event:' || ur.minutes_before
 		FROM user_reminders ur
+		JOIN reminder_overrides overrides
+			ON overrides.user_id = ur.user_id
+			AND overrides.item_key = ur.item_key
+			AND overrides.enabled = TRUE
 		JOIN events e ON ur.item_key = 'event:' || e.event_id::text
 		JOIN users u ON u.user_id = ur.user_id AND u.is_active = TRUE
 		WHERE ur.item_key LIKE 'event:%'
@@ -216,14 +258,21 @@ func (r *Repository) CreateUpcomingEventNotifications(ctx context.Context) (int6
 	}
 	result, err = r.db.ExecContext(ctx, `
 		INSERT INTO notifications (
-			notification_id, user_id, kind, title, text, lesson_key, reminder_key
+			notification_id, user_id, kind, title, text, lesson_id, reminder_key
 		)
 		SELECT
-			gen_random_uuid(), ur.user_id, 'EVENT', l.title,
+			gen_random_uuid(), ur.user_id, 'LESSON', l.title,
 			'Занятие начнётся через ' || ur.minutes_before || ' мин.',
-			ur.item_key, 'lesson:' || ur.minutes_before
+			l.lesson_id, 'lesson:' || ur.minutes_before
 		FROM user_reminders ur
-		JOIN lessons l ON ur.item_key = 'lesson:' || COALESCE(l.external_id, l.lesson_id::text)
+		JOIN reminder_overrides overrides
+			ON overrides.user_id = ur.user_id
+			AND overrides.item_key = ur.item_key
+			AND overrides.enabled = TRUE
+		JOIN lessons l ON ur.item_key IN (
+			'lesson:' || l.lesson_id::text,
+			'lesson:' || COALESCE(l.external_id, l.lesson_id::text)
+		)
 		JOIN users u ON u.user_id = ur.user_id AND u.is_active = TRUE
 		WHERE ur.item_key LIKE 'lesson:%'
 			AND l.starts_at > CURRENT_TIMESTAMP
@@ -239,7 +288,7 @@ func (r *Repository) CreateUpcomingEventNotifications(ctx context.Context) (int6
 
 func (r *Repository) ListPendingPush(ctx context.Context, limit int) ([]PendingPush, error) {
 	rows, err := r.db.QueryContext(ctx, `
-		SELECT n.notification_id, pt.token, n.kind, n.title, n.text, n.task_id, n.event_id
+		SELECT n.notification_id, pt.token, n.kind, n.title, n.text, n.task_id, n.event_id, n.lesson_id
 		FROM notifications n
 		JOIN push_tokens pt ON pt.user_id = n.user_id
 		WHERE n.push_sent_at IS NULL
@@ -253,7 +302,16 @@ func (r *Repository) ListPendingPush(ctx context.Context, limit int) ([]PendingP
 	items := make([]PendingPush, 0)
 	for rows.Next() {
 		var item PendingPush
-		if err := rows.Scan(&item.NotificationID, &item.Token, &item.Kind, &item.Title, &item.Text, &item.TaskID, &item.EventID); err != nil {
+		if err := rows.Scan(
+			&item.NotificationID,
+			&item.Token,
+			&item.Kind,
+			&item.Title,
+			&item.Text,
+			&item.TaskID,
+			&item.EventID,
+			&item.LessonID,
+		); err != nil {
 			return nil, err
 		}
 		items = append(items, item)

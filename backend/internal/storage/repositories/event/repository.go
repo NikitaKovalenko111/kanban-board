@@ -4,7 +4,6 @@ import (
 	"context"
 	"database/sql"
 	"errors"
-	"strings"
 	"time"
 
 	"kanban-board/internal/models"
@@ -111,24 +110,35 @@ func (r *Repository) DeleteEventType(ctx context.Context, userID, eventTypeID st
 	return repositorycommon.RequireAffected(result)
 }
 
-func (r *Repository) ListEvents(ctx context.Context, userID, personID string, groups []string, from, to time.Time) ([]models.Event, error) {
-	groupList := strings.Join(groups, ",")
+func (r *Repository) ListEvents(ctx context.Context, userID, personID string, from, to time.Time) ([]models.Event, error) {
 	rows, err := r.db.QueryContext(ctx, `
+		WITH requested_person AS (
+			SELECT user_id, student_group_id
+			FROM users
+			WHERE user_id = $1 AND is_active = TRUE
+		)
 		SELECT
-			e.event_id, e.owner_user_id, e.title, COALESCE(e.description, ''),
+			e.event_id, e.owner_user_id, e.project_id, e.title, COALESCE(e.description, ''),
 			COALESCE(e.location, ''), e.starts_at, e.ends_at, e.visibility,
 			sg.group_code, e.event_type_id, owner.schedule_privacy
 		FROM events e
 		JOIN users owner ON owner.user_id = e.owner_user_id
+		CROSS JOIN requested_person person
 		LEFT JOIN student_groups sg ON sg.student_group_id = e.student_group_id
-		WHERE e.starts_at >= $3 AND e.starts_at < $4
+		WHERE e.starts_at >= $2 AND e.starts_at < $3
 			AND (
 				e.visibility = 'TEAM'
-				OR (e.visibility = 'GROUP' AND sg.group_code = ANY(string_to_array($2, ',')))
-				OR (e.visibility = 'PERSONAL' AND e.owner_user_id = $1)
+				OR (
+					e.visibility = 'GROUP'
+					AND e.student_group_id = person.student_group_id
+				)
+				OR (
+					e.visibility = 'PERSONAL'
+					AND e.owner_user_id = person.user_id
+				)
 			)
 		ORDER BY e.starts_at
-	`, personID, groupList, from, to)
+	`, personID, from, to)
 	if err != nil {
 		return nil, err
 	}
@@ -138,7 +148,7 @@ func (r *Repository) ListEvents(ctx context.Context, userID, personID string, gr
 		var event models.Event
 		var privacy string
 		if err := rows.Scan(
-			&event.ID, &event.OwnerID, &event.Title, &event.Description,
+			&event.ID, &event.OwnerID, &event.ProjectID, &event.Title, &event.Description,
 			&event.Location, &event.StartsAt, &event.EndsAt, &event.Visibility,
 			&event.Group, &event.TypeID, &privacy,
 		); err != nil {
@@ -152,6 +162,38 @@ func (r *Repository) ListEvents(ctx context.Context, userID, personID string, gr
 	return events, rows.Err()
 }
 
+func (r *Repository) ListGroupEvents(ctx context.Context, userID, group string, from, to time.Time) ([]models.Event, error) {
+	rows, err := r.db.QueryContext(ctx, `
+		SELECT
+			e.event_id, e.owner_user_id, e.project_id, e.title,
+			COALESCE(e.description, ''), COALESCE(e.location, ''),
+			e.starts_at, e.ends_at, e.visibility, sg.group_code, e.event_type_id
+		FROM events e
+		LEFT JOIN student_groups sg ON sg.student_group_id = e.student_group_id
+		WHERE e.starts_at >= $2 AND e.starts_at < $3
+			AND (e.visibility = 'TEAM' OR (e.visibility = 'GROUP' AND sg.group_code = $1))
+			AND EXISTS(SELECT 1 FROM users WHERE user_id = $4 AND is_active = TRUE)
+		ORDER BY e.starts_at
+	`, group, from, to, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	events := make([]models.Event, 0)
+	for rows.Next() {
+		var event models.Event
+		if err := rows.Scan(
+			&event.ID, &event.OwnerID, &event.ProjectID, &event.Title,
+			&event.Description, &event.Location, &event.StartsAt, &event.EndsAt,
+			&event.Visibility, &event.Group, &event.TypeID,
+		); err != nil {
+			return nil, err
+		}
+		events = append(events, event)
+	}
+	return events, rows.Err()
+}
+
 func (r *Repository) GetEvent(ctx context.Context, userID, eventID string) (*models.Event, error) {
 	var event models.Event
 	var privacy string
@@ -159,6 +201,7 @@ func (r *Repository) GetEvent(ctx context.Context, userID, eventID string) (*mod
 		SELECT
 			e.event_id,
 			e.owner_user_id,
+			e.project_id,
 			e.title,
 			COALESCE(e.description, ''),
 			COALESCE(e.location, ''),
@@ -172,25 +215,18 @@ func (r *Repository) GetEvent(ctx context.Context, userID, eventID string) (*mod
 		JOIN users owner ON owner.user_id = e.owner_user_id
 		LEFT JOIN student_groups sg ON sg.student_group_id = e.student_group_id
 		WHERE e.event_id = $2
+			AND EXISTS(
+				SELECT 1
+				FROM users viewer
+				WHERE viewer.user_id = $1 AND viewer.is_active = TRUE
+			)
 			AND (
-				e.visibility = 'TEAM'
+				e.visibility IN ('TEAM', 'GROUP')
 				OR e.owner_user_id = $1
-				OR (
-					e.visibility = 'GROUP'
-					AND (
-						e.student_group_id = (
-							SELECT student_group_id FROM users WHERE user_id = $1
-						)
-						OR EXISTS(
-							SELECT 1 FROM users
-							WHERE user_id = $1 AND system_role = 'CAPTAIN' AND is_active = TRUE
-						)
-					)
-				)
 				OR (e.visibility = 'PERSONAL' AND owner.schedule_privacy <> 'NOTHING')
 			)
 	`, userID, eventID).Scan(
-		&event.ID, &event.OwnerID, &event.Title, &event.Description,
+		&event.ID, &event.OwnerID, &event.ProjectID, &event.Title, &event.Description,
 		&event.Location, &event.StartsAt, &event.EndsAt, &event.Visibility,
 		&event.Group, &event.TypeID, &privacy,
 	)
@@ -232,12 +268,17 @@ func applyEventPrivacy(event *models.Event, viewerID, privacy string) bool {
 	return true
 }
 
-func (r *Repository) CreateEvent(ctx context.Context, userID, title, description, location string, startsAt time.Time, endsAt *time.Time, visibility, group string, typeID *string, reminders []int) (string, error) {
+func (r *Repository) CreateEvent(ctx context.Context, userID, title, description, location string, startsAt time.Time, endsAt *time.Time, visibility, group string, typeID, projectID *string, reminders []int) (string, error) {
 	tx, err := r.db.BeginTx(ctx, nil)
 	if err != nil {
 		return "", err
 	}
 	defer tx.Rollback()
+	if projectID != nil {
+		if err := repositorycommon.RequireMember(ctx, tx, userID, *projectID); err != nil {
+			return "", err
+		}
+	}
 	var groupID *string
 	if visibility == "GROUP" {
 		var id string
@@ -257,12 +298,12 @@ func (r *Repository) CreateEvent(ctx context.Context, userID, title, description
 	var eventID string
 	if err := tx.QueryRowContext(ctx, `
 		INSERT INTO events (
-			event_id, owner_user_id, event_type_id, student_group_id,
+			event_id, owner_user_id, event_type_id, project_id, student_group_id,
 			title, description, location, visibility, starts_at, ends_at
 		)
-		VALUES (gen_random_uuid(), $1, $2, $3, $4, NULLIF($5, ''), NULLIF($6, ''), $7, $8, $9)
+		VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, NULLIF($6, ''), NULLIF($7, ''), $8, $9, $10)
 		RETURNING event_id
-	`, userID, typeID, groupID, title, description, location, visibility, startsAt, endsAt).Scan(&eventID); err != nil {
+	`, userID, typeID, projectID, groupID, title, description, location, visibility, startsAt, endsAt).Scan(&eventID); err != nil {
 		return "", err
 	}
 	if err := replaceEventReminders(ctx, tx, userID, eventID, reminders); err != nil {
@@ -271,9 +312,14 @@ func (r *Repository) CreateEvent(ctx context.Context, userID, title, description
 	return eventID, tx.Commit()
 }
 
-func (r *Repository) UpdateEvent(ctx context.Context, userID, eventID string, title, description, location *string, startsAt *time.Time, endsAt *time.Time, endsAtProvided bool, visibility, group *string, typeID *string, typeProvided bool) error {
+func (r *Repository) UpdateEvent(ctx context.Context, userID, eventID string, title, description, location *string, startsAt *time.Time, endsAt *time.Time, endsAtProvided bool, visibility, group *string, typeID *string, typeProvided bool, projectID *string, projectProvided bool) error {
 	if err := r.requireEventOwnerOrCaptain(ctx, userID, eventID); err != nil {
 		return err
+	}
+	if projectID != nil {
+		if err := repositorycommon.RequireMember(ctx, r.db, userID, *projectID); err != nil {
+			return err
+		}
 	}
 	var groupID *string
 	if group != nil && *group != "" {
@@ -306,9 +352,14 @@ func (r *Repository) UpdateEvent(ctx context.Context, userID, eventID string, ti
 				ELSE student_group_id
 			END,
 			event_type_id = CASE WHEN $12 THEN $13 ELSE event_type_id END,
+			project_id = CASE
+				WHEN $9 IS NOT NULL AND $9 <> 'TEAM' THEN NULL
+				WHEN $14 THEN $15
+				ELSE project_id
+			END,
 			updated_at = CURRENT_TIMESTAMP
-		WHERE event_id = $14
-	`, title, description != nil, description, location != nil, location, startsAt, endsAtProvided, endsAt, visibility, group != nil, groupID, typeProvided, typeID, eventID)
+		WHERE event_id = $16
+	`, title, description != nil, description, location != nil, location, startsAt, endsAtProvided, endsAt, visibility, group != nil, groupID, typeProvided, typeID, projectProvided, projectID, eventID)
 	if err != nil {
 		return err
 	}
@@ -346,9 +397,22 @@ func (r *Repository) requireEventOwnerOrCaptain(ctx context.Context, userID, eve
 
 func (r *Repository) GetReminders(ctx context.Context, userID string) (map[string][]int, error) {
 	rows, err := r.db.QueryContext(ctx, `
-		SELECT item_key, minutes_before FROM user_reminders WHERE user_id = $1
+		SELECT overrides.item_key, reminders.minutes_before
+		FROM reminder_overrides overrides
+		LEFT JOIN user_reminders reminders
+			ON reminders.user_id = overrides.user_id
+			AND reminders.item_key = overrides.item_key
+		WHERE overrides.user_id = $1
 		UNION ALL
-		SELECT 'event:' || event_id::text, minutes_before FROM event_reminders WHERE user_id = $1
+		SELECT 'event:' || event_id::text, minutes_before
+		FROM event_reminders defaults
+		WHERE defaults.user_id = $1
+			AND NOT EXISTS(
+				SELECT 1
+				FROM reminder_overrides overrides
+				WHERE overrides.user_id = defaults.user_id
+					AND overrides.item_key = 'event:' || defaults.event_id::text
+			)
 		ORDER BY 1, 2 DESC
 	`, userID)
 	if err != nil {
@@ -358,11 +422,16 @@ func (r *Repository) GetReminders(ctx context.Context, userID string) (map[strin
 	result := make(map[string][]int)
 	for rows.Next() {
 		var key string
-		var minute int
+		var minute sql.NullInt64
 		if err := rows.Scan(&key, &minute); err != nil {
 			return nil, err
 		}
-		result[key] = append(result[key], minute)
+		if _, exists := result[key]; !exists {
+			result[key] = make([]int, 0)
+		}
+		if minute.Valid {
+			result[key] = append(result[key], int(minute.Int64))
+		}
 	}
 	return result, rows.Err()
 }
@@ -373,6 +442,14 @@ func (r *Repository) PutReminders(ctx context.Context, userID, itemKey string, m
 		return err
 	}
 	defer tx.Rollback()
+	if _, err := tx.ExecContext(ctx, `
+		INSERT INTO reminder_overrides (user_id, item_key, enabled)
+		VALUES ($1, $2, $3)
+		ON CONFLICT (user_id, item_key)
+		DO UPDATE SET enabled = EXCLUDED.enabled, updated_at = CURRENT_TIMESTAMP
+	`, userID, itemKey, len(minutes) > 0); err != nil {
+		return err
+	}
 	if _, err := tx.ExecContext(ctx, `DELETE FROM user_reminders WHERE user_id = $1 AND item_key = $2`, userID, itemKey); err != nil {
 		return err
 	}
@@ -382,6 +459,25 @@ func (r *Repository) PutReminders(ctx context.Context, userID, itemKey string, m
 		`, userID, itemKey, minute); err != nil {
 			return err
 		}
+	}
+	return tx.Commit()
+}
+
+func (r *Repository) DeleteReminderOverride(ctx context.Context, userID, itemKey string) error {
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	if _, err := tx.ExecContext(ctx, `
+		DELETE FROM user_reminders WHERE user_id = $1 AND item_key = $2
+	`, userID, itemKey); err != nil {
+		return err
+	}
+	if _, err := tx.ExecContext(ctx, `
+		DELETE FROM reminder_overrides WHERE user_id = $1 AND item_key = $2
+	`, userID, itemKey); err != nil {
+		return err
 	}
 	return tx.Commit()
 }

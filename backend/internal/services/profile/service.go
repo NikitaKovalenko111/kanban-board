@@ -41,12 +41,15 @@ func (s *Service) ListUsers(ctx context.Context, actorID, search string) ([]Prof
 	return s.repo.ListUsers(ctx, actorID, strings.TrimSpace(search))
 }
 
-func (s *Service) UpdateProfile(ctx context.Context, userID string, fullName, studentGroup, schedulePrivacy *string) (*Profile, error) {
+func (s *Service) UpdateProfile(ctx context.Context, userID string, username, fullName, studentGroup, schedulePrivacy *string) (*Profile, error) {
 	if err := servicecommon.ValidateUUID(userID); err != nil {
 		return nil, err
 	}
 	if fullName != nil && strings.TrimSpace(*fullName) == "" {
 		return nil, servicecommon.InvalidInput("fullName is required")
+	}
+	if username != nil && !usernamePattern.MatchString(*username) {
+		return nil, servicecommon.InvalidInput("username must contain 3 to 32 Latin letters, digits, dots, underscores, or hyphens")
 	}
 	if schedulePrivacy != nil {
 		switch *schedulePrivacy {
@@ -55,11 +58,38 @@ func (s *Service) UpdateProfile(ctx context.Context, userID string, fullName, st
 			return nil, servicecommon.InvalidInput("schedulePrivacy has an invalid value")
 		}
 	}
-	if err := s.repo.UpdateProfile(ctx, userID, fullName, studentGroup, schedulePrivacy); err != nil {
-		return nil, err
+	if err := s.repo.UpdateProfile(ctx, userID, normalizedUsername(username), fullName, studentGroup, schedulePrivacy); err != nil {
+		return nil, servicecommon.DatabaseError(err)
 	}
 
 	return s.repo.GetProfile(ctx, userID)
+}
+
+func (s *Service) UpdateUser(ctx context.Context, actorID, userID string, username, studentGroup *string) (*Profile, error) {
+	if err := servicecommon.ValidateUUID(actorID, userID); err != nil {
+		return nil, err
+	}
+	if username == nil && studentGroup == nil {
+		return nil, servicecommon.InvalidInput("username or studentGroup is required")
+	}
+	if username != nil && !usernamePattern.MatchString(*username) {
+		return nil, servicecommon.InvalidInput("username must contain 3 to 32 Latin letters, digits, dots, underscores, or hyphens")
+	}
+	if studentGroup != nil && strings.TrimSpace(*studentGroup) == "" {
+		return nil, servicecommon.InvalidInput("studentGroup is required")
+	}
+	if err := s.repo.UpdateUser(ctx, actorID, userID, normalizedUsername(username), studentGroup); err != nil {
+		return nil, servicecommon.DatabaseError(err)
+	}
+	return s.repo.GetProfile(ctx, userID)
+}
+
+func normalizedUsername(username *string) *string {
+	if username == nil {
+		return nil
+	}
+	value := strings.ToLower(*username)
+	return &value
 }
 
 func (s *Service) SetPhoto(ctx context.Context, userID, imageURL string) (*Profile, error) {

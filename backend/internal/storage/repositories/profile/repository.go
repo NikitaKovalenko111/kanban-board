@@ -116,7 +116,18 @@ func (r *Repository) ListUsers(ctx context.Context, actorID, search string) ([]m
 	return users, rows.Err()
 }
 
-func (r *Repository) UpdateProfile(ctx context.Context, userID string, fullName, studentGroup, schedulePrivacy *string) error {
+func (r *Repository) UpdateProfile(ctx context.Context, userID string, username, fullName, studentGroup, schedulePrivacy *string) error {
+	return r.updateUserFields(ctx, userID, username, fullName, studentGroup, schedulePrivacy)
+}
+
+func (r *Repository) UpdateUser(ctx context.Context, actorID, userID string, username, studentGroup *string) error {
+	if err := repositorycommon.RequireCaptain(ctx, r.db, actorID); err != nil {
+		return err
+	}
+	return r.updateUserFields(ctx, userID, username, nil, studentGroup, nil)
+}
+
+func (r *Repository) updateUserFields(ctx context.Context, userID string, username, fullName, studentGroup, schedulePrivacy *string) error {
 	tx, err := r.db.BeginTx(ctx, nil)
 	if err != nil {
 		return err
@@ -141,12 +152,13 @@ func (r *Repository) UpdateProfile(ctx context.Context, userID string, fullName,
 	result, err := tx.ExecContext(ctx, `
 		UPDATE users
 		SET
-			display_name = COALESCE($1, display_name),
-			student_group_id = CASE WHEN $2 THEN $3 ELSE student_group_id END,
-			schedule_privacy = COALESCE($4, schedule_privacy),
+			username = COALESCE($1, username),
+			display_name = COALESCE($2, display_name),
+			student_group_id = CASE WHEN $3 THEN $4 ELSE student_group_id END,
+			schedule_privacy = COALESCE($5, schedule_privacy),
 			updated_at = CURRENT_TIMESTAMP
-		WHERE user_id = $5
-	`, fullName, studentGroup != nil, groupID, schedulePrivacy, userID)
+		WHERE user_id = $6
+	`, username, fullName, studentGroup != nil, groupID, schedulePrivacy, userID)
 	if err != nil {
 		return fmt.Errorf("update profile: %w", err)
 	}

@@ -1,0 +1,65 @@
+# Isolated integration fixture. Reads/builds the existing backend without changing it.
+services:
+  db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: kanban_client_check
+      POSTGRES_USER: kanban_client_check
+      POSTGRES_PASSWORD: ${BACKEND_CHECK_PASSWORD:?Set a temporary test password}
+    tmpfs:
+      - /var/lib/postgresql/data
+    healthcheck:
+      test: [CMD-SHELL, 'pg_isready -U kanban_client_check -d kanban_client_check']
+      interval: 2s
+      timeout: 2s
+      retries: 20
+  minio:
+    image: pgsty/minio:RELEASE.2026-08-04T00-00-00Z@sha256:b6bfe7239bfc83fb90d31612d9704d86039dd714f7904b3f1ad68f211e602372
+    command: server /data
+    environment:
+      MINIO_ROOT_USER: client-check
+      MINIO_ROOT_PASSWORD: ${BACKEND_CHECK_PASSWORD:?Set a temporary test password}
+    tmpfs:
+      - /data
+    healthcheck:
+      test: [CMD, curl, --fail, --silent, 'http://127.0.0.1:9000/minio/health/ready']
+      interval: 2s
+      timeout: 2s
+      retries: 20
+  api:
+    build:
+      context: ../../backend
+    environment:
+      log_level: prod
+      http_address: :3005
+      timeout: 4s
+      idle_timeout: 60s
+      db_host: db
+      db_port: '5432'
+      db_user: kanban_client_check
+      db_pass: ${BACKEND_CHECK_PASSWORD:?Set a temporary test password}
+      db_name: kanban_client_check
+      ssl_mode: disable
+      jwt_access_secret: ${BACKEND_CHECK_ACCESS_SECRET:?Set a temporary JWT secret}
+      jwt_refresh_secret: ${BACKEND_CHECK_REFRESH_SECRET:?Set a temporary JWT secret}
+      access_token_ttl: 1m
+      refresh_token_ttl: 1h
+      session_cleanup_interval: 30m
+      minio_enabled: 'true'
+      minio_endpoint: minio:9000
+      minio_access_key: client-check
+      minio_secret_key: ${BACKEND_CHECK_PASSWORD:?Set a temporary test password}
+      minio_bucket: client-check
+      minio_use_ssl: 'false'
+    healthcheck:
+      test: [CMD, wget, -q, -O, /dev/null, 'http://127.0.0.1:3005/api/v1/system/health']
+      interval: 2s
+      timeout: 2s
+      retries: 20
+    ports:
+      - '127.0.0.1:13005:3005'
+    depends_on:
+      db:
+        condition: service_healthy
+      minio:
+        condition: service_healthy

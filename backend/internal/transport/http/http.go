@@ -30,28 +30,40 @@ func Init(handlers *handlers.Handlers, accessSecret string, logger *slog.Logger,
 }
 
 func (h *HTTP) Start(mux *http.ServeMux) {
-	docs.Start(mux)
+	apiRouter := http.NewServeMux()
+
+	docsRouter := http.NewServeMux()
+	apiRouter.Handle("/docs/", http.StripPrefix("/docs", docsRouter))
+	docs.Start(docsRouter)
 
 	systemRouter := http.NewServeMux()
 	h.handlers.System.Start(systemRouter)
-	mux.Handle("/api/v1/system/", http.StripPrefix("/api/v1/system", systemRouter))
+	apiRouter.Handle("/system/", http.StripPrefix("/system", systemRouter))
 
 	authRouter := http.NewServeMux()
-	h.handlers.Auth.StartPublic(authRouter)
-	mux.Handle("/auth/", http.StripPrefix("/auth", authRouter))
-	mux.Handle("/api/v1/auth/", http.StripPrefix("/api/v1/auth", authRouter))
 
-	apiRouter := http.NewServeMux()
-	h.handlers.Auth.StartProtected(apiRouter)
-	h.handlers.Profile.Start(apiRouter)
-	h.handlers.Project.Start(apiRouter)
-	h.handlers.Board.Start(apiRouter)
-	h.handlers.Task.Start(apiRouter)
-	h.handlers.Comment.Start(apiRouter)
-	h.handlers.Attachment.Start(apiRouter)
-	h.handlers.Schedule.Start(apiRouter)
-	h.handlers.Event.Start(apiRouter)
-	h.handlers.Notification.Start(apiRouter)
-	protectedAPI := middleware.Authorization(h.accessSecret, h.logger, h.activeChecker)(apiRouter)
-	mux.Handle("/api/v1/", http.StripPrefix("/api/v1", protectedAPI))
+	h.handlers.Auth.StartPublic(authRouter)
+
+	authProtectedRouter := http.NewServeMux()
+	h.handlers.Auth.StartProtected(authProtectedRouter)
+
+	authRouter.Handle("/", middleware.Authorization(h.accessSecret, h.logger, h.activeChecker)(authProtectedRouter))
+
+	apiRouter.Handle("/auth/", http.StripPrefix("/auth", authRouter))
+
+	privateRouter := http.NewServeMux()
+	h.handlers.Profile.Start(privateRouter)
+	h.handlers.Project.Start(privateRouter)
+	h.handlers.Board.Start(privateRouter)
+	h.handlers.Task.Start(privateRouter)
+	h.handlers.Comment.Start(privateRouter)
+	h.handlers.Attachment.Start(privateRouter)
+	h.handlers.Schedule.Start(privateRouter)
+	h.handlers.Event.Start(privateRouter)
+	h.handlers.Notification.Start(privateRouter)
+
+	protectedAPI := middleware.Authorization(h.accessSecret, h.logger, h.activeChecker)(privateRouter)
+	apiRouter.Handle("/", protectedAPI)
+
+	mux.Handle("/api/v1/", http.StripPrefix("/api/v1", apiRouter))
 }

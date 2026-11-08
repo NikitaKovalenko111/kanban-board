@@ -3,13 +3,15 @@ WORKDIR /src
 COPY go.mod go.sum ./
 RUN go mod download
 COPY . .
-RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/kanban-board ./cmd/kanban-board
+RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/kanban-board ./cmd/kanban-board \
+    && CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/create-captain ./cmd/create-captain
 
 FROM alpine:3.22
 COPY --from=build /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/ca-certificates.crt
 RUN addgroup -S app && adduser -S -G app app
 WORKDIR /app
 COPY --from=build /out/kanban-board /app/kanban-board
+COPY --from=build /out/create-captain /app/create-captain
 COPY --from=build /src/config /app/config
 RUN chown -R app:app /app
 USER app

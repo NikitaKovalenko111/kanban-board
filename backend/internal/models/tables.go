@@ -42,6 +42,7 @@ const (
 			created_by_user_id UUID NOT NULL REFERENCES users (user_id),
 			name VARCHAR NOT NULL,
 			description TEXT,
+			color VARCHAR NOT NULL DEFAULT '#6576DF',
 			join_policy VARCHAR NOT NULL DEFAULT 'INVITE_ONLY' CHECK (join_policy IN ('OPEN', 'INVITE_ONLY', 'CLOSED')),
 			is_archived BOOLEAN NOT NULL DEFAULT FALSE,
 			created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -121,11 +122,18 @@ const (
 			task_id UUID NOT NULL REFERENCES tasks (task_id) ON DELETE CASCADE,
 			uploaded_by_user_id UUID NOT NULL REFERENCES users (user_id),
 			attachment_type VARCHAR NOT NULL CHECK (attachment_type IN ('SOURCE', 'RESULT')),
-			file_name VARCHAR NOT NULL,
-			storage_key VARCHAR NOT NULL,
-			mime_type VARCHAR NOT NULL,
-			file_size BIGINT NOT NULL CHECK (file_size >= 0),
-			created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+			content_kind VARCHAR NOT NULL DEFAULT 'FILE' CHECK (content_kind IN ('FILE', 'LINK')),
+			title VARCHAR NOT NULL,
+			link_url VARCHAR,
+			file_name VARCHAR,
+			storage_key VARCHAR,
+			mime_type VARCHAR,
+			file_size BIGINT CHECK (file_size IS NULL OR file_size >= 0),
+			created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+			CHECK (
+				(content_kind = 'FILE' AND file_name IS NOT NULL AND storage_key IS NOT NULL AND mime_type IS NOT NULL AND file_size IS NOT NULL AND link_url IS NULL) OR
+				(content_kind = 'LINK' AND link_url IS NOT NULL AND file_name IS NULL AND storage_key IS NULL AND mime_type IS NULL AND file_size IS NULL)
+			)
 		);`
 	LESSONS_TABLE = `
 		CREATE TABLE IF NOT EXISTS lessons (
@@ -196,6 +204,14 @@ const (
 			minutes_before INTEGER NOT NULL CHECK (minutes_before BETWEEN 1 AND 40320),
 			PRIMARY KEY (user_id, item_key, minutes_before)
 		);`
+	REMINDER_OVERRIDES_TABLE = `
+		CREATE TABLE IF NOT EXISTS reminder_overrides (
+			user_id UUID NOT NULL REFERENCES users (user_id) ON DELETE CASCADE,
+			item_key VARCHAR NOT NULL,
+			enabled BOOLEAN NOT NULL,
+			updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+			PRIMARY KEY (user_id, item_key)
+		);`
 	PROJECT_SOURCES_TABLE = `
 		CREATE TABLE IF NOT EXISTS project_sources (
 			project_source_id UUID PRIMARY KEY,
@@ -214,16 +230,19 @@ const (
 		CREATE TABLE IF NOT EXISTS notifications (
 			notification_id UUID PRIMARY KEY,
 			user_id UUID NOT NULL REFERENCES users (user_id) ON DELETE CASCADE,
-			kind VARCHAR NOT NULL CHECK (kind IN ('COMMENT', 'RETURNED', 'STATUS', 'EVENT')),
+			kind VARCHAR NOT NULL CHECK (kind IN ('COMMENT', 'RETURNED', 'STATUS', 'EVENT', 'LESSON')),
 			title VARCHAR NOT NULL,
 			text VARCHAR NOT NULL,
 			task_id UUID REFERENCES tasks (task_id) ON DELETE CASCADE,
 			event_id UUID REFERENCES events (event_id) ON DELETE CASCADE,
+			lesson_id UUID REFERENCES lessons (lesson_id) ON DELETE CASCADE,
 			reminder_key VARCHAR,
-			lesson_key VARCHAR,
 			created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
 			read_at TIMESTAMPTZ,
-			push_sent_at TIMESTAMPTZ
+			push_sent_at TIMESTAMPTZ,
+			CONSTRAINT notifications_target_check CHECK (
+				num_nonnulls(task_id, event_id, lesson_id) = 1
+			)
 		);`
 	PUSH_TOKENS_TABLE = `
 		CREATE TABLE IF NOT EXISTS push_tokens (
@@ -366,7 +385,6 @@ const SCHEMA_MIGRATION = `
 	ALTER TABLE comments ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ;
 	ALTER TABLE notifications ADD COLUMN IF NOT EXISTS push_sent_at TIMESTAMPTZ;
 	ALTER TABLE notifications ADD COLUMN IF NOT EXISTS reminder_key VARCHAR;
-	ALTER TABLE notifications ADD COLUMN IF NOT EXISTS lesson_key VARCHAR;
 	DROP INDEX IF EXISTS notifications_user_event_uidx;
 	ALTER TABLE attachments ADD COLUMN IF NOT EXISTS attachment_type VARCHAR NOT NULL DEFAULT 'SOURCE';
 	ALTER TABLE events DROP CONSTRAINT IF EXISTS events_visibility_check;
@@ -415,6 +433,7 @@ const (
 	ATTACHMENTS_UPLOADED_BY_USER_ID_INDEX     = `CREATE INDEX IF NOT EXISTS attachments_uploaded_by_user_id_idx ON attachments (uploaded_by_user_id);`
 	ATTACHMENTS_STORAGE_KEY_INDEX             = `CREATE UNIQUE INDEX IF NOT EXISTS attachments_storage_key_idx ON attachments (storage_key);`
 	LESSONS_GROUP_START_INDEX                 = `CREATE INDEX IF NOT EXISTS lessons_group_starts_at_idx ON lessons (student_group_id, starts_at);`
+	LESSONS_GROUP_EXTERNAL_UNIQUE_INDEX       = `CREATE UNIQUE INDEX IF NOT EXISTS lessons_group_external_uidx ON lessons (student_group_id, external_id) WHERE external_id IS NOT NULL;`
 	EVENT_TYPES_OWNER_INDEX                   = `CREATE INDEX IF NOT EXISTS event_types_created_by_user_id_idx ON event_types (created_by_user_id);`
 	EVENT_TYPES_PROJECT_INDEX                 = `CREATE INDEX IF NOT EXISTS event_types_project_id_idx ON event_types (project_id);`
 	EVENTS_OWNER_START_INDEX                  = `CREATE INDEX IF NOT EXISTS events_owner_starts_at_idx ON events (owner_user_id, starts_at);`
@@ -424,6 +443,6 @@ const (
 	NOTIFICATIONS_USER_INDEX                  = `CREATE INDEX IF NOT EXISTS notifications_user_created_at_idx ON notifications (user_id, created_at DESC);`
 	NOTIFICATIONS_UNREAD_INDEX                = `CREATE INDEX IF NOT EXISTS notifications_user_unread_idx ON notifications (user_id) WHERE read_at IS NULL;`
 	NOTIFICATIONS_EVENT_UNIQUE_INDEX          = `CREATE UNIQUE INDEX IF NOT EXISTS notifications_user_event_uidx ON notifications (user_id, event_id, reminder_key) WHERE event_id IS NOT NULL AND kind = 'EVENT' AND reminder_key IS NOT NULL;`
-	NOTIFICATIONS_LESSON_UNIQUE_INDEX         = `CREATE UNIQUE INDEX IF NOT EXISTS notifications_user_lesson_uidx ON notifications (user_id, lesson_key, reminder_key) WHERE lesson_key IS NOT NULL AND kind = 'EVENT';`
+	NOTIFICATIONS_LESSON_UNIQUE_INDEX         = `CREATE UNIQUE INDEX IF NOT EXISTS notifications_user_lesson_uidx ON notifications (user_id, lesson_id, reminder_key) WHERE lesson_id IS NOT NULL AND kind = 'LESSON' AND reminder_key IS NOT NULL;`
 	USER_REMINDERS_USER_INDEX                 = `CREATE INDEX IF NOT EXISTS user_reminders_user_id_idx ON user_reminders (user_id);`
 )
