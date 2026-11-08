@@ -11,18 +11,20 @@ import AccountSettingsForm from './AccountSettingsForm'
 
 vi.mock('../../api/config', () => ({ isBackendMode: true, apiBaseUrl: '/api/v1' }))
 afterEach(() => vi.restoreAllMocks())
-it('сохраняет серверную группу, оставляя неподдерживаемую смену логина недоступной', async () => {
+it('сохраняет логин и серверную группу через общий API', async () => {
   vi.spyOn(realApi, 'getGroups').mockResolvedValue([{ id: 'group-id', groupCode: 'ТОП-204Б', name: 'ТОП-204Б' }])
   const current = { ...user, id: 'uuid', studentGroup: 'ТОП-203Б' }
-  const updated = { ...current, studentGroup: 'ТОП-204Б', active: true, joinedAt: '2026-01-01' }
+  const updated = { ...current, login: 'new-login', studentGroup: 'ТОП-204Б', active: true, joinedAt: '2026-01-01' }
   const save = vi.spyOn(realApi, 'updateAccount').mockResolvedValue(updated)
   const store = configureStore({ reducer: { auth, team }, preloadedState: { auth: { user: current, loading: false, error: null } } })
   render(<Provider store={store}><AccountSettingsForm user={current} /></Provider>)
-  expect(screen.getByLabelText('Логин')).toHaveAttribute('readonly')
+  expect(screen.getByLabelText('Логин')).not.toHaveAttribute('readonly')
+  await userEvent.clear(screen.getByLabelText('Логин'))
+  await userEvent.type(screen.getByLabelText('Логин'), 'new-login')
   await screen.findByRole('option', { name: 'ТОП-204Б' })
   await userEvent.selectOptions(screen.getByLabelText('Учебная группа'), 'ТОП-204Б')
   await userEvent.click(screen.getByRole('button', { name: 'Сохранить аккаунт' }))
-  expect(save).toHaveBeenCalledWith('uuid', { login: current.login, studentGroup: 'ТОП-204Б' })
+  expect(save).toHaveBeenCalledWith('uuid', { login: 'new-login', studentGroup: 'ТОП-204Б' })
   expect(await screen.findByRole('status')).toHaveTextContent('Данные аккаунта сохранены')
   expect(store.getState().auth.user?.studentGroup).toBe('ТОП-204Б')
 })

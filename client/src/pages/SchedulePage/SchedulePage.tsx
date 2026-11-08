@@ -11,6 +11,7 @@ import type { EventCategory, EventReminders, ScheduleEvent } from '../../types'
 import { loadEventTypes } from '../../utils/eventTypes'
 import SearchField from '../../components/SearchField/SearchField'
 import { useProjectSelection } from '../../store/useProjectSelection'
+import { setProjectForTab } from '../../store/slices/projectsSlice'
 import { loadTeamRequest } from '../../store/slices/teamSlice'
 import { eventCategory, eventFilterCategory, type ScheduleFilterCategory } from '../../utils/schedule'
 import { useSearchParams } from 'react-router-dom'
@@ -87,16 +88,15 @@ const SchedulePage = () => {
   }, [searchParams])
   const linkedEventId = searchParams.get('event')
   const linkedLessonId = searchParams.get('lesson')
-  const linkedNotificationAt = searchParams.get('at')
   useEffect(() => {
-    if (!isBackendMode || !linkedLessonId || !linkedNotificationAt) return
+    if (!isBackendMode || !linkedLessonId) return
     let active = true
     setScope('mine')
-    void realApi.getLessonDate(linkedLessonId, linkedNotificationAt).then(date => { if (active) setSelectedDate(localDate(new Date(date))) }).catch(reason => { if (active) setReminderError(reason.message) })
+    void realApi.getLessonTarget(linkedLessonId).then(lesson => { if (active) { setSelectedDate(lesson.date); setScope(lesson.group === user.studentGroup ? 'mine' : `group:${lesson.group}`); setCategoryFilters(categoryOptions.map(option => option.value)); setQuery('') } }).catch(reason => { if (active) setReminderError(reason.message) })
     return () => { active = false }
-  }, [linkedLessonId, linkedNotificationAt])
-  useEffect(() => { if (isBackendMode && linkedEventId) { let active = true; void realApi.getScheduleEventTarget(linkedEventId).then(event => { if (active) { setSelectedDate(localDate(new Date(event.startsAt))); setScope(event.visibility === 'PERSONAL' && event.ownerId !== user.id ? `user:${event.ownerId}` : 'mine'); setCategoryFilters(categoryOptions.map(option => option.value)); setQuery('') } }).catch(reason => { if (active) setReminderError(reason.message) }); return () => { active = false } } }, [linkedEventId, user.id])
-  useEffect(() => { if (!eventProjectId && projects.length) setEventProjectId(projects[0].id) }, [eventProjectId, projects])
+  }, [linkedLessonId, user.studentGroup])
+  useEffect(() => { if (isBackendMode && linkedEventId) { let active = true; void realApi.getScheduleEventTarget(linkedEventId).then(event => { if (active) { setSelectedDate(localDate(new Date(event.startsAt))); setScope(event.visibility === 'PERSONAL' && event.ownerId !== user.id ? `user:${event.ownerId}` : 'mine'); setCategoryFilters(categoryOptions.map(option => option.value)); setQuery(''); dispatch(setProjectForTab({ tab: 'schedule', projectId: event.projectId ?? 'all' })) } }).catch(reason => { if (active) setReminderError(reason.message) }); return () => { active = false } } }, [linkedEventId, user.id, dispatch])
+  useEffect(() => { if (!isBackendMode && !eventProjectId && projects.length) setEventProjectId(projects[0].id) }, [eventProjectId, projects])
 
   const weekDays = useMemo(() => {
     const monday = new Date(`${selectedDate}T12:00:00`)
@@ -110,14 +110,14 @@ const SchedulePage = () => {
   const visibleDays = slider.mobile ? slider.days : visibleMode === 'week' ? weekDays : [selectedDate]
   const rangeFrom = weekDays[0]
   const rangeTo = weekDays[6]
-  useEffect(() => { if (isBackendMode) dispatch(loadScheduleRequest({ projectId: 'all', personId: selectedOwnerId, groups: scope.startsWith('group:') ? (scope === 'group:both' ? groups.map(item => item.groupCode) : [scope.slice(6)]) : undefined, from: rangeFrom, to: rangeTo })); else dispatch(loadScheduleRequest(activeProjectId)) }, [dispatch, activeProjectId, user.eventPrivacy, selectedOwnerId, scope, rangeFrom, rangeTo, groups])
+  useEffect(() => { if (isBackendMode) dispatch(loadScheduleRequest({ projectId: activeProjectId, personId: selectedOwnerId, groups: scope.startsWith('group:') ? (scope === 'group:both' ? groups.map(item => item.groupCode) : [scope.slice(6)]) : undefined, from: rangeFrom, to: rangeTo })); else dispatch(loadScheduleRequest(activeProjectId)) }, [dispatch, activeProjectId, user.eventPrivacy, selectedOwnerId, scope, rangeFrom, rangeTo, groups])
   const filteredEvents = events.filter((event) => {
     const projectName = projects.find((project) => project.id === event.projectId)?.name ?? ''
     const personal = eventCategory(event) === 'personal'
     const group = scope.startsWith('group:') ? scope.slice(6) : 'both'
     const owner = members.find((member) => member.id === selectedOwnerId) ?? user
     const matchesOwner = personal ? event.ownerId === selectedOwnerId : !!(event.projectId && owner.projectRoles[event.projectId]) || owner.role === 'lead'
-    return (isBackendMode || personal || activeProjectId === 'all' || event.projectId === activeProjectId)
+    return (personal || (isBackendMode && eventCategory(event) !== 'team') || activeProjectId === 'all' || event.projectId === activeProjectId)
       && categoryFilters.includes(eventFilterCategory(event))
       && (isBackendMode || (scope.startsWith('group:') ? !personal && (!event.group || group === 'both' || event.group === 'both' || event.group === group) : matchesOwner))
       && `${event.title} ${event.description} ${projectName}`.toLowerCase().includes(query.toLowerCase())
@@ -150,7 +150,7 @@ const SchedulePage = () => {
     event.preventDefault()
     if (!reminderEvent) return
     try {
-      const reminderMinutes = validateReminderMinutes(reminders.reminderMode === 'type' ? selectedDefaults : reminders.reminderMinutes)
+      const reminderMinutes = validateReminderMinutes(reminders.reminderMode === 'type' && !isBackendMode ? selectedDefaults : reminders.reminderMinutes)
       dispatch(updateEventRemindersRequest({ id: reminderEvent.id, ...reminders, reminderMinutes }))
       setReminderSubmitted(true)
     } catch (reason) { setReminderError((reason as Error).message) }
@@ -163,7 +163,7 @@ const SchedulePage = () => {
     let reminderMinutes: number[]
     try { reminderMinutes = validateReminderMinutes(reminders.reminderMode === 'type' ? selectedDefaults : reminders.reminderMinutes) } catch (reason) { setReminderError((reason as Error).message); return }
     dispatch(createScheduleEventRequest({
-      ...(category === 'personal' ? {} : { projectId: eventProjectId }), title: title.trim(), description: description.trim(),
+      ...((isBackendMode ? category === 'team' : category !== 'personal') && eventProjectId ? { projectId: eventProjectId } : {}), title: title.trim(), description: description.trim(),
       startsAt: `${date}T${time}:00`, endsAt: endTime ? `${date}T${endTime}:00` : undefined,
       type, typeLabel: selectedType.label, typeColor: selectedType.color,
       ...(isBackendMode && category === 'group' ? { group: eventGroup } : {}), reminder: 'none', ...reminders, reminderMinutes, category, ownerId: user.id, location: location.trim() || undefined, author: user.name,
@@ -174,7 +174,7 @@ const SchedulePage = () => {
   return <main className="schedule-page"><div className="container" ref={scheduleRef}>
     <div className="schedule-page__heading">
       <h1>Расписание</h1>
-      {<button className="button" onClick={() => { setDate(selectedDate); setEventSubmitted(false); setReminderEvent(null); setReminderError(''); setReminders({ reminderMode: 'type', reminderMinutes: eventTypes.find((item) => item.id === type)?.reminderMinutes ?? [] }); setCategory(user.role === 'lead' ? 'team' : 'personal'); setShowForm(true) }}><Icon name="plus" /> Добавить событие</button>}
+      {<button className="button" onClick={() => { setDate(selectedDate); if (isBackendMode) setEventProjectId(activeProjectId === 'all' ? '' : activeProjectId); setEventSubmitted(false); setReminderEvent(null); setReminderError(''); setReminders({ reminderMode: 'type', reminderMinutes: eventTypes.find((item) => item.id === type)?.reminderMinutes ?? [] }); setCategory(user.role === 'lead' ? 'team' : 'personal'); setShowForm(true) }}><Icon name="plus" /> Добавить событие</button>}
     </div>
     {slider.mobile && <button type="button" className="schedule-filters-toggle" aria-expanded={filtersOpen} aria-controls={filtersId} onClick={() => setFiltersOpen(open => !open)}><span>Фильтры и настройки</span><Icon name="arrow-down" /></button>}
     <div id={filtersId} className="schedule-options" hidden={slider.mobile && !filtersOpen}>
@@ -236,7 +236,7 @@ const SchedulePage = () => {
               <time dateTime={event.startsAt}>{formatTime(event.startsAt)}{event.endsAt && <small>— {formatTime(event.endsAt)}</small>}</time>
               <span><span className="agenda-item__labels">
                 <small>{eventType?.label ?? event.typeLabel}</small>
-                {!isBackendMode && eventCategory(event) !== 'personal' && <small className="agenda-item__project"><i style={{ background: project?.color }} />{project?.name ?? 'Проект'}</small>}
+                {eventCategory(event) !== 'personal' && event.projectId && event.projectId !== 'all' && <small className="agenda-item__project"><i style={{ background: project?.color }} />{project?.name ?? 'Проект'}</small>}
                 {event.group && eventCategory(event) !== 'personal' && <small className="agenda-item__group">{event.group === 'both' ? 'Группы 203 и 204' : `Группа ${event.group}`}</small>}
               </span><strong>{event.title}</strong><p>{event.description}</p>{reminderButton(event)}</span>
               {event.location && <em>{event.location}</em>}
@@ -262,12 +262,12 @@ const SchedulePage = () => {
       <label>Название<input value={title} onChange={(event) => setTitle(event.target.value)} required /></label>
       <label>Описание<textarea value={description} onChange={(event) => setDescription(event.target.value)} required /></label>
       <div className="schedule-form__grid">
-        {!isBackendMode && category !== 'personal' && <label>Проект<select value={eventProjectId} onChange={(event) => setEventProjectId(event.target.value)} required>{projects.map((project) => <option value={project.id} key={project.id}>{project.name}</option>)}</select></label>}
+        {(isBackendMode ? category === 'team' : category !== 'personal') && <label>Проект<select value={eventProjectId} onChange={(event) => setEventProjectId(event.target.value)} required={!isBackendMode}>{isBackendMode && <option value="">Без проекта</option>}{projects.filter(project => project.canViewBoard !== false).map((project) => <option value={project.id} key={project.id}>{project.name}</option>)}</select></label>}
         <label>Дата<input type="date" value={date} onChange={(event) => setDate(event.target.value)} required /></label>
         <label>Начало<input type="time" value={time} onChange={(event) => setTime(event.target.value)} required /></label>
         <label><span>Окончание <small>(необязательно)</small></span><input type="time" value={endTime} onChange={(event) => setEndTime(event.target.value)} min={time} /></label>
         <label>Категория<select value={category} onChange={(event) => setCategory(event.target.value as EventCategory)}><option value="personal">Личные</option><option value="team">Командные</option><option value="group">Групповые</option></select></label>
-        {isBackendMode && category === 'group' && <label>Учебная группа<select required value={eventGroup} onChange={event => setEventGroup(event.target.value)}><option value="">Выберите группу</option>{groups.map(group => <option key={group.id} value={group.groupCode}>{group.name}</option>)}</select></label>}
+        {isBackendMode && category === 'group' && <label>Учебная группа<select required value={eventGroup} onChange={event => setEventGroup(event.target.value)}><option value="">Выберите группу</option>{groups.filter(group => user.role === 'lead' || group.groupCode === user.studentGroup).map(group => <option key={group.id} value={group.groupCode}>{group.name}</option>)}</select></label>}
         <label>Тип<select value={type} onChange={(event) => setType(event.target.value)} required>{eventTypes.map((item) => <option value={item.id} key={item.id}>{item.label}</option>)}</select></label>
         <label>Место<input value={location} onChange={(event) => setLocation(event.target.value)} placeholder="Необязательно" /></label>
       </div>
@@ -276,7 +276,7 @@ const SchedulePage = () => {
       <button className="button" disabled={saving || (!isBackendMode && category !== 'personal' && !eventProjectId) || !type}>Добавить</button>
     </form>
   </FormModal>}
-  {reminderEvent && <FormModal title="Напоминания события" onClose={() => setReminderEvent(null)}><form className="management-form" onSubmit={submitReminders}><h3>{reminderEvent.title}</h3><EventReminderEditor value={reminders} defaults={selectedDefaults} onChange={setReminders} />{(reminderError || error) && <p className="error-banner" role="alert">{reminderError || error}</p>}<button className="button" disabled={saving}>Сохранить</button></form></FormModal>}</main>
+  {reminderEvent && <FormModal title="Напоминания события" onClose={() => setReminderEvent(null)}><form className="management-form" onSubmit={submitReminders}><h3>{reminderEvent.title}</h3><EventReminderEditor existing value={reminders} defaults={selectedDefaults} onChange={setReminders} />{(reminderError || error) && <p className="error-banner" role="alert">{reminderError || error}</p>}<button className="button" disabled={saving}>Сохранить</button></form></FormModal>}</main>
 }
 
 export default SchedulePage

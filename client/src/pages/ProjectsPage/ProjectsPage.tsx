@@ -118,7 +118,7 @@ const ProjectsPage = () => {
     <form className="management-form" onSubmit={(event) => void submit(event)}>
       <label>Название<input value={name} onChange={(event) => setName(event.target.value)} required /></label>
       <label>Описание<textarea value={description} onChange={(event) => setDescription(event.target.value)} /></label>
-      {!isBackendMode && <fieldset className="color-picker"><legend>Цвет проекта</legend><div>{projectColors.map((value, index) => <label title={projectColorNames[index]} key={value} style={{ background: value }} className={color === value ? 'is-selected' : ''}><input aria-label={`Цвет проекта: ${projectColorNames[index]}`} type="radio" name="project-color" value={value} checked={color === value} onChange={() => setColor(value)} /><span className="visually-hidden">{projectColorNames[index]}</span></label>)}</div></fieldset>}
+      {<fieldset className="color-picker"><legend>Цвет проекта</legend><div>{projectColors.map((value, index) => <label title={projectColorNames[index]} key={value} style={{ background: value }} className={color === value ? 'is-selected' : ''}><input aria-label={`Цвет проекта: ${projectColorNames[index]}`} type="radio" name="project-color" value={value} checked={color === value} onChange={() => setColor(value)} /><span className="visually-hidden">{projectColorNames[index]}</span></label>)}</div></fieldset>}
       <div className="attachment-actions"><label className="file-upload"><Icon name="plus" /> Прикрепить источники<input type="file" multiple onChange={(event) => {
         const files = Array.from(event.target.files ?? [])
         event.target.value = ''

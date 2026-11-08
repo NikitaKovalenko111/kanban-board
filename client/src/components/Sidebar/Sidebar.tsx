@@ -48,7 +48,7 @@ const Sidebar = ({ open, onClose }: Props) => {
     ]),
     ...events.filter((event) => new Date(event.startsAt) >= new Date() && (eventCategory(event) !== 'personal' || event.ownerId === user.id)).map((event) => ({ id: `schedule-${event.id}`, title: 'Предстоящее событие', text: event.title, createdAt: event.startsAt, href: `/schedule?date=${event.startsAt.slice(0, 10)}` })),
   ].sort((a, b) => b.createdAt.localeCompare(a.createdAt))
-  const effectiveReadIds = isBackendMode ? [...serverNotifications.readIds, ...readIds] : readIds
+  const effectiveReadIds = isBackendMode ? serverNotifications.readIds : readIds
   const [reading, setReading] = useState(false)
   const readAll = async () => {
     setReading(true)
@@ -80,7 +80,7 @@ const Sidebar = ({ open, onClose }: Props) => {
         </nav>
         <button className="sidebar__logout" disabled={signingOut} onClick={() => dispatch(isBackendMode ? backendLogoutRequest() : logout())}><Icon name="arrow-right" /> {signingOut ? 'Выходим…' : 'Выйти'}</button>
       </aside>
-      {notificationsOpen && <NotificationsModal items={notifications} readIds={effectiveReadIds} error={serverNotifications.error} onClose={() => setNotificationsOpen(false)} onReadAll={() => void readAll()} reading={reading} onOpen={(item) => { markRead([item.id]); setNotificationsOpen(false); onClose(); navigate(item.href) }} />}
+      {notificationsOpen && <NotificationsModal items={notifications} readIds={effectiveReadIds} error={serverNotifications.error} onClose={() => setNotificationsOpen(false)} onReadAll={() => void readAll()} reading={reading} onOpen={async (item) => { if (isBackendMode) { if (!await serverNotifications.readOne(item.id)) return } else markRead([item.id]); setNotificationsOpen(false); onClose(); navigate(item.href) }} />}
     </>
   )
 }

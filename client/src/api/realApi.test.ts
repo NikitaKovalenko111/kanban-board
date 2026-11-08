@@ -29,6 +29,7 @@ beforeEach(() => {
     requests.push(config)
     const path = config.url
     if (path === '/me') return json(config, profile)
+    if (path === `/users/${otherId}` && config.method === 'patch') return json(config, { ...profile, id: otherId })
     if (path === '/users') return json(config, [profile])
     if (path === '/projects') return json(config, config.method === 'post' ? project : [project])
     if (path === `/projects/${projectId}`) return json(config, project)
@@ -38,6 +39,7 @@ beforeEach(() => {
     if (path === '/tasks/task-id/assign-to-me') { currentTask = { ...currentTask, assigneeId: userId }; return json(config, currentTask) }
     if (path === '/tasks/task-id/move') { currentTask = { ...currentTask, columnId: JSON.parse(config.data).columnId }; return json(config, currentTask) }
     if (path === '/tasks/task-id/comments') return json(config, {})
+    if (path?.endsWith('/attachments/links')) return json(config, {})
     if (path?.endsWith('/attachments')) return json(config, {})
     if (path === '/tasks/task-id') return json(config, currentTask)
     throw Error(`Unexpected request ${config.method} ${path}`)
@@ -46,6 +48,41 @@ beforeEach(() => {
 afterEach(() => { backendHttp.defaults.adapter = original; realApi.clear(); sessionStorage.clear() })
 
 describe('адаптер обновлённого API', () => {
+  it('отправляет сохраняемый цвет при редактировании проекта вместе с UUID участников', async () => {
+    await realApi.updateProject({ id: projectId, name: 'Проект', description: '', color: '#123abc', members: [{ userId, role: 'Тимлид' }] })
+    expect(JSON.parse(requests.find(request => request.method === 'patch')!.data)).toMatchObject({ color: '#123abc', members: [{ userId, role: 'Тимлид' }] })
+  })
+  it('не загружает уже сохранённую ссылку результата повторно после доработки', async () => {
+    currentTask = { ...currentTask, columnId: 'progress', assigneeId: userId, attachments: [{ id: 'saved-link', kind: 'RESULT', contentKind: 'LINK', title: 'Результат', url: 'https://example.com/result', uploadedBy: userId, uploadedAt: task.createdAt }] }
+    await realApi.updateTaskStatus(task.id, 'checking', 'Автор', undefined, [{ id: 'saved-link', name: 'Результат', url: 'https://example.com/result', size: 0 }])
+    expect(requests.some(request => request.url?.endsWith('/attachments/links'))).toBe(false)
+  })
+  it('отключает напоминания пустым PUT и восстанавливает исходные через DELETE', async () => {
+    backendHttp.defaults.adapter = async config => {
+      requests.push(config)
+      if (config.url === '/tasks/task-id') return json(config, currentTask)
+      if (config.url === '/events/event') return json(config, { id: 'event', ownerId: userId, title: 'Событие', startsAt: task.createdAt, endsAt: null, visibility: 'TEAM', group: null, masked: false, partial: false })
+      if (config.url === '/event-types') return json(config, [])
+      return json(config, config.method === 'get' ? { 'event:event': [] } : {})
+    }
+    await realApi.updateEventReminders('event', { reminderMode: 'custom', reminderMinutes: [] })
+    expect(JSON.parse(requests.find(request => request.method === 'put')!.data)).toEqual({ minutes: [] })
+    await realApi.updateEventReminders('event', { reminderMode: 'type', reminderMinutes: [] })
+    expect(requests.some(request => request.method === 'delete' && request.url === '/me/reminders/event%3Aevent')).toBe(true)
+  })
+  it('не выдумывает напоминания типа, когда сервер вернул пустую эффективную настройку', () => {
+    const event: EventDto = { id: 'event', ownerId: userId, title: 'Событие', startsAt: task.createdAt, endsAt: null, visibility: 'TEAM', group: null, typeId: 'type', masked: false, partial: false }
+    expect(mapEvent(event, [{ id: 'type', title: 'Тип', color: '#123456', ownerId: userId, defaultReminders: [90] }], [], { 'event:event': [] }).reminderMinutes).toEqual([])
+    expect(mapEvent(event, [], [], {}).reminderMinutes).toEqual([])
+  })
+  it('преобразует смесь FILE/LINK в исходники и результат без обращения к отсутствующему file', () => {
+    const mapped = mapTask({ ...task, attachments: [
+      { id: 'source-link', kind: 'SOURCE', contentKind: 'LINK', title: 'ТЗ', url: 'https://example.com/spec', uploadedBy: userId, uploadedAt: task.createdAt },
+      { id: 'result-link', kind: 'RESULT', contentKind: 'LINK', title: 'Результат', url: 'https://example.com/result', uploadedBy: userId, uploadedAt: task.createdAt },
+    ] }, columns, [profile])
+    expect(mapped.attachments[0]).toMatchObject({ name: 'ТЗ', url: 'https://example.com/spec' })
+    expect(mapped.resultAttachments[0]).toMatchObject({ name: 'Результат', url: 'https://example.com/result' })
+  })
   it.each([['low', 'LOW'], ['medium', 'NORMAL'], ['high', 'HIGH']] as const)('сохраняет UI-приоритет %s в серверном формате %s', async (priority, wire) => {
     const previous = backendHttp.defaults.adapter as (config: InternalAxiosRequestConfig) => Promise<ReturnType<typeof json>>
     backendHttp.defaults.adapter = async config => {
@@ -62,23 +99,25 @@ describe('адаптер обновлённого API', () => {
     await expect(realApi.updateTaskPriority(task.id, 'high')).rejects.toThrow('только до начала работы')
     expect(requests.some(request => request.method === 'patch')).toBe(false)
   })
-  it('сохраняет собственную группу через PATCH /me без отправки неподдерживаемого login', async () => {
+  it('сохраняет логин и группу через поддерживаемые PATCH профиля и участника', async () => {
     const previous = backendHttp.defaults.adapter as (config: InternalAxiosRequestConfig) => Promise<ReturnType<typeof json>>
     backendHttp.defaults.adapter = async config => {
       if (config.url === '/me' && config.method === 'patch') { requests.push(config); return json(config, { ...profile, studentGroup: 'TOP-204B' }) }
       return previous(config)
     }
     expect(await realApi.updateAccount(userId, { login: profile.username, studentGroup: 'TOP-204B' })).toMatchObject({ id: userId, studentGroup: 'TOP-204B' })
-    expect(JSON.parse(requests.find(request => request.method === 'patch')!.data)).toEqual({ studentGroup: 'TOP-204B' })
-    await expect(realApi.updateAccount(userId, { login: 'new-login' })).rejects.toThrow('Изменение логина')
-    await expect(realApi.updateAccount(otherId, { login: 'other' })).rejects.toThrow('другого участника')
+    expect(JSON.parse(requests.find(request => request.method === 'patch')!.data)).toEqual({ username: profile.username, studentGroup: 'TOP-204B' })
+    await realApi.updateAccount(otherId, { login: 'other', studentGroup: 'TOP-204B' })
+    expect(JSON.parse(requests.find(request => request.url === `/users/${otherId}`)!.data)).toEqual({ username: 'other', studentGroup: 'TOP-204B' })
   })
-  it('не теряет ссылки задачи молча и не создаёт запись перед отказом неподдерживаемого вложения', async () => {
+  it('загружает ссылки SOURCE и RESULT без файлового multipart', async () => {
     const link = { id: 'link:1', name: 'ТЗ', size: 0, url: 'https://example.com' }
-    await expect(realApi.createTask({ projectId, taskName: 'Задача', taskDesc: 'ТЗ', attachments: [link] })).rejects.toThrow('только файлы')
-    expect(requests).toHaveLength(0)
-    await expect(realApi.addTaskSources(task.id, [link])).rejects.toThrow('только файлы')
-    expect(requests).toHaveLength(0)
+    await realApi.createTask({ projectId, taskName: 'Задача', taskDesc: 'ТЗ', attachments: [link] })
+    expect(JSON.parse(requests.find(request => request.url?.endsWith('/attachments/links'))!.data)).toEqual({ kind: 'SOURCE', title: 'ТЗ', url: link.url })
+    currentTask = { ...currentTask, columnId: 'progress', assigneeId: userId }
+    await realApi.updateTaskStatus(task.id, 'checking', 'Автор', undefined, [{ ...link, id: 'link:2' }])
+    expect(JSON.parse(requests.filter(request => request.url?.endsWith('/attachments/links'))[1]!.data).kind).toBe('RESULT')
+    expect(requests.some(request => request.data instanceof FormData)).toBe(false)
   })
   it('при ошибке перехода повторяет сдачу без повторной загрузки уже принятого файла', async () => {
     currentTask = { ...currentTask, columnId: 'progress', assigneeId: userId }
@@ -133,7 +172,7 @@ describe('адаптер обновлённого API', () => {
     }
     await expect(realApi.getSchedule('all')).rejects.toThrow('Не удалось связаться')
   })
-  it('групповой просмотр использует personId участников выбранных групп и исключает личные события', async () => {
+  it('групповой просмотр использует group без активного представителя и исключает личные события', async () => {
     const previous = backendHttp.defaults.adapter as (config: InternalAxiosRequestConfig) => Promise<ReturnType<typeof json>>
     backendHttp.defaults.adapter = async config => config.url === '/users' ? json(config, [profile, { ...profile, id: otherId, studentGroup: 'TOP-204B' }]) : previous(config)
     await realApi.getCurrentUser()
@@ -148,22 +187,20 @@ describe('адаптер обновлённого API', () => {
     }
     const result = await realApi.getSchedule('all', { projectId: 'all', groups: ['TOP-204B'], from: '2026-11-02', to: '2026-11-09' })
     expect(result.map(event => event.id)).toEqual(['team', 'group'])
-    expect(requests.find(request => request.url === '/events')?.params).toMatchObject({ personId: otherId })
+    expect(requests.find(request => request.url === '/events')?.params).toMatchObject({ group: 'TOP-204B' })
   })
   it('находит дату занятия по lessonId, а не по времени доставки уведомления', async () => {
     await realApi.getCurrentUser()
     backendHttp.defaults.adapter = async config => {
       requests.push(config)
-      return json(config, { lessons: [{ id: 'lesson-id', date: '2026-11-06', start: '08:00', end: '09:20' }], source: 'ACTUAL' })
+      return json(config, { id: 'lesson-id', externalId: 'external', date: '2026-11-06', start: '08:00', end: '09:20' })
     }
     expect(await realApi.getLessonDate('lesson-id', '2026-11-05T22:45:00Z')).toBe('2026-11-06T08:00')
-    expect(requests.at(-1)?.params.group).toBe('TOP-203B')
-    expect(requests.at(-1)?.params.from).toMatch(/^\d{4}-\d{2}-\d{2}$/)
+    expect(requests.at(-1)?.url).toBe('/schedule/lessons/lesson-id')
   })
-  it('не подменяет занятие другим при несовпадении внутреннего и внешнего ID', async () => {
-    await realApi.getCurrentUser()
-    backendHttp.defaults.adapter = async config => json(config, { lessons: [{ id: 'external-uust-id', date: '2026-11-06', start: '08:00', title: 'Одинаковое название' }], source: 'ACTUAL' })
-    await expect(realApi.getLessonDate('internal-uuid', '2026-11-05T22:45:00Z')).rejects.toThrow('Занятие не найдено')
+  it('сохраняет ошибку удалённого занятия вместо догадки по названию', async () => {
+    backendHttp.defaults.adapter = async config => { throw new AxiosError('Missing', 'ERR_BAD_RESPONSE', config, undefined, { ...json(config, {}), status: 404 }) }
+    await expect(realApi.getLessonDate('missing')).rejects.toThrow()
   })
   it('отправляет UUID исполнителя строкой в PATCH задачи', async () => {
     await realApi.assignTask(task.id, otherId)
@@ -186,9 +223,9 @@ describe('адаптер обновлённого API', () => {
     expect(user).toMatchObject({ id: userId, role: 'lead', name: profile.fullName, projectRoles: { [projectId]: 'Lead' } })
     expect(requests.every(request => request.headers.get('Authorization') === 'Bearer access')).toBe(true)
   })
-  it('включает создателя в участников проекта и не отправляет mock-поле color', async () => {
+  it('включает создателя в участников проекта и отправляет сохраняемый color', async () => {
     await realApi.createProject({ name: 'Проект', description: 'Описание', color: '#123456' })
-    expect(JSON.parse(requests.find(request => request.method === 'post')!.data)).toEqual({ name: 'Проект', description: 'Описание', members: [{ userId, role: 'Тимлид' }] })
+    expect(JSON.parse(requests.find(request => request.method === 'post')!.data)).toEqual({ name: 'Проект', description: 'Описание', color: '#123456', members: [{ userId, role: 'Тимлид' }] })
   })
   it('загружает исходник после создания задачи, не отправляя pending ID как вложение', async () => {
     const staged = await realApi.uploadAttachment(new File(['source'], 'brief.txt', { type: 'text/plain' }))
@@ -252,12 +289,12 @@ describe('адаптер обновлённого API', () => {
     const file = new File(['data'], 'big.txt'); Object.defineProperty(file, 'size', { value: 11 * 1024 * 1024 })
     await expect(realApi.uploadAttachment(file)).rejects.toThrow('10 МБ')
   })
-  it('не добавляет projectId в события и передаёт RFC3339 время', async () => {
+  it('добавляет projectId только командному событию и передаёт RFC3339 время', async () => {
     const event: EventDto = { id: 'event', ownerId: userId, title: 'Встреча', description: '', startsAt: '2026-11-05T12:00:00Z', endsAt: null, visibility: 'TEAM', group: null, typeId: 'type', masked: false, partial: false }
     backendHttp.defaults.adapter = async config => { requests.push(config); return json(config, config.url === '/events' ? event : config.url === '/event-types' ? [] : {}) }
     await realApi.createScheduleEvent({ projectId, title: 'Встреча', description: '', startsAt: '2026-11-05T12:00:00', type: 'type', typeLabel: '', typeColor: '', reminder: 'none', author: 'Поддельный автор', category: 'team', reminderMode: 'type' })
     const body = JSON.parse(requests.find(request => request.url === '/events')!.data)
-    expect(body.visibility).toBe('TEAM'); expect(body.projectId).toBeUndefined(); expect(body.ownerId).toBeUndefined(); expect(body.startsAt).toMatch(/Z$/)
+    expect(body.visibility).toBe('TEAM'); expect(body.projectId).toBe(projectId); expect(body.ownerId).toBeUndefined(); expect(body.startsAt).toMatch(/Z$/)
   })
   it('сохраняет серверную маскировку чужого личного события', () => {
     const event: EventDto = { id: 'private', ownerId: otherId, title: 'Занят', description: '', startsAt: '2026-11-05T12:00:00Z', endsAt: null, visibility: 'PERSONAL', group: null, masked: true, partial: false }

@@ -27,7 +27,7 @@ it('позволяет заменить напоминания типа прои
   await userEvent.click(screen.getByRole('checkbox', { name: 'Напомнить о событии' }))
   expect(screen.queryByRole('spinbutton')).not.toBeInTheDocument()
   expect(screen.getByTestId('value')).toHaveTextContent('"reminderMinutes":[]')
-  await userEvent.click(screen.getByRole('checkbox', { name: 'Использовать напоминание типа' }))
+  await userEvent.click(screen.getByRole('checkbox', { name: 'Использовать напоминания типа' }))
   expect(screen.queryByRole('spinbutton')).not.toBeInTheDocument()
   expect(screen.getByText('За 30 мин.')).toBeInTheDocument()
 })

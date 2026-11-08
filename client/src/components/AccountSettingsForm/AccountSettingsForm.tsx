@@ -7,11 +7,13 @@ import type { GroupDto } from '../../api/contracts'
 import { useAppDispatch, useAppSelector } from '../../store/hooks'
 import { loginSuccess } from '../../store/slices/authSlice'
 import { updateMemberSuccess } from '../../store/slices/teamSlice'
+import { backendSessionAuthenticated } from '../../store/slices/backendAuthSlice'
 
 export default function AccountSettingsForm({ user }: { user: User }) {
   const dispatch = useAppDispatch()
   const currentId = useAppSelector(state => state.auth.user?.id)
-  const editable = !isBackendMode || user.id === currentId
+  const role = useAppSelector(state => state.auth.user?.role)
+  const editable = user.id === currentId || role === 'lead'
   const [groups, setGroups] = useState<GroupDto[]>([])
   const [login, setLogin] = useState(user.login)
   const [group, setGroup] = useState<StudyGroup | ''>(user.studentGroup ?? '')
@@ -31,14 +33,17 @@ export default function AccountSettingsForm({ user }: { user: User }) {
     try {
       const updated = await api.updateAccount(user.id, { login, studentGroup: group || undefined })
       dispatch(updateMemberSuccess(updated))
-      if (currentId === updated.id) dispatch(loginSuccess(updated))
+      if (currentId === updated.id) {
+        dispatch(loginSuccess(updated))
+        if (isBackendMode) dispatch(backendSessionAuthenticated({ userId: String(updated.id), login: updated.login }))
+      }
       setLogin(updated.login); setSaved(true)
     } catch (reason) { setError(reason instanceof Error ? reason.message : 'Не удалось сохранить аккаунт') }
     finally { setSaving(false) }
   }
   return <form className="management-form" onSubmit={submit}>
-    <label>Логин<input required readOnly={isBackendMode} title={isBackendMode ? 'Изменение логина пока недоступно' : undefined} pattern="[a-zA-Z0-9._-]+" autoComplete="username" value={login} onChange={event => { setLogin(event.target.value); setSaved(false) }} /></label>
-    <label>Учебная группа<select disabled={!editable} value={group} onChange={event => { setGroup(event.target.value as StudyGroup | ''); setSaved(false) }}><option value="">Не указана</option>{isBackendMode ? <>{group && !groups.some(item => item.groupCode === group) && <option value={group}>{group}</option>}{groups.map(item => <option value={item.groupCode} key={item.id}>{item.name}</option>)}</> : <><option value="203">203</option><option value="204">204</option></>}</select></label>
+    <label>Логин<input required disabled={!editable} minLength={isBackendMode ? 3 : undefined} maxLength={isBackendMode ? 32 : undefined} pattern="[a-zA-Z0-9._-]+" autoComplete="username" value={login} onChange={event => { setLogin(event.target.value); setSaved(false) }} /></label>
+    <label>Учебная группа<select disabled={!editable} value={group} onChange={event => { setGroup(event.target.value as StudyGroup | ''); setSaved(false) }}><option value="" disabled={isBackendMode}>Не указана</option>{isBackendMode ? <>{group && !groups.some(item => item.groupCode === group) && <option value={group}>{group}</option>}{groups.map(item => <option value={item.groupCode} key={item.id}>{item.name}</option>)}</> : <><option value="203">203</option><option value="204">204</option></>}</select></label>
     {error && <p className="error-banner" role="alert">{error}</p>}
     {saved && <p role="status">Данные аккаунта сохранены</p>}
     {editable && <button className="button" disabled={saving}>{saving ? 'Сохраняем…' : 'Сохранить аккаунт'}</button>}

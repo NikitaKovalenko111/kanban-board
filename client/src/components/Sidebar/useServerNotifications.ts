@@ -29,12 +29,16 @@ export function useServerNotifications(open: boolean) {
     try { await realApi.readNotifications(); setItems(await realApi.notifications()); setError('') }
     catch (reason) { setError(reason instanceof Error ? reason.message : 'Не удалось прочитать уведомления') }
   }
-  return { items: items.map(notificationItem), readIds: items.filter(item => item.read).map(item => item.id), error, readAll }
+  const readOne = async (id: string) => {
+    try { await realApi.readNotification(id); setItems(current => current.map(item => item.id === id ? { ...item, read: true } : item)); setError(''); return true }
+    catch (reason) { setError(reason instanceof Error ? reason.message : 'Не удалось прочитать уведомление'); return false }
+  }
+  return { items: items.map(notificationItem), readIds: items.filter(item => item.read).map(item => item.id), error, readAll, readOne }
 }
 
 export function notificationItem(item: NotificationDto) {
   const href = item.taskId ? `/?task=${encodeURIComponent(item.taskId)}`
     : item.eventId ? `/schedule?event=${encodeURIComponent(item.eventId)}`
-      : item.lessonId ? `/schedule?lesson=${encodeURIComponent(item.lessonId)}&at=${encodeURIComponent(item.at)}` : '/schedule'
+      : item.lessonId ? `/schedule?lesson=${encodeURIComponent(item.lessonId)}` : '/schedule'
   return { id: item.id, title: item.title, text: item.text, createdAt: item.at, href }
 }

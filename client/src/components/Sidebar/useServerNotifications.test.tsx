@@ -10,7 +10,7 @@ const item: NotificationDto = { id: 'notice', kind: 'LESSON', title: 'Пара',
 
 it('строит независимые ссылки для TASK, EVENT и LESSON с необязательными ID', () => {
   expect(notificationItem(item).href).toContain('lesson=lesson-id')
-  expect(notificationItem(item).href).toContain('at=2026-11-05T23%3A45%3A00Z')
+  expect(notificationItem(item).href).toBe('/schedule?lesson=lesson-id')
   expect(notificationItem({ ...item, lessonId: undefined, eventId: 'event-id', kind: 'EVENT' }).href).toBe('/schedule?event=event-id')
   expect(notificationItem({ ...item, lessonId: undefined, taskId: 'task-id', kind: 'STATUS' }).href).toBe('/?task=task-id')
 })
@@ -25,4 +25,16 @@ it('не отмечает уведомления при открытии и вы
   await act(() => result.current.readAll())
   expect(read).toHaveBeenCalledOnce()
   expect(result.current.readIds).toEqual(['notice'])
+})
+it('подтверждает индивидуальное прочтение на сервере и сохраняет непрочитанное состояние при ошибке', async () => {
+  vi.spyOn(realApi, 'notifications').mockResolvedValue([item])
+  const read = vi.spyOn(realApi, 'readNotification').mockRejectedValueOnce(new Error('Нет связи')).mockResolvedValueOnce()
+  const { result } = renderHook(() => useServerNotifications(true))
+  await waitFor(() => expect(result.current.items).toHaveLength(1))
+  await act(() => result.current.readOne(item.id))
+  expect(result.current.readIds).toEqual([])
+  expect(result.current.error).toBe('Нет связи')
+  await act(() => result.current.readOne(item.id))
+  expect(read).toHaveBeenCalledWith(item.id)
+  expect(result.current.readIds).toEqual([item.id])
 })
