@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"kanban-board/internal/models"
+	repositorycommon "kanban-board/internal/storage/repositories/common"
 
 	"github.com/jackc/pgx/v5/stdlib"
 )
@@ -156,6 +157,25 @@ func (r *Repository) ReadAll(ctx context.Context, userID string) error {
 	return err
 }
 
+func (r *Repository) Read(ctx context.Context, userID, notificationID string) error {
+	result, err := r.db.ExecContext(ctx, `
+		UPDATE notifications
+		SET read_at = COALESCE(read_at, CURRENT_TIMESTAMP)
+		WHERE notification_id = $1 AND user_id = $2
+	`, notificationID, userID)
+	if err != nil {
+		return err
+	}
+	rows, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if rows == 0 {
+		return repositorycommon.ErrNotFound
+	}
+	return nil
+}
+
 func (r *Repository) AddPushToken(ctx context.Context, userID, token, platform string) error {
 	_, err := r.db.ExecContext(ctx, `
 		INSERT INTO push_tokens (user_id, token, platform)
@@ -194,6 +214,11 @@ func (r *Repository) CreateUpcomingEventNotifications(ctx context.Context) (int6
 		JOIN users u ON u.user_id = er.user_id AND u.is_active = TRUE
 		WHERE e.starts_at > CURRENT_TIMESTAMP
 			AND e.starts_at - make_interval(mins => er.minutes_before) <= CURRENT_TIMESTAMP
+			AND NOT EXISTS(
+				SELECT 1 FROM reminder_overrides overrides
+				WHERE overrides.user_id = er.user_id
+					AND overrides.item_key = 'event:' || e.event_id::text
+			)
 		ON CONFLICT DO NOTHING
 	`)
 	if err != nil {
@@ -213,6 +238,10 @@ func (r *Repository) CreateUpcomingEventNotifications(ctx context.Context) (int6
 			'Событие начнётся через ' || ur.minutes_before || ' мин.',
 			e.event_id, 'event:' || ur.minutes_before
 		FROM user_reminders ur
+		JOIN reminder_overrides overrides
+			ON overrides.user_id = ur.user_id
+			AND overrides.item_key = ur.item_key
+			AND overrides.enabled = TRUE
 		JOIN events e ON ur.item_key = 'event:' || e.event_id::text
 		JOIN users u ON u.user_id = ur.user_id AND u.is_active = TRUE
 		WHERE ur.item_key LIKE 'event:%'
@@ -236,7 +265,14 @@ func (r *Repository) CreateUpcomingEventNotifications(ctx context.Context) (int6
 			'Занятие начнётся через ' || ur.minutes_before || ' мин.',
 			l.lesson_id, 'lesson:' || ur.minutes_before
 		FROM user_reminders ur
-		JOIN lessons l ON ur.item_key = 'lesson:' || COALESCE(l.external_id, l.lesson_id::text)
+		JOIN reminder_overrides overrides
+			ON overrides.user_id = ur.user_id
+			AND overrides.item_key = ur.item_key
+			AND overrides.enabled = TRUE
+		JOIN lessons l ON ur.item_key IN (
+			'lesson:' || l.lesson_id::text,
+			'lesson:' || COALESCE(l.external_id, l.lesson_id::text)
+		)
 		JOIN users u ON u.user_id = ur.user_id AND u.is_active = TRUE
 		WHERE ur.item_key LIKE 'lesson:%'
 			AND l.starts_at > CURRENT_TIMESTAMP

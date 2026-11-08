@@ -252,7 +252,10 @@ func (r *Repository) DeleteTask(ctx context.Context, userID, taskID string) ([]s
 	}
 	defer tx.Rollback()
 
-	rows, err := tx.QueryContext(ctx, `SELECT storage_key FROM attachments WHERE task_id = $1`, taskID)
+	rows, err := tx.QueryContext(ctx, `
+		SELECT storage_key FROM attachments
+		WHERE task_id = $1 AND storage_key IS NOT NULL
+	`, taskID)
 	if err != nil {
 		return nil, err
 	}
@@ -619,7 +622,10 @@ func (r *Repository) comments(ctx context.Context, taskID string) ([]models.Comm
 
 func (r *Repository) attachments(ctx context.Context, taskID string) ([]models.Attachment, error) {
 	rows, err := r.db.QueryContext(ctx, `
-		SELECT attachment_id, task_id, uploaded_by_user_id, attachment_type, file_name, storage_key, mime_type, file_size, created_at
+		SELECT
+			attachment_id, task_id, uploaded_by_user_id, attachment_type,
+			content_kind, title, link_url, file_name, storage_key, mime_type,
+			file_size, created_at
 		FROM attachments WHERE task_id = $1 ORDER BY created_at
 	`, taskID)
 	if err != nil {
@@ -629,11 +635,25 @@ func (r *Repository) attachments(ctx context.Context, taskID string) ([]models.A
 	items := make([]models.Attachment, 0)
 	for rows.Next() {
 		var item models.Attachment
-		if err := rows.Scan(&item.ID, &item.TaskID, &item.UploadedBy, &item.Kind, &item.File.Name, &item.StorageKey, &item.File.MimeType, &item.File.SizeBytes, &item.UploadedAt); err != nil {
+		var linkURL, fileName, storageKey, mimeType sql.NullString
+		var fileSize sql.NullInt64
+		if err := rows.Scan(
+			&item.ID, &item.TaskID, &item.UploadedBy, &item.Kind,
+			&item.ContentKind, &item.Title, &linkURL, &fileName, &storageKey,
+			&mimeType, &fileSize, &item.UploadedAt,
+		); err != nil {
 			return nil, err
 		}
-		item.File.ID = item.ID
-		item.File.DownloadURL = "/api/v1/files/" + item.ID
+		if linkURL.Valid {
+			item.URL = &linkURL.String
+		}
+		if item.ContentKind == "FILE" {
+			item.StorageKey = storageKey.String
+			item.File = &models.FileInfo{
+				ID: item.ID, Name: fileName.String, SizeBytes: fileSize.Int64,
+				MimeType: mimeType.String, DownloadURL: "/api/v1/files/" + item.ID,
+			}
+		}
 		items = append(items, item)
 	}
 	return items, rows.Err()

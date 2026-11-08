@@ -26,6 +26,7 @@ func (r *Repository) ListProjects(ctx context.Context, userID string) ([]models.
 		SELECT
 			p.project_id,
 			p.name,
+			p.color,
 			CASE WHEN access.can_view_board THEN COALESCE(p.description, '') ELSE '' END,
 			access.can_view_board
 		FROM projects p
@@ -55,6 +56,7 @@ func (r *Repository) ListProjects(ctx context.Context, userID string) ([]models.
 		if err := rows.Scan(
 			&project.ID,
 			&project.Name,
+			&project.Color,
 			&project.Description,
 			&project.CanViewBoard,
 		); err != nil {
@@ -77,10 +79,10 @@ func (r *Repository) GetProject(ctx context.Context, userID, projectID string) (
 	}
 	var project models.Project
 	err := r.db.QueryRowContext(ctx, `
-		SELECT project_id, name, COALESCE(description, '')
+		SELECT project_id, name, color, COALESCE(description, '')
 		FROM projects
 		WHERE project_id = $1 AND is_archived = FALSE
-	`, projectID).Scan(&project.ID, &project.Name, &project.Description)
+	`, projectID).Scan(&project.ID, &project.Name, &project.Color, &project.Description)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, repositorycommon.ErrNotFound
 	}
@@ -163,7 +165,7 @@ func (r *Repository) fillProject(ctx context.Context, project *models.Project) e
 	return rows.Err()
 }
 
-func (r *Repository) CreateProject(ctx context.Context, userID, name, description string, members []models.ProjectMember) (string, error) {
+func (r *Repository) CreateProject(ctx context.Context, userID, name, description, color string, members []models.ProjectMember) (string, error) {
 	if err := repositorycommon.RequireCaptain(ctx, r.db, userID); err != nil {
 		return "", err
 	}
@@ -175,10 +177,10 @@ func (r *Repository) CreateProject(ctx context.Context, userID, name, descriptio
 
 	var projectID, boardID string
 	if err := tx.QueryRowContext(ctx, `
-		INSERT INTO projects (project_id, created_by_user_id, name, description)
-		VALUES (gen_random_uuid(), $1, $2, NULLIF($3, ''))
+		INSERT INTO projects (project_id, created_by_user_id, name, description, color)
+		VALUES (gen_random_uuid(), $1, $2, NULLIF($3, ''), $4)
 		RETURNING project_id
-	`, userID, name, description).Scan(&projectID); err != nil {
+	`, userID, name, description, color).Scan(&projectID); err != nil {
 		return "", err
 	}
 	if err := tx.QueryRowContext(ctx, `
@@ -217,7 +219,7 @@ func (r *Repository) CreateProject(ctx context.Context, userID, name, descriptio
 	return projectID, nil
 }
 
-func (r *Repository) UpdateProject(ctx context.Context, actorID, projectID string, name, description *string, members *[]models.ProjectMember) error {
+func (r *Repository) UpdateProject(ctx context.Context, actorID, projectID string, name, description *string, members *[]models.ProjectMember, color *string) error {
 	if err := repositorycommon.RequireCaptain(ctx, r.db, actorID); err != nil {
 		return err
 	}
@@ -232,9 +234,10 @@ func (r *Repository) UpdateProject(ctx context.Context, actorID, projectID strin
 		SET
 			name = COALESCE($1, name),
 			description = CASE WHEN $2 THEN NULLIF($3, '') ELSE description END,
+			color = COALESCE($4, color),
 			updated_at = CURRENT_TIMESTAMP
-		WHERE project_id = $4
-	`, name, description != nil, description, projectID)
+		WHERE project_id = $5
+	`, name, description != nil, description, color, projectID)
 	if err != nil {
 		return err
 	}
