@@ -31,7 +31,6 @@ import com.kanbanboard.mobile.feature.schedule.EventEditorRouteScreen
 import java.time.LocalDate
 import com.kanbanboard.mobile.core.model.TaskId
 import com.kanbanboard.mobile.feature.auth.LoginRouteScreen
-import com.kanbanboard.mobile.feature.columns.ColumnsRouteScreen
 import com.kanbanboard.mobile.feature.main.MainScreen
 import com.kanbanboard.mobile.feature.task.TaskDetailRouteScreen
 import com.kanbanboard.mobile.feature.task.TaskEditorRouteScreen
@@ -81,7 +80,6 @@ fun AppNavHost(loggedIn: Boolean) {
                 onCreateProject = { if (entry.isResumed()) nav.navigate(ProjectEditorRoute()) },
                 onOpenTask = { id -> if (entry.isResumed()) nav.navigate(TaskRoute(id.value)) },
                 onCreateTask = { projectId -> if (entry.isResumed()) nav.navigate(TaskEditorRoute(projectId.value)) },
-                onManageColumns = { projectId -> if (entry.isResumed()) nav.navigate(ColumnsRoute(projectId.value)) },
                 onOpenEvent = { id -> if (entry.isResumed()) nav.navigate(EventRoute(id.value)) },
                 onCreateEvent = { date -> if (entry.isResumed()) nav.navigate(EventEditorRoute(date = date.toString())) },
                 onOpenAccountSettings = { if (entry.isResumed()) nav.navigate(AccountSettingsRoute) },
@@ -191,12 +189,5 @@ fun AppNavHost(loggedIn: Boolean) {
             )
         }
 
-        composable<ColumnsRoute> { entry ->
-            val route = entry.toRoute<ColumnsRoute>()
-            ColumnsRouteScreen(
-                projectId = ProjectId(route.projectId),
-                onClose = { if (entry.isResumed()) nav.popBackStack() },
-            )
-        }
     }
 }

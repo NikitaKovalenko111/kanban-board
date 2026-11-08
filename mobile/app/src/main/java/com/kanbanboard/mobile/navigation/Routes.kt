@@ -9,7 +9,6 @@ import kotlinx.serialization.Serializable
 @Serializable data object MainRoute
 @Serializable data class TaskRoute(val taskId: String)
 @Serializable data class TaskEditorRoute(val projectId: String, val taskId: String? = null)
-@Serializable data class ColumnsRoute(val projectId: String)
 @Serializable data class EventRoute(val eventId: String)
 /** date — ISO-дата дня, с которого открыли создание события. */
 @Serializable data class EventEditorRoute(val eventId: String? = null, val date: String? = null)
