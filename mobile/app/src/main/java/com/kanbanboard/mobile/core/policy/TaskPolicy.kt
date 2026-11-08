@@ -102,7 +102,8 @@ object TaskPolicy {
         if (index < 0) return null
         val current = sorted[index]
         val target = sorted.getOrNull(index + direction) ?: return null
-        if (direction > 0 && target.kind == ColumnKind.IN_PROGRESS && canTake(session, task, current)) {
+        // Серверный /take принимает только свободную задачу; назначенную перемещаем через /move.
+        if (direction > 0 && target.kind == ColumnKind.IN_PROGRESS && task.assigneeId == null && canTake(session, task, current)) {
             return QuickMove.Take(target)
         }
         val allowed = moveOptions(session, task, sorted).any { it.target.id == target.id && !it.requiresComment }

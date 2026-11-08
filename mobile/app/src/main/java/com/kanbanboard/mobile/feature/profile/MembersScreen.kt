@@ -211,6 +211,8 @@ fun MembersRouteScreen(onBack: () -> Unit) {
 
 private fun roleTitle(role: TeamRole) = if (role == TeamRole.CAPTAIN) "Капитан" else "Участник"
 
+private val accountLoginPattern = Regex("^[A-Za-z0-9._-]{3,32}$")
+
 @Composable
 private fun MemberDialog(
     member: TeamMember,
@@ -282,7 +284,8 @@ private fun AddAccountDialog(
     var group by rememberSaveable { mutableStateOf(StudyGroup.G203) }
     var role by rememberSaveable { mutableStateOf(TeamRole.MEMBER) }
     var error by remember { mutableStateOf<String?>(null) }
-    val valid = fullName.isNotBlank() && login.isNotBlank() && password.length >= 8
+    val loginValid = accountLoginPattern.matches(login)
+    val valid = fullName.isNotBlank() && loginValid && password.length >= 8
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -290,7 +293,13 @@ private fun AddAccountDialog(
         text = {
             Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 OutlinedTextField(fullName, { fullName = it }, label = { Text("ФИО") }, singleLine = true)
-                OutlinedTextField(login, { login = it.trim() }, label = { Text("Логин") }, singleLine = true)
+                OutlinedTextField(
+                    login, { login = it.trim() },
+                    label = { Text("Логин") },
+                    supportingText = { Text("3–32 латинские буквы, цифры, точка, _ или -") },
+                    isError = login.isNotEmpty() && !loginValid,
+                    singleLine = true,
+                )
                 OutlinedTextField(
                     password, { password = it },
                     label = { Text("Временный пароль") },
