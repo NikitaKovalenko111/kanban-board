@@ -1,5 +1,7 @@
+import { useModal } from '../FormModal/useModal'
+import { useMediaQuery } from '../../utils/useMediaQuery'
 import Icon from '../Icon/Icon'
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Link, NavLink, useNavigate } from 'react-router-dom'
 import { useAppDispatch, useAppSelector } from '../../store/hooks'
 import { logout } from '../../store/slices/authSlice'
@@ -15,6 +17,9 @@ interface Props { open: boolean; onClose: () => void }
 const Sidebar = ({ open, onClose }: Props) => {
   const dispatch = useAppDispatch()
   const navigate = useNavigate()
+  const sidebarRef = useRef<HTMLElement>(null)
+  const mobile = useMediaQuery('(max-width: 1024px)')
+  useModal(sidebarRef, onClose, mobile && open)
   const user = useAppSelector((state) => state.auth.user)!
   const activeProjectId = useAppSelector((state) => state.projects.activeProjectId)
   const tasks = useAppSelector((state) => state.tasks.items)
@@ -37,16 +42,6 @@ const Sidebar = ({ open, onClose }: Props) => {
     ]),
     ...events.filter((event) => new Date(event.startsAt) >= new Date() && (eventCategory(event) !== 'personal' || event.ownerId === user.id)).map((event) => ({ id: `schedule-${event.id}`, title: 'Предстоящее событие', text: event.title, createdAt: event.startsAt, href: `/schedule?date=${event.startsAt.slice(0, 10)}` })),
   ].sort((a, b) => b.createdAt.localeCompare(a.createdAt))
-  const notificationIds = notifications.map((item) => item.id).join('|')
-  useEffect(() => {
-    if (!notificationsOpen) return
-    setReadIds((current) => {
-      const next = [...new Set([...current, ...notificationIds.split('|').filter(Boolean)])]
-      if (next.length === current.length) return current
-      localStorage.setItem(`notification-reads-${user.id}`, JSON.stringify(next))
-      return next
-    })
-  }, [notificationsOpen, notificationIds, user.id])
   const markRead = (ids: string[]) => {
     const next = [...new Set([...readIds, ...ids])]
     setReadIds(next)
@@ -56,11 +51,11 @@ const Sidebar = ({ open, onClose }: Props) => {
   const projectRole = activeProjectId === 'all' ? (user.role === 'lead' ? 'Капитан' : 'Участник') : user.projectRoles?.[activeProjectId] ?? 'Участник проекта'
   return (
     <>
-      <button className={`sidebar-backdrop ${open ? 'is-open' : ''}`} onClick={onClose} aria-label="Закрыть меню" />
-      <aside className={`sidebar ${open ? 'is-open' : ''}`}>
+      <button className={`sidebar-backdrop ${open ? 'is-open' : ''}`} onClick={onClose} tabIndex={-1} aria-label="Закрыть меню" />
+      <aside className={`sidebar ${open ? 'is-open' : ''}`} ref={sidebarRef} tabIndex={-1} inert={mobile && !open} role={mobile && open ? 'dialog' : undefined} aria-modal={mobile && open ? true : undefined} aria-label={mobile ? 'Навигация' : undefined}>
         <div className="sidebar__top"><button className="icon-button" onClick={onClose} aria-label="Закрыть"><Icon name="close" /></button></div>
         <Link className="sidebar__person" to="/profile" onClick={onClose}><UserAvatar user={user} size="large" /><div><strong>{user.name}</strong><small>{projectRole}</small></div></Link>
-        <button className={`sidebar__notifications ${notificationsOpen ? 'is-active' : ''}`} type="button" aria-expanded={notificationsOpen} onClick={() => { markRead(notifications.map((item) => item.id)); setNotificationsOpen(true) }}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9a6 6 0 0 1 12 0c0 7 3 7 3 7H3s3 0 3-7ZM10 20h4" /></svg><span>Уведомления</span>{unreadCount > 0 && <b>{unreadCount}</b>}</button>
+        <button className={`sidebar__notifications ${notificationsOpen ? 'is-active' : ''}`} type="button" aria-expanded={notificationsOpen} onClick={() => setNotificationsOpen(true)}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9a6 6 0 0 1 12 0c0 7 3 7 3 7H3s3 0 3-7ZM10 20h4" /></svg><span>Уведомления</span>{unreadCount > 0 && <b>{unreadCount}</b>}</button>
         <nav className="sidebar__nav">
           <NavLink to="/" onClick={onClose}>▦ <span>Kanban-доска</span></NavLink>
           <NavLink to="/schedule" onClick={onClose}>▤ <span>Расписание</span></NavLink>
@@ -72,7 +67,7 @@ const Sidebar = ({ open, onClose }: Props) => {
         </nav>
         <button className="sidebar__logout" onClick={() => dispatch(logout())}><Icon name="arrow-right" /> Выйти</button>
       </aside>
-      {notificationsOpen && <NotificationsModal items={notifications} readIds={readIds} onClose={() => setNotificationsOpen(false)} onOpen={(href) => { setNotificationsOpen(false); onClose(); navigate(href) }} />}
+      {notificationsOpen && <NotificationsModal items={notifications} readIds={readIds} onClose={() => setNotificationsOpen(false)} onReadAll={() => markRead(notifications.map(item => item.id))} onOpen={(item) => { markRead([item.id]); setNotificationsOpen(false); onClose(); navigate(item.href) }} />}
     </>
   )
 }

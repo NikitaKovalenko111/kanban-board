@@ -1,5 +1,5 @@
 import { createSlice, type PayloadAction } from '@reduxjs/toolkit'
-import type { AddTaskCommentPayload, NewTask, Task, TaskAssignment, TaskStatusUpdate } from '../../types'
+import type { Attachment, TaskPriority, AddTaskCommentPayload, NewTask, Task, TaskAssignment, TaskStatusUpdate } from '../../types'
 
 interface TasksState { items: Task[]; loading: boolean; saving: boolean; error: string | null }
 const initialState: TasksState = { items: [], loading: false, saving: false, error: null }
@@ -11,7 +11,9 @@ const tasksSlice = createSlice({
     loadTasksSuccess(state, action: PayloadAction<Task[]>) { state.items = action.payload; state.loading = false },
     createTaskRequest(state, _action: PayloadAction<NewTask>) { state.saving = true; state.error = null },
     createTaskSuccess(state, action: PayloadAction<Task>) { state.items.unshift(action.payload); state.saving = false },
-    updateTaskStatusRequest(state, _action: PayloadAction<TaskStatusUpdate>) { state.saving = true },
+    updateTaskStatusRequest(state, _action: PayloadAction<TaskStatusUpdate>) { state.saving = true; state.error = null },
+    updateTaskPriorityRequest(state, _action: PayloadAction<{ taskId: number; priority: TaskPriority }>) { state.saving = true; state.error = null },
+    addTaskSourcesRequest(state, _action: PayloadAction<{ taskId: number; files: Attachment[] }>) { state.saving = true; state.error = null },
     assignTaskRequest(state, _action: PayloadAction<TaskAssignment>) { state.saving = true; state.error = null },
     addTaskCommentRequest(state, _action: PayloadAction<AddTaskCommentPayload>) { state.saving = true; state.error = null },
     updateTaskSuccess(state, action: PayloadAction<Task>) {
@@ -23,5 +25,5 @@ const tasksSlice = createSlice({
   },
 })
 
-export const { loadTasksRequest, loadTasksSuccess, createTaskRequest, createTaskSuccess, updateTaskStatusRequest, assignTaskRequest, addTaskCommentRequest, updateTaskSuccess, tasksFailure } = tasksSlice.actions
+export const { updateTaskPriorityRequest, addTaskSourcesRequest, loadTasksRequest, loadTasksSuccess, createTaskRequest, createTaskSuccess, updateTaskStatusRequest, assignTaskRequest, addTaskCommentRequest, updateTaskSuccess, tasksFailure } = tasksSlice.actions
 export default tasksSlice.reducer
