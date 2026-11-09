@@ -1,5 +1,7 @@
 package com.kanbanboard.mobile.feature.schedule
 
+import com.kanbanboard.mobile.core.features.Features
+
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -81,7 +83,7 @@ fun EventTypeDialog(
                     shape = MaterialTheme.shapes.small,
                     modifier = Modifier.fillMaxWidth(),
                 )
-                Caption("цвет")
+                Caption("Цвет")
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     AppPalette.forEach { option ->
                         val selected = option == color
@@ -115,13 +117,13 @@ fun EventTypeDialog(
                     }
                 }
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Caption("превью")
+                    Caption("Превью")
                     Spacer(Modifier.width(10.dp))
                     Tag(title.ifBlank { "Тип" }, color = Color(color), dot = true)
                 }
-                Caption("напоминания по умолчанию")
+                Caption("Напоминания по умолчанию")
                 Caption(
-                    if (reminders.isEmpty()) "Без напоминаний" else reminders.sorted().joinToString(", ") { ReminderPresets.label(it) },
+                    if (reminders.isEmpty()) "Без напоминаний" else ReminderPresets.list(reminders),
                     color = MaterialTheme.colorScheme.onSurface,
                     maxLines = 3,
                 )
@@ -144,7 +146,13 @@ fun EventTypeDialog(
         dismissButton = {
             Row {
                 if (onDelete != null) {
-                    TextButton(onClick = onDelete, enabled = !sending) { Text("Удалить", color = MaterialTheme.colorScheme.error) }
+                    // Удаление типов есть только в мобилке — заблокировано до решения команды.
+                    TextButton(onClick = onDelete, enabled = Features.DELETE_EVENT_TYPE && !sending) {
+                        Text(
+                            "Удалить",
+                            color = if (Features.DELETE_EVENT_TYPE) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f),
+                        )
+                    }
                 }
                 TextButton(onClick = onDismiss) { Text("Отмена") }
             }

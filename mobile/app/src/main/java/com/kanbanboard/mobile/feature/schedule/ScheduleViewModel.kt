@@ -51,6 +51,18 @@ enum class GroupFilter(val title: String, val groups: Set<StudyGroup>) {
     }
 }
 
+/** Что показывает лента (выпадающее меню «Моё расписание»). */
+sealed interface ScheduleView {
+    /** Моё полное расписание: пары моей группы, события, дедлайны; фильтр категорий работает. */
+    data object Mine : ScheduleView
+
+    /** Только пары выбранной группы (групп); фильтр категорий заблокирован. */
+    data class Groups(val filter: GroupFilter) : ScheduleView
+
+    /** Расписание участника с учётом его приватности. */
+    data class Person(val id: UserId) : ScheduleView
+}
+
 /** Категории ленты. Фильтр — набор отмеченных категорий (компактное меню с галочками). */
 enum class AgendaCategory(val title: String) {
     LESSONS("Пары"),
@@ -82,7 +94,7 @@ data class ScheduleUiState(
     val me: Session? = null,
     val members: List<User> = emptyList(),
     val person: User? = null,
-    val groupFilter: GroupFilter = GroupFilter.G203,
+    val view: ScheduleView = ScheduleView.Mine,
     val categories: Set<AgendaCategory> = AgendaCategory.entries.toSet(),
     val selectedDate: LocalDate = LocalDate.now(),
     val days: Map<LocalDate, List<AgendaItem>> = emptyMap(),
@@ -91,7 +103,10 @@ data class ScheduleUiState(
     /** Предупреждение, если пары показаны не из ИСУ (нет связи — кэш или шаблон). null — всё в порядке. */
     val lessonsWarning: String? = null,
 ) {
-    val isMine: Boolean get() = person != null && person.id == me?.user?.id
+    val isMine: Boolean get() = view is ScheduleView.Mine
+
+    /** Режим «только пары группы»: события и дедлайны не показываются, фильтр категорий заблокирован. */
+    val lessonsOnly: Boolean get() = view is ScheduleView.Groups
     fun isLoaded(date: LocalDate): Boolean =
         loadedFrom != null && loadedTo != null && !date.isBefore(loadedFrom) && !date.isAfter(loadedTo)
     fun weekStart(): LocalDate = selectedDate.with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY))
@@ -102,6 +117,7 @@ private data class Query(
     val members: List<User>,
     val person: User,
     val groups: Set<StudyGroup>,
+    val lessonsOnly: Boolean,
     val from: LocalDate,
     val to: LocalDate,
 )
@@ -124,9 +140,8 @@ class ScheduleViewModel(
     board: BoardRepository,
 ) : ViewModel() {
 
-    private val personId = MutableStateFlow<UserId?>(null)
-    /** null — «моя группа»; фильтр живёт во ViewModel и не сбрасывается при свайпе дней (MOB-09). */
-    private val groupFilter = MutableStateFlow<GroupFilter?>(null)
+    /** Выбор в меню «Моё расписание»; живёт во ViewModel и не сбрасывается при свайпе дней (MOB-09). */
+    private val view = MutableStateFlow<ScheduleView>(ScheduleView.Mine)
     private val categories = MutableStateFlow(AgendaCategory.entries.toSet())
     private val selectedDate = MutableStateFlow(LocalDate.now())
 
@@ -144,19 +159,20 @@ class ScheduleViewModel(
     private val query: Flow<Query?> = combine(
         sessions.session,
         team.members,
-        personId,
-        groupFilter,
+        view,
         window,
-    ) { me, members, pid, filter, (from, to) ->
+    ) { me, members, selected, (from, to) ->
         if (me == null) return@combine null
         val users = members.map { it.user }.filter { it.isActive }
-        val person = users.firstOrNull { it.id == (pid ?: me.user.id) } ?: me.user
-        val groups = if (person.id == me.user.id) {
-            (filter ?: GroupFilter.of(me.user.studyGroup)).groups
-        } else {
-            setOf(person.studyGroup)
+        when (selected) {
+            ScheduleView.Mine -> Query(me, users, me.user, setOf(me.user.studyGroup), lessonsOnly = false, from, to)
+            is ScheduleView.Groups -> Query(me, users, me.user, selected.filter.groups, lessonsOnly = true, from, to)
+            is ScheduleView.Person -> {
+                // Участника могли заблокировать или удалить — тогда возвращаемся к своему расписанию.
+                val person = users.firstOrNull { it.id == selected.id } ?: me.user
+                Query(me, users, person, setOf(person.studyGroup), lessonsOnly = false, from, to)
+            }
         }
-        Query(me, users, person, groups, from, to)
     }.distinctUntilChanged()
 
     private val loaded: Flow<Loaded?> = query.flatMapLatest { q ->
@@ -165,10 +181,17 @@ class ScheduleViewModel(
         val lessonFlows = q.groups.sortedBy { it.code }.map { schedule.lessons(it, q.from, q.to) }
         val lessonsFlow: Flow<List<LessonsSnapshot>> =
             if (lessonFlows.isEmpty()) flowOf(emptyList()) else combine(lessonFlows) { it.toList() }
+        // В режиме «только пары группы» события и дедлайны не нужны.
+        val eventsFlow = if (q.lessonsOnly) {
+            flowOf(emptyList())
+        } else {
+            schedule.events(q.person.id, q.groups, q.from.atStartOfDay(zone).toInstant(), q.to.plusDays(1).atStartOfDay(zone).toInstant())
+        }
+        val tasksFlow = if (q.lessonsOnly) flowOf(emptyList()) else board.assignedTasks(q.person.id)
         combine(
             lessonsFlow,
-            schedule.events(q.person.id, q.groups, q.from.atStartOfDay(zone).toInstant(), q.to.plusDays(1).atStartOfDay(zone).toInstant()),
-            board.assignedTasks(q.person.id),
+            eventsFlow,
+            tasksFlow,
             schedule.myReminders,
             schedule.eventTypes,
         ) { snapshots, events, tasks, reminders, types ->
@@ -184,7 +207,7 @@ class ScheduleViewModel(
         }
     }
 
-    val state: StateFlow<ScheduleUiState> = combine(loaded, groupFilter, categories, selectedDate) { data, gFilter, aFilter, date ->
+    val state: StateFlow<ScheduleUiState> = combine(loaded, view, categories, selectedDate) { data, selectedView, aFilter, date ->
         if (data == null) {
             ScheduleUiState(loading = true, categories = aFilter, selectedDate = date)
         } else {
@@ -194,10 +217,10 @@ class ScheduleViewModel(
                 me = q.me,
                 members = q.members,
                 person = q.person,
-                groupFilter = gFilter ?: GroupFilter.of(q.me.user.studyGroup),
+                view = if (selectedView is ScheduleView.Person && q.person.id == q.me.user.id) ScheduleView.Mine else selectedView,
                 categories = aFilter,
                 selectedDate = date,
-                days = buildDays(data, aFilter),
+                days = buildDays(data, if (q.lessonsOnly) setOf(AgendaCategory.LESSONS) else aFilter),
                 loadedFrom = q.from,
                 loadedTo = q.to,
                 lessonsWarning = data.lessonsUpdated?.let { snapshot ->
@@ -207,6 +230,7 @@ class ScheduleViewModel(
                             "Нет связи с ИСУ — показано сохранённое расписание" +
                                 (snapshot.updatedAt?.let { " от ${Formats.dateTime(it)}" } ?: "")
                         LessonsOrigin.UNAVAILABLE -> "Не удалось получить пары с ИСУ — расписание появится, когда сайт станет доступен"
+                        LessonsOrigin.EXAMPLE -> "Нет связи с ИСУ — показан пример расписания"
                     }
                 },
             )
@@ -255,7 +279,7 @@ class ScheduleViewModel(
                 else -> Formats.dateTime(end.toInstant())
             }
             val key = ReminderKeys.event(event.id)
-            val owner = names[event.ownerId] ?: "участник"
+            val owner = names[event.ownerId] ?: "Участник"
             items += start.toLocalDate() to AgendaItem(
                 key = key,
                 kind = if (event.masked) AgendaKind.BUSY else AgendaKind.EVENT,
@@ -304,12 +328,8 @@ class ScheduleViewModel(
         selectedDate.value = date
     }
 
-    fun selectPerson(id: UserId) {
-        personId.value = id
-    }
-
-    fun setGroupFilter(filter: GroupFilter) {
-        groupFilter.value = filter
+    fun selectView(selected: ScheduleView) {
+        view.value = selected
     }
 
     fun toggleCategory(category: AgendaCategory) {

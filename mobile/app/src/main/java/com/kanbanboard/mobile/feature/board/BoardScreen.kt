@@ -25,7 +25,6 @@ import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.automirrored.outlined.ArrowForward
 import androidx.compose.material.icons.outlined.Inbox
 import androidx.compose.material.icons.outlined.PlayArrow
-import androidx.compose.material.icons.outlined.Tune
 import androidx.compose.material3.Badge
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
@@ -34,7 +33,6 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
@@ -84,7 +82,6 @@ private const val DONE_LIMIT = 5
 fun BoardRouteScreen(
     onOpenTask: (TaskId) -> Unit,
     onCreateTask: (ProjectId) -> Unit,
-    onManageColumns: (ProjectId) -> Unit,
     onOpenHistory: () -> Unit,
     onOpenProjects: () -> Unit,
     onCreateProject: () -> Unit,
@@ -106,7 +103,6 @@ fun BoardRouteScreen(
         onOpenTask = onOpenTask,
         onTaskMenu = { menuFor = it },
         onCreateTask = onCreateTask,
-        onManageColumns = onManageColumns,
         onOpenHistory = onOpenHistory,
         onOpenProjects = onOpenProjects,
         onCreateProject = onCreateProject,
@@ -132,7 +128,6 @@ private fun BoardScreen(
     onOpenTask: (TaskId) -> Unit,
     onTaskMenu: (TaskCardUi) -> Unit,
     onCreateTask: (ProjectId) -> Unit,
-    onManageColumns: (ProjectId) -> Unit,
     onOpenHistory: () -> Unit,
     onOpenProjects: () -> Unit,
     onCreateProject: () -> Unit,
@@ -145,14 +140,6 @@ private fun BoardScreen(
                 title = state.project?.name ?: "Доска",
                 titleContent = {
                     ProjectSwitcher(state.project, state.projects, state.session?.user?.id, onSelectProject, onOpenProjects)
-                },
-                actions = {
-                    val project = state.project
-                    if (state.canManageColumns && project != null) {
-                        IconButton(onClick = { onManageColumns(project.id) }) {
-                            Icon(Icons.Outlined.Tune, contentDescription = "Колонки доски")
-                        }
-                    }
                 },
             )
         },
@@ -270,7 +257,7 @@ private fun ColumnsPager(
             val isDone = column.column.kind == ColumnKind.DONE
             val visible = if (isDone) column.cards.take(DONE_LIMIT) else column.cards
             LazyColumn(
-                contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 96.dp),
+                contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 12.dp, bottom = if (state.canCreate) 96.dp else 16.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
                 modifier = Modifier.fillMaxSize(),
             ) {

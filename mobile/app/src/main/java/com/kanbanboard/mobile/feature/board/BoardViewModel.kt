@@ -60,7 +60,6 @@ data class BoardUiState(
     val selectedColumn: BoardColumnUi?
         get() = columns.firstOrNull { it.column.id == selectedColumnId } ?: columns.firstOrNull()
     val canCreate: Boolean get() = project != null && session?.let { TaskPolicy.canCreateTask(it) } == true
-    val canManageColumns: Boolean get() = project != null && session?.let { TaskPolicy.canManageColumns(it) } == true
 }
 
 private data class BoardData(

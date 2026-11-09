@@ -15,6 +15,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.outlined.Event
 import androidx.compose.material.icons.outlined.NotificationsActive
 import androidx.compose.material.icons.outlined.Schedule
@@ -202,9 +203,9 @@ private fun EventEditorScreen(
                 EventVisibility.entries.forEach { visibility ->
                     AppChip(
                         text = when (visibility) {
-                            EventVisibility.TEAM -> "вся команда"
-                            EventVisibility.GROUP -> "группа"
-                            EventVisibility.PERSONAL -> "лично"
+                            EventVisibility.TEAM -> "Вся команда"
+                            EventVisibility.GROUP -> "Группа"
+                            EventVisibility.PERSONAL -> "Лично"
                         },
                         selected = state.visibility == visibility,
                         onClick = { vm.setVisibility(visibility) },
@@ -215,7 +216,7 @@ private fun EventEditorScreen(
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     StudyGroup.entries.filter { state.canUseGroup(it) }.forEach { group ->
                         AppChip(
-                            text = "гр. ${group.code}",
+                            text = "Группа ${group.code}",
                             selected = state.group == group,
                             onClick = { vm.setGroup(group) },
                         )
@@ -227,10 +228,10 @@ private fun EventEditorScreen(
             }
 
             SectionHeader(
-                "тип",
+                "Тип",
                 count = state.types.size,
                 action = {
-                    AppButton("+ свой", onClick = { dialog = EditorDialog.NEW_TYPE }, kind = AppButtonKind.GHOST)
+                    AppButton("Свой", onClick = { dialog = EditorDialog.NEW_TYPE }, kind = AppButtonKind.GHOST, icon = Icons.Filled.Add)
                 },
             )
             TypeGrid(
@@ -256,7 +257,7 @@ private fun EventEditorScreen(
             SectionHeader("Мои напоминания", count = state.reminders.size)
             if (state.reminders.isNotEmpty()) {
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    state.reminders.sorted().forEach { Tag(ReminderPresets.label(it), color = MaterialTheme.colorScheme.primary) }
+                    state.reminders.sorted().forEach { Tag(ReminderPresets.title(it), color = MaterialTheme.colorScheme.primary) }
                 }
             }
             AppButton(

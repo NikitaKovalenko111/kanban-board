@@ -52,6 +52,13 @@ class TaskPolicyTest {
     }
 
     @Test
+    fun `assignee moves assigned backlog task instead of taking it again`() {
+        val mine = task(backlog, "maria")
+        assertTrue(TaskPolicy.canTake(maria, mine, backlog))
+        assertEquals(QuickMove.Move(work), TaskPolicy.quickMove(maria, mine, columns, +1))
+    }
+
+    @Test
     fun `QA-01 member cannot take task assigned to someone else`() {
         val ilyas = task(backlog, "ilya")
         assertFalse(TaskPolicy.canTake(maria, ilyas, backlog))

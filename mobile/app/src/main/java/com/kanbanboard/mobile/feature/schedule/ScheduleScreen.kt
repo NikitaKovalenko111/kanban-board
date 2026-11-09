@@ -3,6 +3,7 @@ package com.kanbanboard.mobile.feature.schedule
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.IntrinsicSize
@@ -31,6 +32,7 @@ import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.outlined.CloudOff
 import androidx.compose.material.icons.outlined.EventAvailable
 import androidx.compose.material.icons.outlined.FilterList
+import androidx.compose.material.icons.outlined.Groups
 import androidx.compose.material.icons.outlined.Notifications
 import androidx.compose.material.icons.outlined.NotificationsActive
 import androidx.compose.material3.AlertDialog
@@ -80,7 +82,6 @@ import com.kanbanboard.mobile.core.model.EventId
 import com.kanbanboard.mobile.core.model.Lesson
 import com.kanbanboard.mobile.core.model.ReminderPresets
 import com.kanbanboard.mobile.core.model.TaskId
-import com.kanbanboard.mobile.core.model.UserId
 import com.kanbanboard.mobile.core.notifications.rememberNotificationPermissionRequest
 import com.kanbanboard.mobile.core.time.Formats
 import com.kanbanboard.mobile.di.LocalAppContainer
@@ -113,8 +114,7 @@ fun ScheduleRouteScreen(
         state = state,
         snackbar = snackbar,
         onSelectDate = vm::selectDate,
-        onSelectPerson = vm::selectPerson,
-        onGroupFilter = vm::setGroupFilter,
+        onSelectView = vm::selectView,
         onToggleCategory = vm::toggleCategory,
         onSaveReminders = { key, minutes ->
             if (minutes.isNotEmpty()) askPermission()
@@ -131,8 +131,7 @@ private fun ScheduleScreen(
     state: ScheduleUiState,
     snackbar: SnackbarHostState,
     onSelectDate: (LocalDate) -> Unit,
-    onSelectPerson: (UserId) -> Unit,
-    onGroupFilter: (GroupFilter) -> Unit,
+    onSelectView: (ScheduleView) -> Unit,
     onToggleCategory: (AgendaCategory) -> Unit,
     onSaveReminders: (String, Set<Int>) -> Unit,
     onOpenEvent: (EventId) -> Unit,
@@ -179,8 +178,8 @@ private fun ScheduleScreen(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                PersonPicker(state, onSelectPerson, onGroupFilter, Modifier.weight(1f))
-                CategoryFilter(state.categories, onToggleCategory)
+                ViewPicker(state, onSelectView, Modifier.weight(1f))
+                CategoryFilter(state.categories, enabled = !state.lessonsOnly, onToggle = onToggleCategory)
             }
             WeekStrip(state, onPick = ::goTo)
             state.lessonsWarning?.let { OfflineBanner(it) }
@@ -231,73 +230,95 @@ private fun ScheduleScreen(
 }
 
 /**
- * «Моё» и чужие расписания в одном списке. В блоке «Моё расписание» — выбор группы
- * (203 / 204 / обе), ниже — участники команды.
+ * Выпадающее меню расписания:
+ *  - «Моё расписание» — полное своё расписание (пары своей группы, события, дедлайны);
+ *  - «Группа 203» / «Группа 204» / «Обе группы» — только пары групп, фильтр категорий заблокирован;
+ *  - участники — расписание человека с учётом его приватности.
+ * Высота меню ограничена: при большой команде участники прокручиваются внутри, меню не закрывает экран.
  */
 @Composable
-private fun PersonPicker(
+private fun ViewPicker(
     state: ScheduleUiState,
-    onSelect: (UserId) -> Unit,
-    onGroupFilter: (GroupFilter) -> Unit,
+    onSelect: (ScheduleView) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     var open by rememberSaveable { mutableStateOf(false) }
     val person = state.person
     val me = state.me?.user
+    val view = state.view
+    val label = when (view) {
+        ScheduleView.Mine -> "Моё расписание"
+        is ScheduleView.Groups -> view.filter.title
+        is ScheduleView.Person -> person?.fullName.orEmpty()
+    }
     Box(modifier) {
         FilterChip(
             selected = true,
             onClick = { open = true },
-            label = {
-                Text(
-                    if (state.isMine) "Моё · ${state.groupFilter.title}" else person?.fullName.orEmpty(),
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
+            label = { Text(label, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+            leadingIcon = {
+                if (view is ScheduleView.Groups) {
+                    Icon(Icons.Outlined.Groups, contentDescription = null, modifier = Modifier.size(20.dp))
+                } else {
+                    UserAvatar(person?.fullName ?: "?", size = 24.dp, photo = person?.photo)
+                }
             },
-            leadingIcon = { UserAvatar(person?.fullName ?: "?", size = 24.dp, photo = person?.photo) },
             trailingIcon = { Icon(Icons.Filled.ArrowDropDown, contentDescription = null) },
             modifier = Modifier.fillMaxWidth(),
         )
-        DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
-            Text(
-                "Моё расписание",
-                style = MaterialTheme.typography.labelLarge,
-                color = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+        DropdownMenu(
+            expanded = open,
+            onDismissRequest = { open = false },
+            modifier = Modifier.heightIn(max = MENU_MAX_HEIGHT),
+        ) {
+            DropdownMenuItem(
+                text = { Text("Моё расписание") },
+                leadingIcon = { UserAvatar(me?.fullName ?: "?", size = 24.dp, photo = me?.photo) },
+                trailingIcon = if (view == ScheduleView.Mine) {
+                    { Icon(Icons.Filled.Check, contentDescription = "Выбрано") }
+                } else null,
+                onClick = { open = false; onSelect(ScheduleView.Mine) },
             )
+            HorizontalDivider()
+            MenuHeader("Пары группы")
             GroupFilter.entries.forEach { filter ->
-                val checked = state.isMine && state.groupFilter == filter
                 DropdownMenuItem(
                     text = { Text(filter.title) },
-                    leadingIcon = { CheckSlot(checked) },
-                    onClick = {
-                        open = false
-                        if (me != null) onSelect(me.id)
-                        onGroupFilter(filter)
-                    },
+                    leadingIcon = { CheckSlot(view == ScheduleView.Groups(filter)) },
+                    onClick = { open = false; onSelect(ScheduleView.Groups(filter)) },
                 )
             }
-            HorizontalDivider()
-            Text(
-                "Участники",
-                style = MaterialTheme.typography.labelLarge,
-                color = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
-            )
-            state.members.filter { it.id != me?.id }.forEach { user ->
-                DropdownMenuItem(
-                    text = { Text(user.fullName) },
-                    leadingIcon = { UserAvatar(user.fullName, size = 24.dp, photo = user.photo) },
-                    trailingIcon = if (!state.isMine && person?.id == user.id) {
-                        { Icon(Icons.Filled.Check, contentDescription = "Выбрано") }
-                    } else null,
-                    onClick = { open = false; onSelect(user.id) },
-                )
+            val others = state.members.filter { it.id != me?.id }
+            if (others.isNotEmpty()) {
+                HorizontalDivider()
+                MenuHeader("Участники")
+                others.forEach { user ->
+                    DropdownMenuItem(
+                        text = { Text(user.fullName, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                        leadingIcon = { UserAvatar(user.fullName, size = 24.dp, photo = user.photo) },
+                        trailingIcon = if (view is ScheduleView.Person && person?.id == user.id) {
+                            { Icon(Icons.Filled.Check, contentDescription = "Выбрано") }
+                        } else null,
+                        onClick = { open = false; onSelect(ScheduleView.Person(user.id)) },
+                    )
+                }
             }
         }
     }
 }
+
+@Composable
+private fun MenuHeader(text: String) {
+    Text(
+        text,
+        style = MaterialTheme.typography.labelLarge,
+        color = MaterialTheme.colorScheme.primary,
+        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+    )
+}
+
+/** Максимальная высота меню расписания: остальное прокручивается внутри. */
+private val MENU_MAX_HEIGHT = 420.dp
 
 @Composable
 private fun CheckSlot(checked: Boolean) {
@@ -308,17 +329,27 @@ private fun CheckSlot(checked: Boolean) {
 
 /** Компактный фильтр категорий: кнопка с меню и галочками. */
 @Composable
-private fun CategoryFilter(selected: Set<AgendaCategory>, onToggle: (AgendaCategory) -> Unit) {
+private fun CategoryFilter(selected: Set<AgendaCategory>, enabled: Boolean, onToggle: (AgendaCategory) -> Unit) {
     var open by rememberSaveable { mutableStateOf(false) }
     val all = selected.size == AgendaCategory.entries.size
     Box {
+        // В режиме «только пары группы» фильтр заблокирован: показываются только пары.
         FilterChip(
-            selected = !all,
+            selected = enabled && !all,
+            enabled = enabled,
             onClick = { open = true },
-            label = { Text(if (all) "Всё" else "${selected.size} из ${AgendaCategory.entries.size}") },
+            label = {
+                Text(
+                    when {
+                        !enabled -> "Пары"
+                        all -> "Всё"
+                        else -> "${selected.size} из ${AgendaCategory.entries.size}"
+                    },
+                )
+            },
             leadingIcon = { Icon(Icons.Outlined.FilterList, contentDescription = null, modifier = Modifier.size(18.dp)) },
         )
-        DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+        DropdownMenu(expanded = open && enabled, onDismissRequest = { open = false }) {
             AgendaCategory.entries.forEach { category ->
                 DropdownMenuItem(
                     text = { Text(category.title) },
@@ -502,7 +533,7 @@ private fun LessonDialog(lesson: Lesson, reminders: Set<Int>, onDismiss: () -> U
                 Hairline()
                 SpecRow(
                     "Напомнить",
-                    if (reminders.isEmpty()) "Не напоминать" else reminders.sorted().joinToString(", ") { ReminderPresets.label(it) },
+                    if (reminders.isEmpty()) "Не напоминать" else ReminderPresets.list(reminders),
                 )
             }
         },

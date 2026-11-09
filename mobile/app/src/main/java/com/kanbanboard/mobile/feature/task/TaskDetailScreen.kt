@@ -77,6 +77,7 @@ import com.kanbanboard.mobile.core.designsystem.Tag
 import com.kanbanboard.mobile.core.designsystem.UserAvatar
 import com.kanbanboard.mobile.core.designsystem.color
 import com.kanbanboard.mobile.core.designsystem.ext
+import com.kanbanboard.mobile.core.features.Features
 import com.kanbanboard.mobile.core.model.Attachment
 import com.kanbanboard.mobile.core.model.AttachmentKind
 import com.kanbanboard.mobile.core.model.ColumnId
@@ -298,7 +299,7 @@ private fun TaskDetailScreen(
 @Composable
 private fun HeaderPanel(state: TaskDetailUiState, task: Task) {
     val column = state.column ?: return
-    Panel(contentPadding = PaddingValues(16.dp)) {
+    Panel(contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 8.dp)) {
         Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             Tag(column.title, color = Color(column.color), dot = true)
             Tag(task.priority.title, color = task.priority.color())
@@ -453,7 +454,8 @@ private fun FilesPanel(
                     Caption("${Formats.fileSize(file.sizeBytes)} · ${state.name(file.uploadedBy)} · ${Formats.dateTime(file.uploadedAt)}")
                 }
                 if (state.canRemove(file)) {
-                    IconButton(onClick = { toRemove = file }, enabled = !state.busy) {
+                    // Удаление файлов есть только в мобилке — заблокировано до решения команды.
+                    IconButton(onClick = { toRemove = file }, enabled = Features.DELETE_ATTACHMENT && !state.busy) {
                         Icon(Icons.Outlined.Close, contentDescription = "Удалить файл", tint = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 }

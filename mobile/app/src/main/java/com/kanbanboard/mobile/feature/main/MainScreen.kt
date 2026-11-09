@@ -129,7 +129,6 @@ fun MainScreen(
     onCreateProject: () -> Unit,
     onOpenTask: (TaskId) -> Unit,
     onCreateTask: (ProjectId) -> Unit,
-    onManageColumns: (ProjectId) -> Unit,
     onOpenEvent: (EventId) -> Unit,
     onCreateEvent: (LocalDate) -> Unit,
     onOpenAccountSettings: () -> Unit,
@@ -184,7 +183,6 @@ fun MainScreen(
                 BoardRouteScreen(
                     onOpenTask = onOpenTask,
                     onCreateTask = onCreateTask,
-                    onManageColumns = onManageColumns,
                     onOpenHistory = { tabs.openTab(HistoryTab) },
                     onOpenProjects = { tabs.openTab(ProjectsTab) },
                     onCreateProject = onCreateProject,

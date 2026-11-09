@@ -221,7 +221,7 @@ private fun EventDetailScreen(
                     .padding(12.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
-                Panel(contentPadding = androidx.compose.foundation.layout.PaddingValues(16.dp)) {
+                Panel(contentPadding = androidx.compose.foundation.layout.PaddingValues(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 8.dp)) {
                     val accent = state.type?.let { Color(it.color) } ?: MaterialTheme.colorScheme.onSurfaceVariant
                     FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                         Tag(state.type?.title ?: if (event.masked) "Личное" else "Событие", color = accent, dot = true)
@@ -281,7 +281,7 @@ private fun EventDetailScreen(
                         Caption("Без напоминаний")
                     } else {
                         FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                            state.reminders.sorted().forEach { Tag(ReminderPresets.label(it), color = MaterialTheme.colorScheme.primary) }
+                            state.reminders.sorted().forEach { Tag(ReminderPresets.title(it), color = MaterialTheme.colorScheme.primary) }
                         }
                     }
                     Spacer(Modifier.height(10.dp))
@@ -328,7 +328,7 @@ private fun EventDetailScreen(
 }
 
 private fun endLabel(event: ScheduleEvent): String {
-    val end = event.endsAt ?: return "не указано"
+    val end = event.endsAt ?: return "Не указано"
     val zone = ZoneId.systemDefault()
     return if (end.atZone(zone).toLocalDate() == event.startsAt.atZone(zone).toLocalDate()) {
         Formats.time(end.atZone(zone).toLocalTime())

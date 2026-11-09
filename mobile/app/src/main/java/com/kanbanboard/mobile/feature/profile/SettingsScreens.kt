@@ -25,6 +25,7 @@ import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.Folder
 import androidx.compose.material.icons.outlined.Image
 import androidx.compose.material.icons.outlined.Password
+import androidx.compose.material.icons.outlined.WarningAmber
 import androidx.compose.material.icons.outlined.PhotoCamera
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
@@ -59,6 +60,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
@@ -276,6 +278,40 @@ fun AppSettingsRouteScreen(onBack: () -> Unit, onOpenNotifications: () -> Unit) 
                     checked = settings.tabAnimation,
                     onChange = { vm.setTabAnimation(it) },
                 )
+            }
+            if (settings.tabAnimation) {
+                item {
+                    // Анимация вкладок пока в бета-версии: по умолчанию выключена (решение команды).
+                    Card(
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.errorContainer,
+                            contentColor = MaterialTheme.colorScheme.onErrorContainer,
+                        ),
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Row(Modifier.padding(16.dp), verticalAlignment = Alignment.Top) {
+                            Icon(Icons.Outlined.WarningAmber, contentDescription = null, tint = MaterialTheme.colorScheme.error)
+                            Spacer(Modifier.width(12.dp))
+                            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                Text(
+                                    "Функция в бета-версии",
+                                    style = MaterialTheme.typography.titleSmall,
+                                    color = MaterialTheme.colorScheme.error,
+                                )
+                                Text(
+                                    "Анимация может срабатывать дважды и подтормаживать.",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                )
+                                Text(
+                                    "«РАДМИРУ НЕЛЬЗЯ ЭТО ВКЛЮЧАТЬ»",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.error,
+                                )
+                            }
+                        }
+                    }
+                }
             }
 
             item { SectionHeader("Обои", modifier = Modifier.padding(top = 8.dp)) }
