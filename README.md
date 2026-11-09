@@ -499,10 +499,3 @@ kanban-board/
 ├── scripts/                        # Деплой и проверка установки
 └── docs/                           # Общая документация и отчёты интеграции
 ```
-
-Дополнительные документы:
-
-- [Frontend: режимы работы и проверки](client/README.md).
-- [API backend](backend/docs/API.md) и [OpenAPI](backend/docs/openapi.yaml).
-- [Инфраструктура backend](backend/docs/INFRASTRUCTURE.md).
-- [Состояние интеграции frontend и backend, ограничения и расхождения](docs/FRONTEND_BACKEND_INTEGRATION.md).
