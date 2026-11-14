@@ -113,11 +113,11 @@ SCHEDULE_SYNC_HTTP_TIMEOUT=20s
 
 ### 3. Проверить конфигурацию backend
 
-Основной YAML-конфиг находится в `backend/config/config.yaml`. Сервер сначала читает YAML, затем переопределяет поля переменными окружения. Имена переменных самого backend записаны в нижнем регистре, например `db_host`, `jwt_access_secret`, `schedule_sync_enabled`.
+Путь YAML-конфига по умолчанию — `backend/config/config.yaml`, но этот файл исключён из Git правилом `backend/.gitignore` и отсутствует на свежем клоне. Сервер допускает отсутствие YAML: в таком случае все обязательные настройки должны поступить из окружения. Если YAML существует, сервер сначала читает его, затем переопределяет поля переменными окружения. Имена переменных самого backend записаны в нижнем регистре, например `db_host`, `jwt_access_secret`, `schedule_sync_enabled`.
 
 В Docker параметры PostgreSQL, MinIO, HTTP и синхронизации уже передаются через `compose.yaml`. Поэтому для контейнерного запуска менять `postgres.db_host` с `localhost` на `postgres` в YAML не нужно — Compose переопределяет его.
 
-JWT-настройки основной Compose-файл не переопределяет: используются значения из YAML. В репозитории заданы тестовые секреты. Для общей установки задайте собственные независимые секреты. Например, добавьте в корневой `.env`:
+Основной Compose-файл пока не передаёт обязательные JWT-настройки. Поэтому для запуска со свежего клона добавьте в корневой `.env` собственные независимые секреты:
 
 ```dotenv
 JWT_ACCESS_SECRET=replace-with-a-long-random-access-secret
@@ -132,11 +132,19 @@ services:
     environment:
       jwt_access_secret: ${JWT_ACCESS_SECRET:?Set JWT_ACCESS_SECRET in .env}
       jwt_refresh_secret: ${JWT_REFRESH_SECRET:?Set JWT_REFRESH_SECRET in .env}
+      access_token_ttl: "1m"
+      refresh_token_ttl: "1h"
+      session_cleanup_interval: "30m"
 ```
 
-Docker Compose автоматически подключает `compose.override.yaml` при командах без `-f`. В этом файле остаются ссылки на переменные, сами секреты хранятся в `.env`. Локальный override не требуется добавлять в Git.
+Docker Compose автоматически подключает `compose.override.yaml` при командах без `-f`, в том числе в CD. В этом файле остаются ссылки на переменные, сами секреты хранятся в `.env`. Чтобы локальный override не мешал проверке чистоты рабочей копии при деплое, исключите его локально из корня репозитория (Bash):
 
-В секции `jwt` YAML также настраиваются `access_token_ttl`, `refresh_token_ttl` и `session_cleanup_interval`. Сейчас в исходном конфиге это `1m`, `1h` и `30m` соответственно. Клиент автоматически обновляет истёкший access-токен через refresh-токен.
+```sh
+printf '\n/compose.override.yaml\n' >> "$(git rev-parse --git-path info/exclude)"
+git status --porcelain
+```
+
+Перед CD вывод `git status --porcelain` должен быть пустым. С таким override отдельный `config.yaml` для Docker-запуска не нужен. Пример задаёт срок access-токена `1m`, refresh-токена `1h` и интервал очистки сессий `30m`; эти значения можно изменить. Клиент автоматически обновляет истёкший access-токен через refresh-токен.
 
 ### 4. Собрать и запустить сервисы
 
@@ -288,25 +296,36 @@ MinIO в этом варианте собирается из исходнико�
 
 ### 2. Настроить и запустить backend
 
-Перейдите в `backend` и создайте локальную копию конфига.
+Перейдите в `backend` и создайте файл `config/config.local.yaml` вручную по примеру ниже. Копировать `config/config.yaml` со свежего клона нельзя: он не хранится в Git.
 
 PowerShell:
 
 ```powershell
 Set-Location backend
-Copy-Item config/config.yaml config/config.local.yaml
 ```
 
 Linux / macOS:
 
 ```sh
 cd backend
-cp config/config.yaml config/config.local.yaml
 ```
 
-В `config/config.local.yaml` сохраните секции `log_level`, `http_server`, `jwt`, а параметры БД замените следующими и добавьте MinIO:
+Содержимое `config/config.local.yaml` для отдельного инфраструктурного стека (замените JWT-секреты собственными значениями):
 
 ```yaml
+log_level: "info"
+http_server:
+  http_address: ":3005"
+  http_timeout: 4s
+  http_idle_timeout: 60s
+
+jwt:
+  jwt_access_secret: "replace-with-a-long-random-access-secret"
+  jwt_refresh_secret: "replace-with-another-long-random-refresh-secret"
+  access_token_ttl: "1m"
+  refresh_token_ttl: "1h"
+  session_cleanup_interval: "30m"
+
 postgres:
   db_host: "localhost"
   db_user: "postgres"
@@ -324,7 +343,7 @@ minio:
   use_ssl: false
 ```
 
-Здесь `db_name` должен быть именно `kanban-db`, как в инфраструктурном Compose. Исходный `config.yaml` содержит другое значение — `kanban`. Локальную копию с собственными секретами не добавляйте в Git; при необходимости исключите её через `.git/info/exclude`.
+Здесь `db_name` должен быть именно `kanban-db`, как в инфраструктурном Compose. Основной корневой Compose по умолчанию использует другую БД — `kanban`. Локальный конфиг с собственными секретами не добавляйте в Git; исключите `/backend/config/config.local.yaml` через `.git/info/exclude`.
 
 Загрузите зависимости и запустите сервер из `backend`:
 
