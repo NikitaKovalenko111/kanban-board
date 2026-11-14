@@ -17,10 +17,10 @@ Kotlin + Jetpack Compose + Material 3. Версия `0.5.1-demo` — Сприн�
 
 ### Сборка с сервером
 
-Адрес REST API берётся **во время сборки** из `BACKEND_BASE_URL`: переменной процесса либо файла `mobile/.env` (также поддерживается `.env` в корне репозитория). Скопируйте `mobile/.env.example` в `mobile/.env` и при необходимости измените адрес. Укажите базовый адрес без `/api/v1`: приложение добавляет этот путь само. Пример:
+Адрес REST API берётся **во время сборки** из `BACKEND_BASE_URL`: переменной процесса либо файла `mobile/.env` (также поддерживается `.env` в корне репозитория). Скопируйте `mobile/.env.example` в `mobile/.env` и замените адрес-заглушку на адрес своего сервера. Укажите базовый адрес без `/api/v1`: приложение добавляет этот путь само. Пример:
 
 ```dotenv
-BACKEND_BASE_URL=http://94.41.18.199:8080
+BACKEND_BASE_URL=http://your-server.example:8080
 ```
 
 Файлы `.env` игнорируются Git; `.env.example` хранится в репозитории. Для быстрой пересборки после изменения файла:
@@ -34,7 +34,7 @@ cd mobile
 
 ```powershell
 cd mobile
-$env:BACKEND_BASE_URL = 'http://94.41.18.199:8080'
+$env:BACKEND_BASE_URL = 'http://your-server.example:8080'
 .\gradlew.bat assembleCleanDebug
 ```
 
