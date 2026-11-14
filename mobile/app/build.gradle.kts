@@ -10,8 +10,24 @@ val isuUrlTemplate = providers.gradleProperty("isuUrlTemplate").orNull
     ?: "https://isu.uust.ru/class_schedule/?group={group}"
 val isuGroup203 = providers.gradleProperty("isuGroup203").orNull ?: "203"
 val isuGroup204 = providers.gradleProperty("isuGroup204").orNull ?: "204"
-val backendBaseUrl = providers.gradleProperty("backendBaseUrl").orNull.orEmpty()
-require('"' !in backendBaseUrl && '\\' !in backendBaseUrl) { "Некорректный backendBaseUrl" }
+// Файл .env Gradle сам не загружает. Читаем только нужную переменную без новых зависимостей.
+fun backendUrlFromDotenv(path: String) = providers.fileContents(rootProject.layout.projectDirectory.file(path))
+    .asText.map { contents ->
+        contents.lineSequence()
+            .map { it.trim().trimStart('\uFEFF').removePrefix("export ").trim() }
+            .firstOrNull { it.contains('=') && it.substringBefore('=').trim() == "BACKEND_BASE_URL" }
+            ?.substringAfter('=')?.trim()?.removeSurrounding("\"")?.removeSurrounding("'").orEmpty()
+    }
+
+// Приоритет: -P, переменная процесса, mobile/.env, .env в корне репозитория.
+val backendBaseUrl = providers.gradleProperty("backendBaseUrl")
+    .orElse(providers.environmentVariable("BACKEND_BASE_URL"))
+    .orElse(backendUrlFromDotenv(".env"))
+    .orElse(backendUrlFromDotenv("../.env"))
+    .orNull.orEmpty().trim().trimEnd('/')
+require(backendBaseUrl.none { it == '"' || it == '\\' || it == '\n' || it == '\r' }) {
+    "Некорректный backendBaseUrl"
+}
 
 android {
     namespace = "com.kanbanboard.mobile"
