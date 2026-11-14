@@ -6,6 +6,7 @@ import { backendHttp as http } from './backendApi'
 import { readBackendSession, saveBackendSession } from './backendSession'
 import { columnStatus, mapEvent, mapProfile, mapProject, mapTask, privacyToServer } from './mappers'
 import type { EventTypeOption } from '../utils/eventTypes'
+import { createUuid } from '../utils/uuid'
 
 let projects: ProjectDto[] = []
 let profiles: ProfileDto[] = []
@@ -175,7 +176,7 @@ export const realApi = {
   async addTaskComment(payload: AddTaskCommentPayload) { await http.post(`/tasks/${pathId(payload.taskId)}/comments`, { text: payload.text }); return taskDetail(payload.taskId) },
   async uploadAttachment(file: File): Promise<Attachment> {
     if (file.size > 10 * 1024 * 1024) throw new Error('Максимальный размер файла — 10 МБ')
-    const id = `pending:${crypto.randomUUID()}`; staged.set(id, file)
+    const id = `pending:${createUuid()}`; staged.set(id, file)
     return { id, name: file.name, size: file.size }
   },
   async downloadAttachment(id: string): Promise<Blob> { if (id.startsWith('pending:')) return stagedFile({ id, name: '', size: 0 }); return (await http.get<Blob>(`/files/${pathId(id)}`, { responseType: 'blob' })).data },

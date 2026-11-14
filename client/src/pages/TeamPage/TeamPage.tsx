@@ -11,8 +11,9 @@ import { useAppDispatch, useAppSelector } from '../../store/hooks'
 import { useProjectSelection } from '../../store/useProjectSelection'
 import { createMemberRequest, loadTeamRequest, toggleMemberRequest } from '../../store/slices/teamSlice'
 import type { EntityId, StudyGroup, UserRole } from '../../types'
+import { createUuid } from '../../utils/uuid'
 
-const createPassword = () => 'team-' + crypto.randomUUID().slice(0, 12)
+const createPassword = () => 'team-' + createUuid().slice(0, 12)
 
 const TeamPage = () => {
   const dispatch = useAppDispatch()
