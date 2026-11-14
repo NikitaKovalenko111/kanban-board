@@ -70,9 +70,9 @@ class ProjectsViewModel(
     private val settings: SettingsRepository,
 ) : ViewModel() {
     val state: StateFlow<ProjectsUiState> = combine(projects.projects, sessions.session, settings.settings) { list, session, prefs ->
-        val activeId = prefs.selectedProjectId?.takeIf { id -> list.any { it.id == id } }
-            ?: list.firstOrNull { session != null && it.isMember(session.user.id) }?.id
-            ?: list.firstOrNull()?.id
+        val activeId = prefs.selectedProjectId?.takeIf { id -> list.any { it.id == id && it.canViewBoard } }
+            ?: list.firstOrNull { it.canViewBoard && session != null && it.isMember(session.user.id) }?.id
+            ?: list.firstOrNull { it.canViewBoard }?.id
         val items = list.map { project ->
             ProjectItemUi(project, session?.let { project.members[it.user.id] }, project.id == activeId)
         }
@@ -82,6 +82,8 @@ class ProjectsViewModel(
 
     /** Двойное нажатие на проект — сделать его активным на доске. */
     fun makeActive(id: ProjectId) {
+        if (state.value.mine.none { it.project.id == id && it.project.canViewBoard } &&
+            state.value.others.none { it.project.id == id && it.project.canViewBoard }) return
         viewModelScope.launch { settings.setSelectedProject(id) }
     }
 }
@@ -179,6 +181,7 @@ private fun ProjectCard(item: ProjectItemUi, onOpen: (ProjectId) -> Unit, onMake
         modifier = Modifier
             .fillMaxWidth()
             .combinedClickable(
+                enabled = item.project.canViewBoard,
                 onClick = { onOpen(item.project.id) },
                 onDoubleClick = { onMakeActive(item.project) },
             ),
@@ -198,6 +201,7 @@ private fun ProjectCard(item: ProjectItemUi, onOpen: (ProjectId) -> Unit, onMake
                     modifier = Modifier.weight(1f),
                 )
                 if (item.active) Tag("На доске", filled = true)
+                if (!item.project.canViewBoard) Tag("Нет доступа к доске")
             }
             if (item.project.description.isNotBlank()) {
                 Text(
@@ -212,7 +216,7 @@ private fun ProjectCard(item: ProjectItemUi, onOpen: (ProjectId) -> Unit, onMake
             Caption(
                 listOfNotNull(
                     item.myRole?.takeIf { it.isNotBlank() },
-                    "${item.project.members.size} участн.",
+                    if (item.project.canViewBoard) "${item.project.members.size} участн." else null,
                 ).joinToString(" · "),
                 modifier = Modifier.padding(top = 8.dp),
             )

@@ -232,7 +232,7 @@ private fun ScheduleScreen(
 /**
  * Выпадающее меню расписания:
  *  - «Моё расписание» — полное своё расписание (пары своей группы, события, дедлайны);
- *  - «Группа 203» / «Группа 204» / «Обе группы» — только пары групп, фильтр категорий заблокирован;
+ *  - учебные группы участников и общий просмотр — только пары, фильтр категорий заблокирован;
  *  - участники — расписание человека с учётом его приватности.
  * Высота меню ограничена: при большой команде участники прокручиваются внутри, меню не закрывает экран.
  */
@@ -281,7 +281,11 @@ private fun ViewPicker(
             )
             HorizontalDivider()
             MenuHeader("Пары группы")
-            GroupFilter.entries.forEach { filter ->
+            val groups = (state.members.map { it.studyGroup } + listOfNotNull(me?.studyGroup))
+                .distinct().sortedBy { it.code }
+            val filters = groups.map { GroupFilter("Группа ${it.code}", setOf(it)) } +
+                if (groups.size > 1) listOf(GroupFilter("Все группы", groups.toSet())) else emptyList()
+            filters.forEach { filter ->
                 DropdownMenuItem(
                     text = { Text(filter.title) },
                     leadingIcon = { CheckSlot(view == ScheduleView.Groups(filter)) },

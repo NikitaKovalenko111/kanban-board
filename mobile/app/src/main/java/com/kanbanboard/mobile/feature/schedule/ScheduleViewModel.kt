@@ -41,15 +41,7 @@ import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
-enum class GroupFilter(val title: String, val groups: Set<StudyGroup>) {
-    G203("Группа 203", setOf(StudyGroup.G203)),
-    G204("Группа 204", setOf(StudyGroup.G204)),
-    BOTH("Обе группы", setOf(StudyGroup.G203, StudyGroup.G204));
-
-    companion object {
-        fun of(group: StudyGroup): GroupFilter = if (group == StudyGroup.G203) G203 else G204
-    }
-}
+data class GroupFilter(val title: String, val groups: Set<StudyGroup>)
 
 /** Что показывает лента (выпадающее меню «Моё расписание»). */
 sealed interface ScheduleView {
