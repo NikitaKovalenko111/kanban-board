@@ -165,9 +165,11 @@ private fun BoardScreen(
                 val captain = state.session?.isCaptain == true
                 EmptyState(
                     icon = Icons.Outlined.Inbox,
-                    title = "Проектов пока нет",
+                    title = if (state.projects.isEmpty()) "Проектов пока нет" else "Нет доступных досок",
                     text = if (captain) {
                         "Создайте первый проект — у него сразу будет доска со стандартными колонками."
+                    } else if (state.projects.isNotEmpty()) {
+                        "Попросите капитана добавить вас в проект."
                     } else {
                         "Капитан команды создаёт проекты, после этого здесь появится доска."
                     },
@@ -299,7 +301,7 @@ private fun ProjectSwitcher(
             if (projects.isNotEmpty()) Icon(Icons.Filled.ArrowDropDown, contentDescription = "Сменить проект")
         }
         DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
-            val (mine, others) = projects.partition { myId != null && it.isMember(myId) }
+            val (mine, others) = projects.filter { it.canViewBoard }.partition { myId != null && it.isMember(myId) }
             mine.forEach { item -> ProjectMenuItem(item, item.id == project?.id) { expanded = false; onSelect(item.id) } }
             if (mine.isNotEmpty() && others.isNotEmpty()) HorizontalDivider()
             others.forEach { item -> ProjectMenuItem(item, item.id == project?.id) { expanded = false; onSelect(item.id) } }

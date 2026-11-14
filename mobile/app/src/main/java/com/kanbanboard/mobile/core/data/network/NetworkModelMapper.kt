@@ -49,6 +49,7 @@ internal object NetworkModelMapper {
 
     fun project(dto: ProjectDto): Project = Project(
         id = ProjectId(dto.id), name = dto.name, description = dto.description,
+        canViewBoard = dto.canViewBoard,
         members = dto.members.associate { UserId(it.userId) to it.role },
         sources = dto.sources.map { source ->
             ProjectSource(
@@ -73,9 +74,13 @@ internal object NetworkModelMapper {
         dueAt = dto.dueAt?.let(Instant::parse), completedAt = dto.completedAt?.let(Instant::parse),
         attachments = dto.attachments.map { attachment ->
             Attachment(
-                id = attachment.id, name = attachment.file.name, sizeBytes = attachment.file.sizeBytes,
+                id = attachment.id,
+                name = attachment.file?.name ?: attachment.title ?: attachment.url ?: "Ссылка",
+                sizeBytes = attachment.file?.sizeBytes ?: 0,
                 kind = AttachmentKind.valueOf(attachment.kind), uploadedBy = UserId(attachment.uploadedBy),
-                uploadedAt = Instant.parse(attachment.uploadedAt), fileRef = attachment.file.downloadUrl,
+                uploadedAt = Instant.parse(attachment.uploadedAt),
+                fileRef = attachment.file?.downloadUrl,
+                url = attachment.url?.takeIf { attachment.contentKind == "LINK" },
             )
         },
         comments = dto.comments.map { comment ->

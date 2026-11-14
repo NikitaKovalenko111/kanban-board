@@ -4,8 +4,14 @@ package com.kanbanboard.mobile.core.model
 
 import java.time.Instant
 import java.time.LocalDate
+import kotlinx.serialization.KSerializer
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.UseSerializers
+import kotlinx.serialization.descriptors.PrimitiveKind
+import kotlinx.serialization.descriptors.PrimitiveSerialDescriptor
+import kotlinx.serialization.descriptors.SerialDescriptor
+import kotlinx.serialization.encoding.Decoder
+import kotlinx.serialization.encoding.Encoder
 
 // Идентификаторы — строки (бэкенд выдаёт UUID). Value-классы не дают перепутать ID разных сущностей.
 @Serializable @JvmInline value class UserId(val value: String)
@@ -13,14 +19,29 @@ import kotlinx.serialization.UseSerializers
 @Serializable @JvmInline value class ColumnId(val value: String)
 @Serializable @JvmInline value class TaskId(val value: String)
 
-@Serializable
-enum class StudyGroup(val code: String) {
-    G203("203"),
-    G204("204");
-
+@Serializable(with = StudyGroupSerializer::class)
+data class StudyGroup(val code: String) : java.io.Serializable {
     companion object {
-        fun fromCode(code: String?): StudyGroup? = entries.firstOrNull { it.code == code }
+        val G203 = StudyGroup("203")
+        val G204 = StudyGroup("204")
+        /** Группы демо-режима; сервер может возвращать другие коды. */
+        val entries = listOf(G203, G204)
+
+        fun fromCode(code: String?): StudyGroup? = when (code?.trim()) {
+            null, "" -> null
+            "G203" -> G203
+            "G204" -> G204
+            else -> StudyGroup(code.trim())
+        }
     }
+}
+
+/** Сохраняем строковое представление, чтобы читать старые локальные данные с G203/G204. */
+object StudyGroupSerializer : KSerializer<StudyGroup> {
+    override val descriptor: SerialDescriptor = PrimitiveSerialDescriptor("StudyGroup", PrimitiveKind.STRING)
+    override fun serialize(encoder: Encoder, value: StudyGroup) = encoder.encodeString(value.code)
+    override fun deserialize(decoder: Decoder): StudyGroup =
+        StudyGroup.fromCode(decoder.decodeString()) ?: error("Пустой код учебной группы")
 }
 
 @Serializable
@@ -70,6 +91,7 @@ data class Project(
     val members: Map<UserId, String>,
     /** Источники проекта: ссылки (ТЗ, Google Docs, чаты) и файлы. */
     val sources: List<ProjectSource> = emptyList(),
+    val canViewBoard: Boolean = true,
 ) {
     fun isMember(userId: UserId): Boolean = userId in members
 }
@@ -156,6 +178,8 @@ data class Attachment(
     val uploadedAt: Instant,
     /** Ссылка на содержимое в хранилище ([com.kanbanboard.mobile.core.files.FileStore]); null — файла нет на устройстве. */
     val fileRef: String? = null,
+    /** Адрес внешней ссылки, если вложение не является файлом. */
+    val url: String? = null,
 )
 
 @Serializable

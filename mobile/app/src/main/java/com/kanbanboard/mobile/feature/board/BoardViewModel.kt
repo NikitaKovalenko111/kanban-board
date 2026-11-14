@@ -59,7 +59,7 @@ data class BoardUiState(
     val selectedIndex: Int get() = columns.indexOfFirst { it.column.id == selectedColumnId }.coerceAtLeast(0)
     val selectedColumn: BoardColumnUi?
         get() = columns.firstOrNull { it.column.id == selectedColumnId } ?: columns.firstOrNull()
-    val canCreate: Boolean get() = project != null && session?.let { TaskPolicy.canCreateTask(it) } == true
+    val canCreate: Boolean get() = project?.canViewBoard == true && session?.let { TaskPolicy.canCreateTask(it) } == true
 }
 
 private data class BoardData(
@@ -83,7 +83,7 @@ class BoardViewModel(
     val messages: Flow<String> = _messages.receiveAsFlow()
 
     private val data: Flow<BoardData> = combine(projects.projects, settings.settings, sessions.session) { list, prefs, session ->
-        list to resolveProject(list, prefs.selectedProjectId, session)
+        list to resolveProject(list.filter { it.canViewBoard }, prefs.selectedProjectId, session)
     }.flatMapLatest { (list, project) ->
         if (project == null) {
             flowOf(BoardData(list, null, emptyList(), emptyList()))

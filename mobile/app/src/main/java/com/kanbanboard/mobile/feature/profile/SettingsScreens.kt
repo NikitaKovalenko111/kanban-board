@@ -88,6 +88,8 @@ fun AccountSettingsRouteScreen(onBack: () -> Unit) {
     val snackbar = remember { SnackbarHostState() }
     LaunchedEffect(vm) { vm.messages.collect { snackbar.showSnackbar(it) } }
     val user = state.session?.user
+    val groups = (state.members.map { it.user.studyGroup } + user?.studyGroup + StudyGroup.entries)
+        .filterNotNull().distinct().sortedBy { it.code }
     val pickPhoto = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
         if (uri != null) vm.setPhoto(uri)
     }
@@ -124,11 +126,11 @@ fun AccountSettingsRouteScreen(onBack: () -> Unit) {
             item { SectionHeader("Учебная группа", modifier = Modifier.padding(top = 8.dp)) }
             item {
                 SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
-                    StudyGroup.entries.forEachIndexed { index, group ->
+                    groups.forEachIndexed { index, group ->
                         SegmentedButton(
                             selected = user.studyGroup == group,
                             onClick = { vm.setGroup(group) },
-                            shape = SegmentedButtonDefaults.itemShape(index, StudyGroup.entries.size),
+                            shape = SegmentedButtonDefaults.itemShape(index, groups.size),
                         ) { Text("Группа ${group.code}") }
                     }
                 }

@@ -59,6 +59,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -131,6 +132,7 @@ fun TaskDetailRouteScreen(
             }
         }
     }
+    val uriHandler = LocalUriHandler.current
 
     TaskDetailScreen(
         state = state,
@@ -146,7 +148,12 @@ fun TaskDetailRouteScreen(
             picker.launch(arrayOf("*/*"))
         },
         onOpenFile = { file ->
-            file.fileRef?.let { onOpenFile(it, file.name, state.projectName) }
+            if (file.url != null) {
+                runCatching { uriHandler.openUri(file.url) }
+                    .onFailure { vm.report("Не удалось открыть ссылку") }
+            } else {
+                file.fileRef?.let { onOpenFile(it, file.name, state.projectName) }
+            }
         },
         onRemoveFile = { vm.removeAttachment(it.id) },
         onAssignToSelf = vm::assignToSelf,
@@ -439,7 +446,7 @@ private fun FilesPanel(
                 modifier = Modifier
                     .fillMaxWidth()
                     .clip(MaterialTheme.shapes.small)
-                    .clickable(enabled = file.fileRef != null) { onOpen(file) }
+                    .clickable(enabled = file.url != null || file.fileRef != null) { onOpen(file) }
                     .padding(vertical = 4.dp),
             ) {
                 Icon(
@@ -451,7 +458,7 @@ private fun FilesPanel(
                 Spacer(Modifier.width(10.dp))
                 Column(Modifier.weight(1f)) {
                     Text(file.name, style = MaterialTheme.typography.bodyMedium)
-                    Caption("${Formats.fileSize(file.sizeBytes)} · ${state.name(file.uploadedBy)} · ${Formats.dateTime(file.uploadedAt)}")
+                    Caption("${if (file.url != null) "Ссылка" else Formats.fileSize(file.sizeBytes)} · ${state.name(file.uploadedBy)} · ${Formats.dateTime(file.uploadedAt)}")
                 }
                 if (state.canRemove(file)) {
                     // Удаление файлов есть только в мобилке — заблокировано до решения команды.

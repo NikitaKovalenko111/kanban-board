@@ -148,9 +148,10 @@ class WorkspaceApi(
 @Serializable data class ProjectDto(
     val id: String,
     val name: String,
-    val description: String,
-    val members: List<ProjectMemberDto>,
-    val sources: List<ProjectSourceDto>,
+    val description: String = "",
+    val members: List<ProjectMemberDto> = emptyList(),
+    val sources: List<ProjectSourceDto> = emptyList(),
+    val canViewBoard: Boolean = true,
 )
 @Serializable data class FileInfoDto(
     val id: String, val name: String, val sizeBytes: Long,
@@ -187,7 +188,8 @@ class WorkspaceApi(
 )
 @Serializable data class AttachmentDto(
     val id: String, val kind: String, val uploadedBy: String,
-    val uploadedAt: String, val file: FileInfoDto,
+    val uploadedAt: String, val file: FileInfoDto? = null,
+    val contentKind: String = "FILE", val title: String? = null, val url: String? = null,
 )
 @Serializable data class TaskHistoryDto(
     val id: String, val action: String, val at: String,

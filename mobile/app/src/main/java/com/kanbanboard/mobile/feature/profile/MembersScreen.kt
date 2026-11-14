@@ -203,6 +203,7 @@ fun MembersRouteScreen(onBack: () -> Unit) {
 
     if (adding) {
         AddAccountDialog(
+            groups = (state.members.map { it.user.studyGroup } + StudyGroup.entries).distinct().sortedBy { it.code },
             onDismiss = { adding = false },
             onCreate = { account, onError -> vm.createAccount(account, onError) { adding = false } },
         )
@@ -275,6 +276,7 @@ private fun MemberDialog(
 
 @Composable
 private fun AddAccountDialog(
+    groups: List<StudyGroup>,
     onDismiss: () -> Unit,
     onCreate: (NewAccount, (String) -> Unit) -> Unit,
 ) {
@@ -308,11 +310,11 @@ private fun AddAccountDialog(
                 )
                 Text("Группа", style = MaterialTheme.typography.labelLarge)
                 SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
-                    StudyGroup.entries.forEachIndexed { i, g ->
+                    groups.forEachIndexed { i, g ->
                         SegmentedButton(
                             selected = group == g,
                             onClick = { group = g },
-                            shape = SegmentedButtonDefaults.itemShape(i, StudyGroup.entries.size),
+                            shape = SegmentedButtonDefaults.itemShape(i, groups.size),
                         ) { Text(g.code) }
                     }
                 }
