@@ -1,4 +1,5 @@
 import type { EntityId } from '../types'
+import { createUuid } from '../utils/uuid'
 import { createLinkAttachment } from '../utils/attachmentLinks'
 import { validatePriority } from '../utils/taskPriority'
 import axios, { type AxiosRequestConfig, type AxiosResponse } from 'axios'
@@ -165,7 +166,7 @@ client.defaults.adapter = async (config) => {
     const file = (config.data as FormData).get('file')
     if (!(file instanceof Blob)) throw new Error('Выберите файл')
     if (file.size > 25 * 1024 * 1024) throw new Error('Размер файла не должен превышать 25 МБ')
-    const id = crypto.randomUUID()
+    const id = createUuid()
     await saveFile(id, file)
     return response(config, { id, name: (file as File).name || 'file', size: file.size }, 201)
   }
@@ -182,7 +183,7 @@ client.defaults.adapter = async (config) => {
     const id = Number(config.url.split('/')[3])
     if (id === actor.id) throw new Error('Нельзя сбросить собственный пароль в этом окне')
     if (!accounts.some((account) => account.id === id)) throw new Error('Участник не найден')
-    const password = 'team-' + crypto.randomUUID().slice(0, 12)
+    const password = 'team-' + createUuid().slice(0, 12)
     accounts = accounts.map((account) => account.id === id ? { ...account, password } : account)
     return response(config, { password })
   }
@@ -361,7 +362,7 @@ client.defaults.adapter = async (config) => {
     if (previous.assigneeId === assignee?.id && previous.assignee === (assignee?.name ?? 'Не назначен')) return response(config, cloneTask(previous))
     const updated: Task = {
       ...previous, assignee: assignee?.name ?? 'Не назначен', assigneeId: assignee?.id,
-      history: [...previous.history, { id: crypto.randomUUID(), type: 'assignment', fromStatus: previous.taskStatus, toStatus: previous.taskStatus, author: actor.name, createdAt: new Date().toISOString(), comment: `${previous.assignee} → ${assignee?.name ?? 'Не назначен'}` }],
+      history: [...previous.history, { id: createUuid(), type: 'assignment', fromStatus: previous.taskStatus, toStatus: previous.taskStatus, author: actor.name, createdAt: new Date().toISOString(), comment: `${previous.assignee} → ${assignee?.name ?? 'Не назначен'}` }],
     }
     tasks = tasks.map((task) => task.taskId === id ? updated : task)
     return response(config, cloneTask(updated))
@@ -401,7 +402,7 @@ client.defaults.adapter = async (config) => {
     const taskId = Number(config.url.split('/')[2])
     const payload = JSON.parse(config.data as string) as AddTaskCommentPayload
     if (!payload.text.trim()) throw new Error('Введите комментарий')
-    const comment: TaskComment = { id: crypto.randomUUID(), author: currentActor().name, text: payload.text.trim(), createdAt: new Date().toISOString() }
+    const comment: TaskComment = { id: createUuid(), author: currentActor().name, text: payload.text.trim(), createdAt: new Date().toISOString() }
     const taskIndex = tasks.findIndex((task) => task.taskId === taskId)
     if (taskIndex < 0) throw new Error('Задача не найдена')
     const updatedTask = { ...tasks[taskIndex], comments: [...tasks[taskIndex].comments, comment] }
