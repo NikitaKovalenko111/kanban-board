@@ -320,20 +320,55 @@ func (r *Repository) DeleteUser(ctx context.Context, actorID, userID string) err
 	}
 	defer tx.Rollback()
 
-	queries := []string{
-		`UPDATE events SET owner_user_id = $1 WHERE owner_user_id = $2 AND visibility <> 'PERSONAL'`,
-		`DELETE FROM events WHERE owner_user_id = $2 AND visibility = 'PERSONAL'`,
-		`DELETE FROM event_reminders WHERE user_id = $2`,
-		`DELETE FROM user_reminders WHERE user_id = $2`,
-		`DELETE FROM push_tokens WHERE user_id = $2`,
-		`UPDATE event_types SET created_by_user_id = $1 WHERE created_by_user_id = $2`,
-		`UPDATE projects SET created_by_user_id = $1 WHERE created_by_user_id = $2`,
-		`DELETE FROM project_members WHERE user_id = $2`,
-		`UPDATE sessions SET revoked_at = CURRENT_TIMESTAMP WHERE user_id = $2 AND revoked_at IS NULL`,
-		`UPDATE users SET is_active = FALSE, username = username || '-deleted-' || user_id::text, display_name = 'Удалённый участник', image_url = NULL, contact = NULL, updated_at = CURRENT_TIMESTAMP WHERE user_id = $2`,
+	type queryWithArgs struct {
+		query string
+		args  []any
 	}
-	for _, query := range queries {
-		if _, err := tx.ExecContext(ctx, query, actorID, userID); err != nil {
+
+	queries := []queryWithArgs{
+		{
+			query: `UPDATE events SET owner_user_id = $1 WHERE owner_user_id = $2 AND visibility <> 'PERSONAL'`,
+			args:  []any{actorID, userID},
+		},
+		{
+			query: `DELETE FROM events WHERE owner_user_id = $1 AND visibility = 'PERSONAL'`,
+			args:  []any{userID},
+		},
+		{
+			query: `DELETE FROM event_reminders WHERE user_id = $1`,
+			args:  []any{userID},
+		},
+		{
+			query: `DELETE FROM user_reminders WHERE user_id = $1`,
+			args:  []any{userID},
+		},
+		{
+			query: `DELETE FROM push_tokens WHERE user_id = $1`,
+			args:  []any{userID},
+		},
+		{
+			query: `UPDATE event_types SET created_by_user_id = $1 WHERE created_by_user_id = $2`,
+			args:  []any{actorID, userID},
+		},
+		{
+			query: `UPDATE projects SET created_by_user_id = $1 WHERE created_by_user_id = $2`,
+			args:  []any{actorID, userID},
+		},
+		{
+			query: `DELETE FROM project_members WHERE user_id = $1`,
+			args:  []any{userID},
+		},
+		{
+			query: `UPDATE sessions SET revoked_at = CURRENT_TIMESTAMP WHERE user_id = $1 AND revoked_at IS NULL`,
+			args:  []any{userID},
+		},
+		{
+			query: `UPDATE users SET is_active = FALSE, username = username || '-deleted-' || user_id::text, display_name = 'Удалённый участник', image_url = NULL, contact = NULL, updated_at = CURRENT_TIMESTAMP WHERE user_id = $1`,
+			args:  []any{userID},
+		},
+	}
+	for _, item := range queries {
+		if _, err := tx.ExecContext(ctx, item.query, item.args...); err != nil {
 			return err
 		}
 	}
