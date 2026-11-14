@@ -10,8 +10,13 @@ val isuUrlTemplate = providers.gradleProperty("isuUrlTemplate").orNull
     ?: "https://isu.uust.ru/class_schedule/?group={group}"
 val isuGroup203 = providers.gradleProperty("isuGroup203").orNull ?: "203"
 val isuGroup204 = providers.gradleProperty("isuGroup204").orNull ?: "204"
-val backendBaseUrl = providers.gradleProperty("backendBaseUrl").orNull.orEmpty()
-require('"' !in backendBaseUrl && '\\' !in backendBaseUrl) { "Некорректный backendBaseUrl" }
+// Адрес API читается при каждой сборке: -P имеет приоритет над переменной окружения.
+val backendBaseUrl = providers.gradleProperty("backendBaseUrl")
+    .orElse(providers.environmentVariable("BACKEND_BASE_URL"))
+    .orNull.orEmpty().trim().trimEnd('/')
+require(backendBaseUrl.none { it == '"' || it == '\\' || it == '\n' || it == '\r' }) {
+    "Некорректный backendBaseUrl"
+}
 
 android {
     namespace = "com.kanbanboard.mobile"
